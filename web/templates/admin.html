@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin — AI API Key Portal</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <h1>AI API Key Portal — Admin</h1>
+  <nav>
+    <a href="/">Dashboard</a>
+  </nav>
+</header>
+
+<main>
+
+  {{if .Flash}}
+  <div class="alert alert-info">{{.Flash}}</div>
+  {{end}}
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="showTab('profiles', this)">Profiles</button>
+      <button class="tab-btn" onclick="showTab('users', this)">Users</button>
+    </div>
+
+    <!-- ── Profiles tab ─────────────────────────────────── -->
+    <div id="tab-profiles" class="tab-panel active">
+
+      <h2 style="margin-bottom:1.25rem">Profiles</h2>
+
+      <div class="table-wrap" style="margin-bottom:2rem">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Models</th>
+              <th>TPM</th>
+              <th>RPM</th>
+              <th>Budget</th>
+              <th>Default</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Profiles}}
+            <tr>
+              <td><strong>{{.Name}}</strong></td>
+              <td>{{.Description}}</td>
+              <td>
+                {{if .Models}}
+                  {{range $i, $m := .Models}}{{if $i}}, {{end}}{{$m}}{{end}}
+                {{else}}
+                  <em style="color:#999">all</em>
+                {{end}}
+              </td>
+              <td>{{if .TPMLimit}}{{.TPMLimit}}{{else}}&mdash;{{end}}</td>
+              <td>{{if .RPMLimit}}{{.RPMLimit}}{{else}}&mdash;{{end}}</td>
+              <td>
+                {{if .MaxBudget}}
+                  {{printf "%.2f" .MaxBudget}}
+                  {{if .BudgetDuration}} / {{.BudgetDuration}}{{end}}
+                {{else}}&mdash;{{end}}
+              </td>
+              <td>{{if .IsDefault}}✓{{end}}</td>
+              <td>
+                <div style="display:flex;gap:.4rem">
+                  <button class="btn btn-sm btn-secondary"
+                          onclick="openEditProfile({{.ID}}, {{.Name | printf "%q"}}, {{.Description | printf "%q"}},
+                            '{{range $i,$m := .Models}}{{if $i}},{{end}}{{$m}}{{end}}',
+                            '{{if .TPMLimit}}{{.TPMLimit}}{{end}}',
+                            '{{if .RPMLimit}}{{.RPMLimit}}{{end}}',
+                            '{{if .MaxBudget}}{{printf "%.2f" .MaxBudget}}{{end}}',
+                            '{{if .BudgetDuration}}{{.BudgetDuration}}{{end}}',
+                            {{.IsDefault}})">Edit</button>
+                  {{if not .IsDefault}}
+                  <form method="POST" action="/admin/profiles/{{.ID}}/delete"
+                        onsubmit="return confirm('Delete profile {{.Name}}?')">
+                    <button class="btn btn-sm btn-danger">Delete</button>
+                  </form>
+                  {{end}}
+                </div>
+              </td>
+            </tr>
+            {{else}}
+            <tr><td colspan="8" style="color:#999;text-align:center">No profiles yet.</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Create / Edit form -->
+      <h3 id="profile-form-title">New profile</h3>
+      <form id="profile-form" method="POST" action="/admin/profiles" style="max-width:540px">
+        <input type="hidden" name="_id" id="pf-id" value="">
+
+        <div class="form-group">
+          <label for="pf-name">Name *</label>
+          <input type="text" id="pf-name" name="name" required>
+        </div>
+        <div class="form-group">
+          <label for="pf-desc">Description</label>
+          <textarea id="pf-desc" name="description" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="pf-models">Allowed models</label>
+          <input type="text" id="pf-models" name="models" placeholder="gpt-4o, claude-3-5-sonnet, …">
+          <div class="form-hint">Comma-separated model IDs. Leave blank to allow all models.</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+          <div class="form-group">
+            <label for="pf-tpm">TPM limit</label>
+            <input type="number" id="pf-tpm" name="tpm_limit" min="0" placeholder="unlimited">
+          </div>
+          <div class="form-group">
+            <label for="pf-rpm">RPM limit</label>
+            <input type="number" id="pf-rpm" name="rpm_limit" min="0" placeholder="unlimited">
+          </div>
+          <div class="form-group">
+            <label for="pf-budget">Max budget ($)</label>
+            <input type="number" id="pf-budget" name="max_budget" step="0.01" min="0" placeholder="unlimited">
+          </div>
+          <div class="form-group">
+            <label for="pf-bdur">Budget duration</label>
+            <input type="text" id="pf-bdur" name="budget_duration" placeholder="30d / monthly">
+          </div>
+        </div>
+        <div class="form-group">
+          <div class="checkbox-row">
+            <input type="checkbox" id="pf-default" name="is_default">
+            <label for="pf-default" style="margin:0">Default profile</label>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button type="submit" class="btn btn-primary" id="profile-submit-btn">Create profile</button>
+          <button type="button" class="btn btn-secondary" onclick="resetProfileForm()">Reset</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- ── Users tab ──────────────────────────────────────── -->
+    <div id="tab-users" class="tab-panel">
+
+      <h2 style="margin-bottom:1.25rem">Users</h2>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Profile</th>
+              <th>Change profile</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Users}}
+            {{$pid := .ProfileIDVal}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td>{{.Email}}</td>
+              <td>
+                {{if .Profile}}{{.Profile.Name}}{{else}}<em style="color:#999">default</em>{{end}}
+              </td>
+              <td>
+                <form method="POST" action="/admin/users/{{.ID}}/profile"
+                      style="display:flex;gap:.5rem;align-items:center">
+                  <select name="profile_id" style="width:auto">
+                    <option value="0"{{if eq $pid 0}} selected{{end}}>(default)</option>
+                    {{range $.Profiles}}
+                    <option value="{{.ID}}"{{if eq .ID $pid}} selected{{end}}>{{.Name}}</option>
+                    {{end}}
+                  </select>
+                  <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                </form>
+              </td>
+            </tr>
+            {{else}}
+            <tr><td colspan="4" style="color:#999;text-align:center">No users yet.</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- .card -->
+</main>
+
+<script>
+function showTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+function openEditProfile(id, name, desc, models, tpm, rpm, budget, bdur, isDefault) {
+  document.getElementById('pf-id').value = id;
+  document.getElementById('pf-name').value = name;
+  document.getElementById('pf-desc').value = desc;
+  document.getElementById('pf-models').value = models;
+  document.getElementById('pf-tpm').value = tpm;
+  document.getElementById('pf-rpm').value = rpm;
+  document.getElementById('pf-budget').value = budget;
+  document.getElementById('pf-bdur').value = bdur;
+  document.getElementById('pf-default').checked = isDefault;
+  document.getElementById('profile-form-title').textContent = 'Edit profile: ' + name;
+  document.getElementById('profile-submit-btn').textContent = 'Update profile';
+  document.getElementById('profile-form').action = '/admin/profiles/' + id;
+  document.getElementById('pf-name').focus();
+  document.getElementById('pf-name').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function resetProfileForm() {
+  document.getElementById('pf-id').value = '';
+  document.getElementById('profile-form').reset();
+  document.getElementById('profile-form').action = '/admin/profiles';
+  document.getElementById('profile-form-title').textContent = 'New profile';
+  document.getElementById('profile-submit-btn').textContent = 'Create profile';
+}
+
+// Restore tab from hash
+if (location.hash === '#users') showTab('users', document.querySelectorAll('.tab-btn')[1]);
+</script>
+
+</body>
+</html>

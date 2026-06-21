@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI API Key Portal</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <h1>AI API Key Portal</h1>
+  <nav>
+    {{if .IsAdmin}}<a href="/admin">Admin</a>{{end}}
+    <span style="opacity:.6;font-size:.85rem">{{.User.Name}}</span>
+    <form method="POST" action="/logout" style="display:inline">
+      <button type="submit">Sign out</button>
+    </form>
+  </nav>
+</header>
+
+<main>
+
+  {{if .NewKey}}
+  <div class="card">
+    <div class="alert alert-warning">
+      <strong>Save your API key now.</strong> It will not be shown again after you leave this page.
+    </div>
+    <div style="margin-top:.75rem" class="key-box key-new">
+      <span id="new-key-val">{{.NewKey}}</span>
+      <button class="copy-btn" onclick="copyText('new-key-val', this)">Copy</button>
+    </div>
+  </div>
+  {{end}}
+
+  <div class="card">
+    <h2>Your account</h2>
+    <dl class="info-grid">
+      <dt>Name</dt>  <dd>{{.User.Name}}</dd>
+      <dt>Email</dt> <dd>{{.User.Email}}</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2>API key</h2>
+
+    {{if .APIKey}}
+
+      <dl class="info-grid" style="margin-bottom:1.25rem">
+        <dt>Key</dt>
+        <dd>
+          <div class="key-box">
+            <span>{{.APIKey.KeyPrefix}}…</span>
+          </div>
+        </dd>
+        <dt>Expires</dt>
+        <dd>
+          <span class="expiry" data-date="{{.APIKey.ExpiresAt.Format "2006-01-02"}}"></span>
+          &nbsp;{{.APIKey.ExpiresAt.Format "2006-01-02"}}
+        </dd>
+      </dl>
+
+      <div class="btn-row">
+        <form method="POST" action="/key/extend">
+          <button type="submit" class="btn btn-secondary">Extend (+{{.KeyDurationDays}} days)</button>
+        </form>
+        <form method="POST" action="/key/generate"
+              onsubmit="return confirm('This will revoke your current key and generate a new one. Continue?')">
+          <button type="submit" class="btn btn-secondary">Regenerate</button>
+        </form>
+        <form method="POST" action="/key/delete"
+              onsubmit="return confirm('Delete your API key? You will lose access immediately.')">
+          <button type="submit" class="btn btn-danger">Delete</button>
+        </form>
+      </div>
+
+    {{else}}
+
+      <p style="color:#555;margin-bottom:1.25rem">You don't have an API key yet.</p>
+      <form method="POST" action="/key/generate">
+        <button type="submit" class="btn btn-primary">Generate API key</button>
+      </form>
+
+    {{end}}
+  </div>
+
+  {{if .APIKey}}
+  <div class="card">
+    <h2>Using your key</h2>
+    <p style="margin-bottom:.75rem;color:#555;font-size:.9rem">
+      Configure your AI client with these settings:
+    </p>
+    <dl class="info-grid">
+      <dt>Base URL</dt>
+      <dd>
+        <div class="key-box">
+          <span id="base-url-val">{{.FrontendURL}}/v1</span>
+          <button class="copy-btn" onclick="copyText('base-url-val', this)">Copy</button>
+        </div>
+      </dd>
+    </dl>
+  </div>
+  {{end}}
+
+</main>
+
+<script>
+function copyText(id, btn) {
+  const text = document.getElementById(id).textContent.trim();
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 2000);
+  });
+}
+
+// Colour expiry badges
+document.querySelectorAll('.expiry').forEach(el => {
+  const d = new Date(el.dataset.date + 'T23:59:59');
+  const days = Math.round((d - Date.now()) / 86400000);
+  const cls = days < 0 ? 'badge-expired' : days < 14 ? 'badge-warn' : 'badge-ok';
+  el.classList.add('badge', cls);
+  el.textContent = days < 0 ? 'Expired' : days === 0 ? 'Today' : days + 'd left';
+});
+
+// Session polling — redirect to /login when session expires
+(function poll() {
+  if (document.hidden) { setTimeout(poll, 5000); return; }
+  fetch('/session/status').then(r => {
+    if (r.status === 401) { location.href = '/login'; return; }
+    setTimeout(poll, 5000);
+  }).catch(() => setTimeout(poll, 10000));
+})();
+</script>
+
+</body>
+</html>
