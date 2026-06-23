@@ -1,0 +1,31 @@
+issuer: http://127.0.0.1:5556/dex
+
+storage:
+    type: memory
+
+web:
+    http: 127.0.0.1:5556
+
+telemetry:
+    http: 127.0.0.1:5558
+
+grpc:
+    addr: 127.0.0.1:5557
+
+oauth2:
+    skipApprovalScreen: true
+
+staticClients:
+    - id: example-app
+      redirectURIs:
+          - "http://127.0.0.1:8080/callback"
+      name: "Example App"
+      secret: ZXhhbXBsZS1hcHAtc2VjcmV0
+
+enablePasswordDB: true
+
+staticPasswords:
+    - email: test@example.com
+      hash: "$2a$14$znhatkugA/caTpLxi3dr6.bqBcOIxEh9KKIDOe3fuxKN5YPWQ8kYq" # test
+      username: test
+      userID: 406b8173-5d57-4272-a193-8c358f299102

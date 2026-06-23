@@ -1,0 +1,31 @@
+services:
+  dex:
+    image: dexidp/dex:latest
+    container_name: dex
+    ports:
+      - "127.0.0.1:5556:5556"
+    volumes:
+      - ./dex-config.yaml:/etc/dex/config.yaml
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+
+  litellm:
+    image: docker.litellm.ai/berriai/litellm:v1.88.0
+    container_name: litellm
+    restart: always
+    volumes:
+     - litellm-config.yml:/etc/litellm/litellm-config.yml
+    command:
+     - "--config=/etc/litellm/config.yml"
+    env_file:
+      - litellm.env
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16
+    restart: always
+    container_name: litellm_db
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: litellm
