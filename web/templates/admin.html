@@ -55,7 +55,7 @@
                 {{if .Models}}
                   {{range $i, $m := .Models}}{{if $i}}, {{end}}{{$m}}{{end}}
                 {{else}}
-                  <em style="color:#999">all</em>
+                  <em class="text-faint">all</em>
                 {{end}}
               </td>
               <td>{{if .TPMLimit}}{{.TPMLimit}}{{else}}&mdash;{{end}}</td>
@@ -87,7 +87,7 @@
               </td>
             </tr>
             {{else}}
-            <tr><td colspan="8" style="color:#999;text-align:center">No profiles yet.</td></tr>
+            <tr><td colspan="8" class="text-faint" style="text-align:center">No profiles yet.</td></tr>
             {{end}}
           </tbody>
         </table>
@@ -164,7 +164,7 @@
               <td>{{.Name}}</td>
               <td>{{.Email}}</td>
               <td>
-                {{if .Profile}}{{.Profile.Name}}{{else}}<em style="color:#999">default</em>{{end}}
+                {{if .Profile}}{{.Profile.Name}}{{else}}<em class="text-faint">default</em>{{end}}
               </td>
               <td>
                 <form method="POST" action="/admin/users/{{.ID}}/profile"
@@ -180,7 +180,7 @@
               </td>
             </tr>
             {{else}}
-            <tr><td colspan="4" style="color:#999;text-align:center">No users yet.</td></tr>
+            <tr><td colspan="4" class="text-faint" style="text-align:center">No users yet.</td></tr>
             {{end}}
           </tbody>
         </table>

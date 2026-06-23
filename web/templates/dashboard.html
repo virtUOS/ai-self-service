@@ -76,7 +76,7 @@
 
     {{else}}
 
-      <p style="color:#555;margin-bottom:1.25rem">You don't have an API key yet.</p>
+      <p class="text-muted" style="margin-bottom:1.25rem">You don't have an API key yet.</p>
       <form method="POST" action="/key/generate">
         <button type="submit" class="btn btn-primary">Generate API key</button>
       </form>
@@ -87,7 +87,7 @@
   {{if .APIKey}}
   <div class="card">
     <h2>Using your key</h2>
-    <p style="margin-bottom:.75rem;color:#555;font-size:.9rem">
+    <p class="text-muted" style="margin-bottom:.75rem;font-size:.9rem">
       Configure your AI client with these settings:
     </p>
     <dl class="info-grid">
