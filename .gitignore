@@ -1,0 +1,18 @@
+# Environment files — contain the LiteLLM master key and OIDC client secret
+.env
+.env.local
+.env.*.local
+
+# SQLite databases — contain users' plaintext LiteLLM API keys
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Build output
+/ai-self-service
+/server
+
+# OS / editor cruft
+.DS_Store
