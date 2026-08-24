@@ -46,6 +46,17 @@ var (
 	})
 )
 
+// init pre-registers the label combinations so each series exists at zero from
+// startup. A CounterVec otherwise emits nothing until first use, which makes a
+// dashboard panel read "no data" whether the portal is idle or broken.
+func init() {
+	for _, action := range []string{"generate", "extend", "delete", "revoke"} {
+		for _, outcome := range []string{"success", "provider_error", "store_error"} {
+			KeyOperations.WithLabelValues(action, outcome)
+		}
+	}
+}
+
 // Handler serves the Prometheus exposition format.
 func Handler() http.Handler { return promhttp.Handler() }
 
