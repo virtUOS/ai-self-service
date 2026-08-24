@@ -23,6 +23,7 @@ type Admin struct {
 	store    *database.Store
 	sessions *session.Manager
 	keys     keyprovider.Provider
+	models   *modelCache
 	tmpl     *template.Template
 	csrf     *session.CSRF
 }
@@ -37,7 +38,11 @@ func parseAdminTemplate() *template.Template {
 
 func NewAdmin(cfg *config.Config, store *database.Store, sessions *session.Manager, keys keyprovider.Provider, csrf *session.CSRF) *Admin {
 	tmpl := parseAdminTemplate()
-	return &Admin{cfg: cfg, store: store, sessions: sessions, keys: keys, tmpl: tmpl, csrf: csrf}
+	// Only some gateways can enumerate models; the form degrades to free text
+	// when the provider cannot.
+	lister, _ := keys.(keyprovider.ModelLister)
+	return &Admin{cfg: cfg, store: store, sessions: sessions, keys: keys,
+		models: newModelCache(lister), tmpl: tmpl, csrf: csrf}
 }
 
 // actorEmail identifies the admin performing the current request, for audit.
@@ -136,11 +141,12 @@ type userRow struct {
 }
 
 type adminData struct {
-	Profiles  []database.Profile
-	Users     []userRow
-	Audit     []database.AuditEvent
-	Flash     string
-	CSRFToken string
+	AvailableModels []string
+	Profiles        []database.Profile
+	Users           []userRow
+	Audit           []database.AuditEvent
+	Flash           string
+	CSRFToken       string
 }
 
 // Panel renders the admin page with profile and user lists.
@@ -187,11 +193,12 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 	}
 	flash := r.URL.Query().Get("flash")
 	if err := a.tmpl.Execute(w, adminData{
-		Profiles:  profiles,
-		Users:     users,
-		Audit:     audit,
-		Flash:     flash,
-		CSRFToken: a.csrf.Token(w, r),
+		AvailableModels: a.models.Models(r.Context()),
+		Profiles:        profiles,
+		Users:           users,
+		Audit:           audit,
+		Flash:           flash,
+		CSRFToken:       a.csrf.Token(w, r),
 	}); err != nil {
 		slog.Error("admin template", "err", err)
 	}
@@ -207,7 +214,7 @@ func (a *Admin) CreateProfile(w http.ResponseWriter, r *http.Request) {
 	p := &database.Profile{
 		Name:        strings.TrimSpace(r.FormValue("name")),
 		Description: strings.TrimSpace(r.FormValue("description")),
-		Models:      parseModelsField(r.FormValue("models")),
+		Models:      selectedModels(r),
 		IsDefault:   r.FormValue("is_default") == "on",
 	}
 	p.TPMLimit = parseOptionalInt64(r.FormValue("tpm_limit"))
@@ -249,7 +256,7 @@ func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		ID:          id,
 		Name:        strings.TrimSpace(r.FormValue("name")),
 		Description: strings.TrimSpace(r.FormValue("description")),
-		Models:      parseModelsField(r.FormValue("models")),
+		Models:      selectedModels(r),
 		IsDefault:   r.FormValue("is_default") == "on",
 		UpdatedAt:   time.Now(),
 	}
@@ -329,6 +336,22 @@ func (a *Admin) SetUserProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- helpers ---
+
+// selectedModels reads the model checkboxes, falling back to the comma-
+// separated text field when the picker was not rendered. An empty result means
+// "all models", which is what the gateway understands from an empty list.
+func selectedModels(r *http.Request) []string {
+	if vals := r.Form["model"]; len(vals) > 0 {
+		out := make([]string, 0, len(vals))
+		for _, v := range vals {
+			if v = strings.TrimSpace(v); v != "" {
+				out = append(out, v)
+			}
+		}
+		return out
+	}
+	return parseModelsField(r.FormValue("models"))
+}
 
 func parseModelsField(s string) []string {
 	var out []string

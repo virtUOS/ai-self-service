@@ -22,6 +22,10 @@ type Fake struct {
 	Deleted  []string
 	Extended []string
 
+	// AvailableModels is what ListModels returns; ModelsErr forces it to fail.
+	AvailableModels []string
+	ModelsErr       error
+
 	// CreateErr, DeleteErr and ExpiryErr force the respective call to fail.
 	CreateErr error
 	DeleteErr error
@@ -32,7 +36,20 @@ func NewFake() *Fake {
 	return &Fake{Keys: make(map[string]KeyRequest)}
 }
 
-var _ Provider = (*Fake)(nil)
+var (
+	_ Provider    = (*Fake)(nil)
+	_ ModelLister = (*Fake)(nil)
+)
+
+// Models is what ListModels returns.
+func (f *Fake) ListModels(context.Context) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.ModelsErr != nil {
+		return nil, f.ModelsErr
+	}
+	return f.AvailableModels, nil
+}
 
 func (f *Fake) CreateKey(_ context.Context, req KeyRequest) (KeyResult, error) {
 	f.mu.Lock()

@@ -337,3 +337,40 @@ tr:hover td { background: var(--tr-hover); }
   right: 0;
   transform: none;
 }
+
+/* ── Model picker ───────────────────────────────────────────────────────── */
+/* Checkboxes for the models the gateway actually serves, so a profile cannot
+   name a model that does not exist. */
+.model-picker {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  padding: .6rem .75rem;
+  border: 1px solid var(--border, #334155);
+  border-radius: .375rem;
+  background: var(--input-bg, #0f172a);
+}
+
+.model-option {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin: 0;
+  font-weight: 400;
+  font-size: .875rem;
+  cursor: pointer;
+}
+
+.model-option input {
+  width: auto;
+  margin: 0;
+  flex: none;
+}
+
+.model-option span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .8rem;
+  word-break: break-all;
+}

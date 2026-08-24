@@ -111,8 +111,26 @@
         </div>
         <div class="form-group">
           <label for="pf-models">Allowed models <span class="help" tabindex="0" data-help="Restrict this profile to specific models, e.g. Qwen/Qwen3.8-27B-FP8. Leave blank to allow every model the gateway offers.">?</span></label>
-          <input type="text" id="pf-models" name="models" placeholder="gpt-4o, claude-3-5-sonnet, …">
-          <div class="form-hint">Comma-separated model IDs. Leave blank to allow all models.</div>
+          {{if .AvailableModels}}
+          <div class="model-picker" id="pf-model-picker">
+            {{range .AvailableModels}}
+            <label class="model-option">
+              <input type="checkbox" name="model" value="{{.}}"> <span>{{.}}</span>
+            </label>
+            {{end}}
+          </div>
+          <div class="form-hint">
+            Nothing selected = all models allowed. Only models the gateway
+            actually serves are listed, so a typo cannot produce a key that
+            works for nothing.
+          </div>
+          {{else}}
+          <input type="text" id="pf-models" name="models" placeholder="Qwen/Qwen3.8-27B-FP8, …">
+          <div class="form-hint">
+            Comma-separated model IDs. Leave blank to allow all models.
+            (The gateway's model list could not be loaded.)
+          </div>
+          {{end}}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
           <div class="form-group">
@@ -270,7 +288,7 @@ function openEditProfile(id, name, desc, models, tpm, rpm, expiry, quota, period
   document.getElementById('pf-id').value = id;
   document.getElementById('pf-name').value = name;
   document.getElementById('pf-desc').value = desc;
-  document.getElementById('pf-models').value = models;
+  setSelectedModels(models);
   document.getElementById('pf-tpm').value = tpm;
   document.getElementById('pf-rpm').value = rpm;
   document.getElementById('pf-expiry').value = expiry;
@@ -284,9 +302,25 @@ function openEditProfile(id, name, desc, models, tpm, rpm, expiry, quota, period
   document.getElementById('pf-name').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
+// Models arrive as a comma-separated string; tick the matching boxes, or fall
+// back to the free-text input when the gateway list was unavailable.
+function setSelectedModels(models) {
+  const wanted = new Set((models || '').split(',').map(s => s.trim()).filter(Boolean));
+  const picker = document.getElementById('pf-model-picker');
+  if (!picker) {
+    const free = document.getElementById('pf-models');
+    if (free) free.value = models || '';
+    return;
+  }
+  picker.querySelectorAll('input[name="model"]').forEach(cb => {
+    cb.checked = wanted.has(cb.value);
+  });
+}
+
 function resetProfileForm() {
   document.getElementById('pf-id').value = '';
   document.getElementById('profile-form').reset();
+  setSelectedModels('');
   document.getElementById('profile-form').action = '/admin/profiles';
   document.getElementById('profile-form-title').textContent = 'New profile';
   document.getElementById('profile-submit-btn').textContent = 'Create profile';

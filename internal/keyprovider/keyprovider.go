@@ -46,6 +46,13 @@ type KeyResult struct {
 	Ref string
 }
 
+// ModelLister is implemented by providers that can enumerate the models they
+// serve, so the admin UI can offer a real list instead of a free-text field.
+// It is separate from Provider because not every gateway can do this.
+type ModelLister interface {
+	ListModels(ctx context.Context) ([]string, error)
+}
+
 // Provider issues and revokes keys on an upstream gateway.
 type Provider interface {
 	// CreateKey issues a new key.

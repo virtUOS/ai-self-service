@@ -19,7 +19,15 @@ type Provider struct {
 // NewProvider wraps a client as a keyprovider.Provider.
 func NewProvider(c *Client) *Provider { return &Provider{client: c} }
 
-var _ keyprovider.Provider = (*Provider)(nil)
+var (
+	_ keyprovider.Provider    = (*Provider)(nil)
+	_ keyprovider.ModelLister = (*Provider)(nil)
+)
+
+// ListModels reports the models the gateway serves.
+func (p *Provider) ListModels(ctx context.Context) ([]string, error) {
+	return p.client.ListModels(ctx)
+}
 
 func (p *Provider) CreateKey(ctx context.Context, req keyprovider.KeyRequest) (keyprovider.KeyResult, error) {
 	secret, err := p.client.CreateKey(ctx, req.Alias, toKeyParams(req), req.ExpiresAt)

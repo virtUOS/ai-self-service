@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -119,4 +120,44 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte) (*htt
 	req.Header.Set("Authorization", "Bearer "+c.masterKey)
 	req.Header.Set("Content-Type", "application/json")
 	return c.http.Do(req)
+}
+
+type modelInfoResponse struct {
+	Data []struct {
+		ModelName string `json:"model_name"`
+	} `json:"data"`
+}
+
+// ListModels returns the model names the gateway serves.
+//
+// /model/info is used rather than /v1/models: the portal's credential is
+// scoped to management routes, and /v1/models reflects that key's own model
+// access rather than everything configured on the proxy.
+func (c *Client) ListModels(ctx context.Context) ([]string, error) {
+	resp, err := c.do(ctx, http.MethodGet, "/model/info", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("LiteLLM /model/info returned %d: %s", resp.StatusCode, b)
+	}
+
+	var result modelInfoResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode model list: %w", err)
+	}
+
+	seen := make(map[string]bool, len(result.Data))
+	models := make([]string, 0, len(result.Data))
+	for _, m := range result.Data {
+		if m.ModelName != "" && !seen[m.ModelName] {
+			seen[m.ModelName] = true
+			models = append(models, m.ModelName)
+		}
+	}
+	sort.Strings(models)
+	return models, nil
 }

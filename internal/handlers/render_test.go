@@ -143,3 +143,41 @@ func TestDashboardTooltipsRender(t *testing.T) {
 		t.Errorf("only %d tooltips rendered on the dashboard", n)
 	}
 }
+
+// The model picker must list exactly what the gateway serves, so an admin
+// cannot type a model that does not exist.
+func TestAdminModelPickerRenders(t *testing.T) {
+	tmpl := parseAdminTemplate()
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, adminData{
+		AvailableModels: []string{"Qwen/Qwen3.8-27B-FP8", "bge-m3"},
+		Profiles:        []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
+		CSRFToken:       "T",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, m := range []string{"Qwen/Qwen3.8-27B-FP8", "bge-m3"} {
+		if !strings.Contains(out, `value="`+m+`"`) {
+			t.Errorf("model %q not offered as a checkbox", m)
+		}
+	}
+	if strings.Contains(out, `name="models"`) {
+		t.Error("free-text fallback rendered alongside the picker")
+	}
+}
+
+// With no list available the form must still be usable.
+func TestAdminModelPickerFallsBackToText(t *testing.T) {
+	tmpl := parseAdminTemplate()
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, adminData{
+		Profiles:  []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
+		CSRFToken: "T",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `name="models"`) {
+		t.Error("no free-text fallback when the gateway list is unavailable")
+	}
+}
