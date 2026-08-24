@@ -20,11 +20,12 @@ type Admin struct {
 	store    *database.Store
 	sessions *session.Manager
 	tmpl     *template.Template
+	csrf     *session.CSRF
 }
 
-func NewAdmin(cfg *config.Config, store *database.Store, sessions *session.Manager) *Admin {
+func NewAdmin(cfg *config.Config, store *database.Store, sessions *session.Manager, csrf *session.CSRF) *Admin {
 	tmpl := template.Must(template.ParseFS(web.TemplateFS, "templates/admin.html"))
-	return &Admin{cfg: cfg, store: store, sessions: sessions, tmpl: tmpl}
+	return &Admin{cfg: cfg, store: store, sessions: sessions, tmpl: tmpl, csrf: csrf}
 }
 
 // Middleware checks that the current session belongs to an admin user.
@@ -54,9 +55,10 @@ type userRow struct {
 }
 
 type adminData struct {
-	Profiles []database.Profile
-	Users    []userRow
-	Flash    string
+	Profiles  []database.Profile
+	Users     []userRow
+	Flash     string
+	CSRFToken string
 }
 
 // Panel renders the admin page with profile and user lists.
@@ -81,7 +83,12 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 		users[i] = row
 	}
 	flash := r.URL.Query().Get("flash")
-	if err := a.tmpl.Execute(w, adminData{Profiles: profiles, Users: users, Flash: flash}); err != nil {
+	if err := a.tmpl.Execute(w, adminData{
+		Profiles:  profiles,
+		Users:     users,
+		Flash:     flash,
+		CSRFToken: a.csrf.Token(w, r),
+	}); err != nil {
 		log.Printf("admin template: %v", err)
 	}
 }

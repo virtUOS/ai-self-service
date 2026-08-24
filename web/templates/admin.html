@@ -80,6 +80,7 @@
                   {{if not .IsDefault}}
                   <form method="POST" action="/admin/profiles/{{.ID}}/delete"
                         onsubmit="return confirm('Delete profile {{.Name}}?')">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                     <button class="btn btn-sm btn-danger">Delete</button>
                   </form>
                   {{end}}
@@ -96,6 +97,7 @@
       <!-- Create / Edit form -->
       <h3 id="profile-form-title">New profile</h3>
       <form id="profile-form" method="POST" action="/admin/profiles" style="max-width:540px">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
         <input type="hidden" name="_id" id="pf-id" value="">
 
         <div class="form-group">
@@ -169,6 +171,7 @@
               <td>
                 <form method="POST" action="/admin/users/{{.ID}}/profile"
                       style="display:flex;gap:.5rem;align-items:center">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                   <select name="profile_id" style="width:auto">
                     <option value="0"{{if eq $pid 0}} selected{{end}}>(default)</option>
                     {{range $.Profiles}}

@@ -14,6 +14,7 @@
     {{if .IsAdmin}}<a href="/admin">Admin</a>{{end}}
     <span style="opacity:.6;font-size:.85rem">{{.User.Name}}</span>
     <form method="POST" action="/logout" style="display:inline">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <button type="submit">Sign out</button>
     </form>
   </nav>
@@ -62,14 +63,17 @@
 
       <div class="btn-row">
         <form method="POST" action="/key/extend">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button type="submit" class="btn btn-secondary">Extend (+{{.KeyDurationDays}} days)</button>
         </form>
         <form method="POST" action="/key/generate"
               onsubmit="return confirm('This will revoke your current key and generate a new one. Continue?')">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button type="submit" class="btn btn-secondary">Regenerate</button>
         </form>
         <form method="POST" action="/key/delete"
               onsubmit="return confirm('Delete your API key? You will lose access immediately.')">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button type="submit" class="btn btn-danger">Delete</button>
         </form>
       </div>
@@ -78,6 +82,7 @@
 
       <p class="text-muted" style="margin-bottom:1.25rem">You don't have an API key yet.</p>
       <form method="POST" action="/key/generate">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button type="submit" class="btn btn-primary">Generate API key</button>
       </form>
 

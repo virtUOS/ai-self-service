@@ -21,16 +21,17 @@ type UI struct {
 	oidc     *oidcpkg.Provider
 	litellm  *litellm.Client
 	tmpl     *template.Template
+	flash    *keyFlash
+	csrf     *session.CSRF
 }
 
-func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager, oidc *oidcpkg.Provider, ll *litellm.Client) *UI {
+func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager, oidc *oidcpkg.Provider, ll *litellm.Client, csrf *session.CSRF) *UI {
 	tmpl := template.Must(template.ParseFS(web.TemplateFS, "templates/dashboard.html"))
-	return &UI{cfg: cfg, store: store, sessions: sessions, oidc: oidc, litellm: ll, tmpl: tmpl}
+	return &UI{cfg: cfg, store: store, sessions: sessions, oidc: oidc, litellm: ll, tmpl: tmpl, flash: newKeyFlash(), csrf: csrf}
 }
 
 func (u *UI) requireSession(r *http.Request) (*session.SessionUser, error) {
 	token := u.sessions.TokenFromRequest(r)
-	log.Printf("requireSession: token present=%v", token != "")
 	if token == "" {
 		return nil, http.ErrNoCookie
 	}
@@ -54,10 +55,12 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		IsAdmin         bool
 		FrontendURL     string
 		KeyDurationDays int
+		CSRFToken       string
 	}
 
-	// Pull a one-time new key from the query string (set after generate/regenerate redirect).
-	newKey := r.URL.Query().Get("newkey")
+	// Redeem a one-time new key stashed by GenerateKey. The secret never
+	// appears in the URL; the query string carries only an opaque token.
+	newKey := u.flash.Take(su.User.ID, r.URL.Query().Get("k"))
 
 	if err := u.tmpl.Execute(w, data{
 		User:            su.User,
@@ -66,6 +69,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		IsAdmin:         u.cfg.IsAdmin(su.User.Email),
 		FrontendURL:     u.cfg.FrontendURL,
 		KeyDurationDays: u.cfg.KeyDurationDays,
+		CSRFToken:       u.csrf.Token(w, r),
 	}); err != nil {
 		log.Printf("dashboard template: %v", err)
 	}
@@ -85,16 +89,12 @@ func (u *UI) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("callback: authenticated %s (%s)", result.UserInfo.Email, result.UserInfo.Subject)
-
 	user, err := u.oidc.GetOrCreateUser(r.Context(), result.UserInfo)
 	if err != nil {
 		log.Printf("callback: get/create user: %v", err)
 		http.Error(w, "Failed to load user", http.StatusInternalServerError)
 		return
 	}
-
-	log.Printf("callback: user id=%d email=%s", user.ID, user.Email)
 
 	token, err := u.sessions.Create(r.Context(), user.ID, result.IDToken)
 	if err != nil {
@@ -104,7 +104,6 @@ func (u *UI) Callback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u.sessions.SetCookie(w, token)
-	log.Printf("callback: session created, redirecting to /")
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
@@ -195,7 +194,13 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 		log.Printf("store api key: %v", err)
 	}
 
-	http.Redirect(w, r, "/?newkey="+key, http.StatusFound)
+	token, err := u.flash.Put(su.User.ID, key)
+	if err != nil {
+		log.Printf("stash new key: %v", err)
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, "/?k="+token, http.StatusFound)
 }
 
 // ExtendKey extends the user's key expiry by KEY_DURATION_DAYS from now.
