@@ -46,7 +46,7 @@ func newTestUI(t *testing.T, name string) (*UI, *keyprovider.Fake, *database.Sto
 	}
 
 	fake := keyprovider.NewFake()
-	csrf, err := session.NewCSRF(false)
+	csrf, err := session.NewCSRF(false, "test-seed")
 	if err != nil {
 		t.Fatal(err)
 	}

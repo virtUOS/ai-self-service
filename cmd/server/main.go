@@ -79,7 +79,10 @@ func main() {
 	}
 
 	sessions := session.NewManager(store, cfg.SessionDuration, cfg.CookieSecure)
-	csrf, err := session.NewCSRF(cfg.CookieSecure)
+	// Seeded from the OIDC client secret: a stable per-deployment secret the
+	// process already holds, so CSRF tokens survive a restart instead of
+	// invalidating every open page on each redeploy.
+	csrf, err := session.NewCSRF(cfg.CookieSecure, cfg.OIDCClientSecret)
 	if err != nil {
 		log.Fatalf("CSRF: %v", err)
 	}

@@ -31,15 +31,29 @@ type CSRF struct {
 	secure bool
 }
 
-// NewCSRF creates a CSRF protector with a process-lifetime random secret.
-// Restarting the server invalidates outstanding forms, which surfaces as a
-// single retry-able rejection rather than a security hole.
-func NewCSRF(secure bool) (*CSRF, error) {
-	secret := make([]byte, 32)
-	if _, err := rand.Read(secret); err != nil {
-		return nil, fmt.Errorf("generate CSRF secret: %w", err)
+// NewCSRF creates a CSRF protector.
+//
+// The signing secret is derived from seed rather than generated per process.
+// A random per-process secret invalidates every form the moment the server
+// restarts, and the user sees "Invalid CSRF token" on a page they had open —
+// which on a redeployed service is routine rather than exceptional.
+//
+// Deriving from a stable seed keeps outstanding forms working across a restart
+// while still being unguessable, because the seed is a secret the deployment
+// already holds. An empty seed falls back to a random secret so a
+// misconfiguration fails closed rather than using a predictable key.
+func NewCSRF(secure bool, seed string) (*CSRF, error) {
+	if seed == "" {
+		secret := make([]byte, 32)
+		if _, err := rand.Read(secret); err != nil {
+			return nil, fmt.Errorf("generate CSRF secret: %w", err)
+		}
+		return &CSRF{secret: secret, secure: secure}, nil
 	}
-	return &CSRF{secret: secret, secure: secure}, nil
+
+	// Domain-separated so the seed cannot be replayed against another use.
+	sum := sha256.Sum256([]byte("ai-self-service/csrf\x00" + seed))
+	return &CSRF{secret: sum[:], secure: secure}, nil
 }
 
 func (c *CSRF) sign(value string) string {
@@ -47,6 +61,11 @@ func (c *CSRF) sign(value string) string {
 	mac.Write([]byte(value))
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
+
+// csrfCookieMaxAge outlives a working day, so a form left open over lunch still
+// submits. The cookie is only half of the pair; the signature is what makes a
+// forged value useless.
+const csrfCookieMaxAge = 12 * 60 * 60
 
 // Token returns the value templates embed in forms, setting the paired cookie
 // if the request does not already carry one.
@@ -64,6 +83,7 @@ func (c *CSRF) Token(w http.ResponseWriter, r *http.Request) string {
 			Name:     csrfCookieName,
 			Value:    value,
 			Path:     "/",
+			MaxAge:   csrfCookieMaxAge,
 			HttpOnly: true,
 			Secure:   c.secure,
 			SameSite: http.SameSiteLaxMode,
