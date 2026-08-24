@@ -78,6 +78,17 @@ Profile fields:
 Different cohorts get different profiles: students might get 30-day keys with a
 1M-token daily allowance, lecturers 365-day keys with no quota.
 
+### How extending works
+
+Extend sets the expiry to **now + the profile's key validity**. It does not add
+to the existing expiry, so clicking twice does not stockpile time, and it does
+not use the duration the key was originally created with — that is never
+stored.
+
+The consequence is that policy changes apply on the next extend: move a user
+from a 30-day profile to a 365-day one and their existing key extends by 365,
+without needing to be regenerated.
+
 ### How usage limits work
 
 Admins configure quotas in **tokens**; LiteLLM enforces spend. The portal
