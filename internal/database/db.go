@@ -159,6 +159,9 @@ func (s *Store) updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile, mode
 		Set("rpm_limit = ?", p.RPMLimit).
 		Set("max_budget = ?", p.MaxBudget).
 		Set("budget_duration = ?", p.BudgetDuration).
+		Set("key_duration_days = ?", p.KeyDurationDays).
+		Set("quota_tokens = ?", p.QuotaTokens).
+		Set("quota_period = ?", p.QuotaPeriod).
 		Set("is_default = ?", p.IsDefault).
 		Set("updated_at = ?", p.UpdatedAt).
 		Where("id = ?", p.ID).

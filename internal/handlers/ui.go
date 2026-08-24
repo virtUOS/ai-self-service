@@ -38,6 +38,21 @@ func (u *UI) requireSession(r *http.Request) (*session.SessionUser, error) {
 	return u.sessions.Get(r.Context(), token)
 }
 
+// dashboardData is what dashboard.html renders. Named rather than anonymous so
+// tests cannot drift from the handler's shape.
+type dashboardData struct {
+	User            *database.User
+	APIKey          *database.APIKey
+	NewKey          string
+	IsAdmin         bool
+	FrontendURL     string
+	KeyDurationDays int
+	ProfileName     string
+	QuotaTokens     string
+	QuotaPeriod     string
+	CSRFToken       string
+}
+
 // Dashboard renders the user dashboard.
 func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 	su, err := u.requireSession(r)
@@ -51,27 +66,27 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		log.Printf("dashboard: load key: %v", err)
 	}
 
-	type data struct {
-		User            *database.User
-		APIKey          *database.APIKey
-		NewKey          string
-		IsAdmin         bool
-		FrontendURL     string
-		KeyDurationDays int
-		CSRFToken       string
+	// The dashboard advertises the extend duration and the fair-use quota, both
+	// of which come from the user's profile rather than the server default.
+	profile, err := u.resolveProfile(r, su.User)
+	if err != nil {
+		log.Printf("dashboard: resolve profile: %v", err)
 	}
 
 	// Redeem a one-time new key stashed by GenerateKey. The secret never
 	// appears in the URL; the query string carries only an opaque token.
 	newKey := u.flash.Take(su.User.ID, r.URL.Query().Get("k"))
 
-	if err := u.tmpl.Execute(w, data{
+	if err := u.tmpl.Execute(w, dashboardData{
 		User:            su.User,
 		APIKey:          apiKey,
 		NewKey:          newKey,
 		IsAdmin:         u.cfg.IsAdmin(su.User.Email),
 		FrontendURL:     u.cfg.FrontendURL,
-		KeyDurationDays: u.cfg.KeyDurationDays,
+		KeyDurationDays: u.keyDuration(profile),
+		ProfileName:     profileName(profile),
+		QuotaTokens:     profileQuota(profile),
+		QuotaPeriod:     profilePeriod(profile),
 		CSRFToken:       u.csrf.Token(w, r),
 	}); err != nil {
 		log.Printf("dashboard template: %v", err)
@@ -177,7 +192,7 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 
 	// Create the replacement BEFORE revoking the old one. The reverse order
 	// leaves the user with no working key whenever creation fails.
-	expiresAt := time.Now().AddDate(0, 0, u.cfg.KeyDurationDays)
+	expiresAt := time.Now().AddDate(0, 0, u.keyDuration(profile))
 	params := profileToKeyParams(profile, su.User.Email)
 	key, err := u.litellm.CreateKey(r.Context(), su.User.Email, params, expiresAt)
 	if err != nil {
@@ -240,7 +255,12 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newExpiry := time.Now().AddDate(0, 0, u.cfg.KeyDurationDays)
+	profile, err := u.resolveProfile(r, su.User)
+	if err != nil {
+		http.Error(w, "Failed to load profile", http.StatusInternalServerError)
+		return
+	}
+	newExpiry := time.Now().AddDate(0, 0, u.keyDuration(profile))
 	if err := u.litellm.UpdateKeyExpiry(r.Context(), k.LiteLLMKey, newExpiry); err != nil {
 		http.Error(w, "Failed to extend key: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -273,6 +293,48 @@ func (u *UI) DeleteKey(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
+func profileName(p *database.Profile) string {
+	if p == nil {
+		return ""
+	}
+	return p.Name
+}
+
+// profileQuota renders the fair-use allowance, or "" when there is none.
+func profileQuota(p *database.Profile) string {
+	if p == nil || p.QuotaTokens <= 0 || p.QuotaPeriod == "" {
+		return ""
+	}
+	return litellm.FormatTokens(p.QuotaTokens)
+}
+
+func profilePeriod(p *database.Profile) string {
+	if p == nil || p.QuotaTokens <= 0 {
+		return ""
+	}
+	switch p.QuotaPeriod {
+	case "1h":
+		return "per hour"
+	case "24h":
+		return "per day"
+	case "7d":
+		return "per week"
+	case "30d":
+		return "per month"
+	default:
+		return ""
+	}
+}
+
+// keyDuration returns the profile's expiry in days, falling back to the
+// server-wide default when the profile does not set one.
+func (u *UI) keyDuration(p *database.Profile) int {
+	if p != nil && p.KeyDurationDays > 0 {
+		return p.KeyDurationDays
+	}
+	return u.cfg.KeyDurationDays
+}
+
 func (u *UI) resolveProfile(r *http.Request, user *database.User) (*database.Profile, error) {
 	if user.ProfileID != nil {
 		return u.store.GetProfile(r.Context(), *user.ProfileID)
@@ -292,6 +354,16 @@ func profileToKeyParams(p *database.Profile, email string) litellm.KeyParams {
 		MaxBudget:      p.MaxBudget,
 		BudgetDuration: p.BudgetDuration,
 		Metadata:       map[string]any{"user_email": email},
+	}
+
+	// A token quota is expressed upstream as a spend cap over a reset window.
+	// It takes precedence over any raw budget left on the profile, which only
+	// applies once commercial (really priced) models are in play.
+	if p.QuotaTokens > 0 && p.QuotaPeriod != "" {
+		budget := litellm.TokensToBudget(p.QuotaTokens)
+		period := p.QuotaPeriod
+		params.MaxBudget = &budget
+		params.BudgetDuration = &period
 	}
 	return params
 }

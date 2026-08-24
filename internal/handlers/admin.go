@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/ai-self-service/internal/litellm"
 	"github.com/virtuos/ai-self-service/internal/session"
 	"github.com/virtuos/ai-self-service/web"
 )
@@ -23,8 +24,16 @@ type Admin struct {
 	csrf     *session.CSRF
 }
 
+// parseAdminTemplate builds the admin template with its helper functions.
+// Tests use it too, so a helper added here cannot be missed there.
+func parseAdminTemplate() *template.Template {
+	return template.Must(template.New("admin.html").
+		Funcs(template.FuncMap{"fmtTokens": litellm.FormatTokens}).
+		ParseFS(web.TemplateFS, "templates/admin.html"))
+}
+
 func NewAdmin(cfg *config.Config, store *database.Store, sessions *session.Manager, csrf *session.CSRF) *Admin {
-	tmpl := template.Must(template.ParseFS(web.TemplateFS, "templates/admin.html"))
+	tmpl := parseAdminTemplate()
 	return &Admin{cfg: cfg, store: store, sessions: sessions, tmpl: tmpl, csrf: csrf}
 }
 
@@ -108,11 +117,16 @@ func (a *Admin) CreateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	p.TPMLimit = parseOptionalInt64(r.FormValue("tpm_limit"))
 	p.RPMLimit = parseOptionalInt64(r.FormValue("rpm_limit"))
-	p.MaxBudget = parseOptionalFloat64(r.FormValue("max_budget"))
-	p.BudgetDuration = parseOptionalString(r.FormValue("budget_duration"))
+	p.KeyDurationDays = parseNonNegativeInt(r.FormValue("key_duration_days"))
+	p.QuotaTokens = parseNonNegativeInt64(r.FormValue("quota_tokens"))
+	p.QuotaPeriod = strings.TrimSpace(r.FormValue("quota_period"))
 
 	if p.Name == "" {
 		http.Redirect(w, r, "/admin?flash=Name+is+required", http.StatusFound)
+		return
+	}
+	if !litellm.IsValidQuotaPeriod(p.QuotaPeriod) {
+		http.Redirect(w, r, "/admin?flash=Invalid+quota+period", http.StatusFound)
 		return
 	}
 
@@ -146,8 +160,14 @@ func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	p.TPMLimit = parseOptionalInt64(r.FormValue("tpm_limit"))
 	p.RPMLimit = parseOptionalInt64(r.FormValue("rpm_limit"))
-	p.MaxBudget = parseOptionalFloat64(r.FormValue("max_budget"))
-	p.BudgetDuration = parseOptionalString(r.FormValue("budget_duration"))
+	p.KeyDurationDays = parseNonNegativeInt(r.FormValue("key_duration_days"))
+	p.QuotaTokens = parseNonNegativeInt64(r.FormValue("quota_tokens"))
+	p.QuotaPeriod = strings.TrimSpace(r.FormValue("quota_period"))
+
+	if !litellm.IsValidQuotaPeriod(p.QuotaPeriod) {
+		http.Redirect(w, r, "/admin?flash=Invalid+quota+period", http.StatusFound)
+		return
+	}
 
 	if err := a.store.UpdateProfile(r.Context(), p); err != nil {
 		log.Printf("update profile: %v", err)
@@ -225,22 +245,21 @@ func parseOptionalInt64(s string) *int64 {
 	return &v
 }
 
-func parseOptionalFloat64(s string) *float64 {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil
-	}
-	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return nil
-	}
-	return &v
+// parseNonNegativeInt reads an optional whole number, treating blank, invalid
+// and negative input as 0 ("not set").
+func parseNonNegativeInt(s string) int {
+	v := parseNonNegativeInt64(s)
+	return int(v)
 }
 
-func parseOptionalString(s string) *string {
+func parseNonNegativeInt64(s string) int64 {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return nil
+		return 0
 	}
-	return &s
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || v < 0 {
+		return 0
+	}
+	return v
 }

@@ -39,7 +39,18 @@
     <dl class="info-grid">
       <dt>Name</dt>  <dd>{{.User.Name}}</dd>
       <dt>Email</dt> <dd>{{.User.Email}}</dd>
+      {{if .ProfileName}}<dt>Profile</dt> <dd>{{.ProfileName}}</dd>{{end}}
+      {{if .QuotaTokens}}
+      <dt>Usage limit</dt>
+      <dd>{{.QuotaTokens}} tokens {{.QuotaPeriod}}</dd>
+      {{end}}
     </dl>
+    {{if .QuotaTokens}}
+    <p class="text-muted" style="margin-top:.75rem;font-size:.85rem">
+      Requests fail once the limit is reached and resume automatically when the
+      period resets.
+    </p>
+    {{end}}
   </div>
 
   <div class="card">

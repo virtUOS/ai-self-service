@@ -117,3 +117,58 @@ func TestProfileModelsRoundTrip(t *testing.T) {
 		t.Fatalf("models after update = %#v", got.Models)
 	}
 }
+
+// New profile fields must round-trip through create and update.
+func TestProfileQuotaFieldsPersist(t *testing.T) {
+	s := migratedStore(t, "pq1")
+	ctx := context.Background()
+
+	p := &Profile{
+		Name: "students", KeyDurationDays: 30,
+		QuotaTokens: 1_000_000, QuotaPeriod: "24h",
+	}
+	if err := s.CreateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetProfile(ctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.KeyDurationDays != 30 || got.QuotaTokens != 1_000_000 || got.QuotaPeriod != "24h" {
+		t.Fatalf("after create: days=%d tokens=%d period=%q",
+			got.KeyDurationDays, got.QuotaTokens, got.QuotaPeriod)
+	}
+
+	p.KeyDurationDays = 365
+	p.QuotaTokens = 5_000_000
+	p.QuotaPeriod = "30d"
+	if err := s.UpdateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.GetProfile(ctx, p.ID)
+	if got.KeyDurationDays != 365 || got.QuotaTokens != 5_000_000 || got.QuotaPeriod != "30d" {
+		t.Fatalf("after update: days=%d tokens=%d period=%q",
+			got.KeyDurationDays, got.QuotaTokens, got.QuotaPeriod)
+	}
+}
+
+// Profiles created before this migration must keep working, with the new
+// columns defaulting to "unset" rather than imposing a zero-token quota.
+func TestExistingProfilesGetSafeDefaults(t *testing.T) {
+	s := migratedStore(t, "pq2")
+	ctx := context.Background()
+
+	if err := s.SeedDefaultProfile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	d, err := s.GetDefaultProfile(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.KeyDurationDays != 0 {
+		t.Errorf("KeyDurationDays = %d, want 0 (fall back to server default)", d.KeyDurationDays)
+	}
+	if d.QuotaTokens != 0 || d.QuotaPeriod != "" {
+		t.Errorf("seeded profile has a quota: tokens=%d period=%q", d.QuotaTokens, d.QuotaPeriod)
+	}
+}

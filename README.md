@@ -13,7 +13,7 @@ A self-service web portal that lets users generate, manage, and renew their own 
 ## Features
 
 - **Self-service key management** — generate, extend, regenerate, and delete LiteLLM API keys
-- **Profile system** — per-user limits for models, tokens per minute (TPM), requests per minute (RPM), and budget
+- **Profile system** — per-user key validity, fair-use token quotas, model restrictions and TPM/RPM limits
 - **OIDC authentication** — login, logout, and back-channel logout support
 - **SQLite storage** — single file, no separate database server
 - **Admin panel** — manage profiles and assign them to users
@@ -36,7 +36,7 @@ Copy `.env.example` to `.env` and fill in the values:
 | `LISTEN_ADDR`        | no       | `:8080`     | Address and port to listen on                                      |
 | `COOKIE_SECURE`      | no       | `false`     | Set `true` when serving over HTTPS                                 |
 | `SESSION_DURATION`   | no       | `24h`       | How long a login session lasts                                     |
-| `KEY_DURATION_DAYS`  | no       | `90`        | Default validity period for generated keys                         |
+| `KEY_DURATION_DAYS`  | no       | `90`        | Default key validity; profiles may override it                     |
 
 ## Running
 
@@ -55,13 +55,28 @@ Users whose email appears in `ADMIN_EMAILS` see an **Admin** link in the header.
 
 Profile fields:
 
-| Field           | Description                                                       |
-| --------------- | ----------------------------------------------------------------- |
-| Models          | Comma-separated list of allowed LiteLLM model names (empty = all models) |
-| TPM limit       | Maximum tokens per minute                                         |
-| RPM limit       | Maximum requests per minute                                       |
-| Max budget      | Maximum spend before the key is blocked                           |
-| Budget duration | Budget reset period (e.g. `30d`, `1mo`)                           |
+| Field            | Description                                                              |
+| ---------------- | ------------------------------------------------------------------------ |
+| Models           | Comma-separated list of allowed model names (empty = all models)          |
+| Key validity     | How long a generated key lasts, in days (blank = `KEY_DURATION_DAYS`)     |
+| Usage limit      | Fair-use allowance in **tokens** per period (blank = unlimited)           |
+| Limit resets     | `hourly`, `daily`, `weekly` or `monthly`                                  |
+| TPM limit        | Maximum tokens per minute — burst control, complements the usage limit    |
+| RPM limit        | Maximum requests per minute                                               |
+
+Different cohorts get different profiles: students might get 30-day keys with a
+1M-token daily allowance, lecturers 365-day keys with no quota.
+
+### How usage limits work
+
+Admins configure quotas in **tokens**; LiteLLM enforces spend. The portal
+converts using a nominal per-token price (`internal/litellm/quota.go`), so a
+1,000,000-token daily allowance becomes a $0.10 cap that resets every 24h.
+Requests fail with HTTP 429 once the allowance is spent and resume when the
+period resets.
+
+This requires every model in LiteLLM to carry that same nominal price. A model
+priced at `0` or `null` accrues no spend, so a quota over it never triggers.
 
 ## Routes
 

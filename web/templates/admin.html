@@ -41,7 +41,8 @@
               <th>Models</th>
               <th>TPM</th>
               <th>RPM</th>
-              <th>Budget</th>
+              <th>Expiry</th>
+              <th>Quota</th>
               <th>Default</th>
               <th></th>
             </tr>
@@ -60,11 +61,9 @@
               </td>
               <td>{{if .TPMLimit}}{{.TPMLimit}}{{else}}&mdash;{{end}}</td>
               <td>{{if .RPMLimit}}{{.RPMLimit}}{{else}}&mdash;{{end}}</td>
+              <td>{{if .KeyDurationDays}}{{.KeyDurationDays}}d{{else}}<em class="text-faint">default</em>{{end}}</td>
               <td>
-                {{if .MaxBudget}}
-                  {{printf "%.2f" .MaxBudget}}
-                  {{if .BudgetDuration}} / {{.BudgetDuration}}{{end}}
-                {{else}}&mdash;{{end}}
+                {{if .QuotaTokens}}{{fmtTokens .QuotaTokens}} / {{.QuotaPeriod}}{{else}}&mdash;{{end}}
               </td>
               <td>{{if .IsDefault}}✓{{end}}</td>
               <td>
@@ -74,8 +73,9 @@
                             '{{range $i,$m := .Models}}{{if $i}},{{end}}{{$m}}{{end}}',
                             '{{if .TPMLimit}}{{.TPMLimit}}{{end}}',
                             '{{if .RPMLimit}}{{.RPMLimit}}{{end}}',
-                            '{{if .MaxBudget}}{{printf "%.2f" .MaxBudget}}{{end}}',
-                            '{{if .BudgetDuration}}{{.BudgetDuration}}{{end}}',
+                            '{{if .KeyDurationDays}}{{.KeyDurationDays}}{{end}}',
+                            '{{if .QuotaTokens}}{{.QuotaTokens}}{{end}}',
+                            '{{.QuotaPeriod}}',
                             {{.IsDefault}})">Edit</button>
                   {{if not .IsDefault}}
                   <form method="POST" action="/admin/profiles/{{.ID}}/delete"
@@ -88,7 +88,7 @@
               </td>
             </tr>
             {{else}}
-            <tr><td colspan="8" class="text-faint" style="text-align:center">No profiles yet.</td></tr>
+            <tr><td colspan="9" class="text-faint" style="text-align:center">No profiles yet.</td></tr>
             {{end}}
           </tbody>
         </table>
@@ -123,12 +123,25 @@
             <input type="number" id="pf-rpm" name="rpm_limit" min="0" placeholder="unlimited">
           </div>
           <div class="form-group">
-            <label for="pf-budget">Max budget ($)</label>
-            <input type="number" id="pf-budget" name="max_budget" step="0.01" min="0" placeholder="unlimited">
+            <label for="pf-expiry">Key validity (days)</label>
+            <input type="number" id="pf-expiry" name="key_duration_days" min="0" placeholder="server default">
+            <div class="form-hint">How long a generated key lasts. Blank uses the server default.</div>
           </div>
           <div class="form-group">
-            <label for="pf-bdur">Budget duration</label>
-            <input type="text" id="pf-bdur" name="budget_duration" placeholder="30d / monthly">
+            <label for="pf-quota">Usage limit (tokens)</label>
+            <input type="number" id="pf-quota" name="quota_tokens" min="0" placeholder="unlimited">
+            <div class="form-hint">Fair-use allowance per period. Blank means no limit.</div>
+          </div>
+          <div class="form-group">
+            <label for="pf-period">Limit resets</label>
+            <select id="pf-period" name="quota_period">
+              <option value="">no limit</option>
+              <option value="1h">hourly</option>
+              <option value="24h">daily</option>
+              <option value="7d">weekly</option>
+              <option value="30d">monthly</option>
+            </select>
+            <div class="form-hint">Requests fail once the limit is hit, then resume at the reset.</div>
           </div>
         </div>
         <div class="form-group">
@@ -201,15 +214,16 @@ function showTab(name, btn) {
   btn.classList.add('active');
 }
 
-function openEditProfile(id, name, desc, models, tpm, rpm, budget, bdur, isDefault) {
+function openEditProfile(id, name, desc, models, tpm, rpm, expiry, quota, period, isDefault) {
   document.getElementById('pf-id').value = id;
   document.getElementById('pf-name').value = name;
   document.getElementById('pf-desc').value = desc;
   document.getElementById('pf-models').value = models;
   document.getElementById('pf-tpm').value = tpm;
   document.getElementById('pf-rpm').value = rpm;
-  document.getElementById('pf-budget').value = budget;
-  document.getElementById('pf-bdur').value = bdur;
+  document.getElementById('pf-expiry').value = expiry;
+  document.getElementById('pf-quota').value = quota;
+  document.getElementById('pf-period').value = period;
   document.getElementById('pf-default').checked = isDefault;
   document.getElementById('profile-form-title').textContent = 'Edit profile: ' + name;
   document.getElementById('profile-submit-btn').textContent = 'Update profile';

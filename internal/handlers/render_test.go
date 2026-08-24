@@ -16,15 +16,7 @@ import (
 func TestDashboardTemplateRenders(t *testing.T) {
 	tmpl := template.Must(template.ParseFS(web.TemplateFS, "templates/dashboard.html"))
 	var buf bytes.Buffer
-	err := tmpl.Execute(&buf, struct {
-		User            *database.User
-		APIKey          *database.APIKey
-		NewKey          string
-		IsAdmin         bool
-		FrontendURL     string
-		KeyDurationDays int
-		CSRFToken       string
-	}{
+	err := tmpl.Execute(&buf, dashboardData{
 		User:            &database.User{Name: "Test", Email: "t@example.com"},
 		APIKey:          &database.APIKey{KeyPrefix: "sk-abc123", ExpiresAt: time.Now().Add(24 * time.Hour)},
 		NewKey:          "sk-brand-new",
@@ -53,15 +45,7 @@ func TestDashboardTemplateRenders(t *testing.T) {
 func TestDashboardTemplateNoKeyBranch(t *testing.T) {
 	tmpl := template.Must(template.ParseFS(web.TemplateFS, "templates/dashboard.html"))
 	var buf bytes.Buffer
-	err := tmpl.Execute(&buf, struct {
-		User            *database.User
-		APIKey          *database.APIKey
-		NewKey          string
-		IsAdmin         bool
-		FrontendURL     string
-		KeyDurationDays int
-		CSRFToken       string
-	}{
+	err := tmpl.Execute(&buf, dashboardData{
 		User:      &database.User{Name: "Test", Email: "t@example.com"},
 		CSRFToken: "TOK789",
 	})
@@ -79,10 +63,13 @@ func TestDashboardTemplateNoKeyBranch(t *testing.T) {
 }
 
 func TestAdminTemplateRenders(t *testing.T) {
-	tmpl := template.Must(template.ParseFS(web.TemplateFS, "templates/admin.html"))
+	tmpl := parseAdminTemplate()
 	var buf bytes.Buffer
 	err := tmpl.Execute(&buf, adminData{
-		Profiles:  []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
+		Profiles: []database.Profile{
+			{ID: 1, Name: "default", IsDefault: true},
+			{ID: 2, Name: "students", KeyDurationDays: 30, QuotaTokens: 1_500_000, QuotaPeriod: "24h"},
+		},
 		Users:     []userRow{{User: database.User{ID: 2, Name: "U", Email: "u@x.de"}}},
 		CSRFToken: "TOK456",
 	})
@@ -90,9 +77,16 @@ func TestAdminTemplateRenders(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 	out := buf.String()
-	// default profile hides its delete form, so 2 of the 3 forms render here
-	if n := strings.Count(out, `name="csrf_token" value="TOK456"`); n != 2 {
-		t.Errorf("csrf fields rendered = %d, want 2", n)
+	// the default profile hides its delete form; the second profile shows one
+	if n := strings.Count(out, `name="csrf_token" value="TOK456"`); n != 3 {
+		t.Errorf("csrf fields rendered = %d, want 3", n)
+	}
+	// Quotas must render in tokens, formatted, not as raw spend.
+	if !strings.Contains(out, "1.5M / 24h") {
+		t.Error("token quota not rendered in admin table")
+	}
+	if !strings.Contains(out, "30d") {
+		t.Error("per-profile expiry not rendered in admin table")
 	}
 	if forms, toks := strings.Count(out, "<form"), strings.Count(out, `name="csrf_token"`); forms != toks {
 		t.Errorf("%d forms but %d csrf fields", forms, toks)
