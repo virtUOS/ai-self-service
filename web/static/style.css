@@ -281,61 +281,56 @@ tr:hover td { background: var(--tr-hover); }
 }
 
 /* ── Help tooltips ──────────────────────────────────────────────────────── */
-/* A dotted-underline marker that reveals an explanation on hover or focus, so
-   admins do not have to know what TPM means to configure a profile. */
+/* Rendered via the popover API so they escape `.table-wrap`'s overflow-x
+   scroll container — a CSS-positioned tooltip is clipped by it, which is what
+   made these unreadable inside the profiles table. */
 .help {
   position: relative;
   display: inline-block;
   margin-left: .3rem;
-  width: 1rem;
-  height: 1rem;
+  width: 1.05rem;
+  height: 1.05rem;
   line-height: 1rem;
   text-align: center;
   font-size: .7rem;
   font-weight: 600;
   color: var(--text-muted, #94a3b8);
+  background: none;
   border: 1px solid currentColor;
   border-radius: 50%;
   cursor: help;
+  padding: 0;
   user-select: none;
+  vertical-align: middle;
+  flex: none;
 }
 
-.help::after {
-  content: attr(data-help);
-  position: absolute;
-  bottom: calc(100% + .5rem);
-  left: 50%;
-  transform: translateX(-50%);
-  min-width: 16rem;
-  max-width: 24rem;
-  padding: .6rem .75rem;
+.help:hover,
+.help:focus-visible {
+  color: var(--accent, #818cf8);
+  outline: none;
+}
+
+/* The popover itself lives in the top layer, so no ancestor can clip it. */
+.help-popover {
+  position: fixed;
+  margin: 0;
+  max-width: 22rem;
+  padding: .65rem .8rem;
   background: #0f172a;
   color: #e2e8f0;
-  border: 1px solid #334155;
+  border: 1px solid #475569;
   border-radius: .375rem;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .55);
   font-size: .8rem;
   font-weight: 400;
   line-height: 1.45;
   text-align: left;
   white-space: normal;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity .12s ease;
-  z-index: 20;
 }
 
-.help:hover::after,
-.help:focus::after {
-  opacity: 1;
-  visibility: visible;
-}
-
-/* Near the right edge the tooltip would overflow; anchor it to the right. */
-.help.help-left::after {
-  left: auto;
-  right: 0;
-  transform: none;
+.help-popover:popover-open {
+  display: block;
 }
 
 /* ── Model picker ───────────────────────────────────────────────────────── */

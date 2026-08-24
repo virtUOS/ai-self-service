@@ -39,9 +39,9 @@
     <dl class="info-grid">
       <dt>Name</dt>  <dd>{{.User.Name}}</dd>
       <dt>Email</dt> <dd>{{.User.Email}}</dd>
-      {{if .ProfileName}}<dt>Profile <span class="help" tabindex="0" data-help="Your profile decides which models you can use, how long your key lasts and how many tokens you may use per period. An administrator assigns it.">?</span></dt> <dd>{{.ProfileName}}</dd>{{end}}
+      {{if .ProfileName}}<dt>Profile <button type="button" class="help" data-help="Your profile decides which models you can use, how long your key lasts and how many tokens you may use per period. An administrator assigns it.">?</button></dt> <dd>{{.ProfileName}}</dd>{{end}}
       {{if .QuotaTokens}}
-      <dt>Usage limit <span class="help" tabindex="0" data-help="Your fair-use allowance. Requests stop working once it is used up and start again automatically at the next reset. Resets happen on UTC boundaries.">?</span></dt>
+      <dt>Usage limit <button type="button" class="help" data-help="Your fair-use allowance. Requests stop working once it is used up and start again automatically at the next reset. Resets happen on UTC boundaries.">?</button></dt>
       <dd>{{.QuotaTokens}} tokens {{.QuotaPeriod}}</dd>
       {{end}}
     </dl>
@@ -80,7 +80,7 @@
             <span>{{.APIKey.KeyPrefix}}…</span>
           </div>
         </dd>
-        <dt>Expires <span class="help" tabindex="0" data-help="When this key stops working. Click Extend for a full new period — you can do that at any time, as often as you like.">?</span></dt>
+        <dt>Expires <button type="button" class="help" data-help="When this key stops working. Click Extend for a full new period — you can do that at any time, as often as you like.">?</button></dt>
         <dd>
           <span class="expiry" data-date="{{.APIKey.ExpiresAt.Format "2006-01-02"}}"></span>
           &nbsp;{{.APIKey.ExpiresAt.Format "2006-01-02"}}
@@ -122,7 +122,7 @@
       Configure your AI client with these settings:
     </p>
     <dl class="info-grid">
-      <dt>Base URL <span class="help" tabindex="0" data-help="Point your AI client at this address and give it your API key. It speaks the OpenAI API, so any OpenAI-compatible tool works.">?</span></dt>
+      <dt>Base URL <button type="button" class="help" data-help="Point your AI client at this address and give it your API key. It speaks the OpenAI API, so any OpenAI-compatible tool works.">?</button></dt>
       <dd>
         <div class="key-box">
           <span id="base-url-val">{{.APIBaseURL}}</span>
@@ -164,5 +164,6 @@ document.querySelectorAll('.expiry').forEach(el => {
 })();
 </script>
 
+<script src="/static/help.js"></script>
 </body>
 </html>

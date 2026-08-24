@@ -87,10 +87,10 @@ func TestAdminTemplateRenders(t *testing.T) {
 		t.Errorf("csrf fields rendered = %d, want 3", n)
 	}
 	// Quotas must render in tokens, formatted, not as raw spend.
-	if !strings.Contains(out, "1.5M / 24h") {
+	if !strings.Contains(out, "1.5M per day") {
 		t.Error("token quota not rendered in admin table")
 	}
-	if !strings.Contains(out, "30d") {
+	if !strings.Contains(out, "30 days") {
 		t.Error("per-profile expiry not rendered in admin table")
 	}
 	if forms, toks := strings.Count(out, "<form"), strings.Count(out, `name="csrf_token"`); forms != toks {
@@ -179,5 +179,44 @@ func TestAdminModelPickerFallsBackToText(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), `name="models"`) {
 		t.Error("no free-text fallback when the gateway list is unavailable")
+	}
+}
+
+// An empty limit must say what actually applies. A bare dash leaves the admin
+// guessing whether it means unlimited, zero, or not-yet-configured.
+func TestAdminTableStatesDefaults(t *testing.T) {
+	tmpl := parseAdminTemplate()
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, adminData{
+		DefaultKeyDays: 90,
+		Profiles:       []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
+		CSRFToken:      "T",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		"all models",               // no model restriction
+		"unlimited",                // no TPM/RPM/quota
+		"90 days (server default)", // expiry falls back to the server value
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("table does not state %q", want)
+		}
+	}
+	if strings.Contains(out, "&mdash;") {
+		t.Error("table still renders bare dashes for empty values")
+	}
+}
+
+func TestFormatPeriod(t *testing.T) {
+	for in, want := range map[string]string{
+		"1h": "per hour", "24h": "per day", "7d": "per week", "30d": "per month",
+		"": "", "weird": "weird",
+	} {
+		if got := formatPeriod(in); got != want {
+			t.Errorf("formatPeriod(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

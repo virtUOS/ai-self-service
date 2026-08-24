@@ -28,11 +28,31 @@ type Admin struct {
 	csrf     *session.CSRF
 }
 
+// formatPeriod renders a reset window as words, so the table reads
+// "1.5M per day" rather than "1.5M 24h".
+func formatPeriod(p string) string {
+	switch p {
+	case "1h":
+		return "per hour"
+	case "24h":
+		return "per day"
+	case "7d":
+		return "per week"
+	case "30d":
+		return "per month"
+	default:
+		return p
+	}
+}
+
 // parseAdminTemplate builds the admin template with its helper functions.
 // Tests use it too, so a helper added here cannot be missed there.
 func parseAdminTemplate() *template.Template {
 	return template.Must(template.New("admin.html").
-		Funcs(template.FuncMap{"fmtTokens": litellm.FormatTokens}).
+		Funcs(template.FuncMap{
+			"fmtTokens": litellm.FormatTokens,
+			"fmtPeriod": formatPeriod,
+		}).
 		ParseFS(web.TemplateFS, "templates/admin.html"))
 }
 
@@ -142,11 +162,14 @@ type userRow struct {
 
 type adminData struct {
 	AvailableModels []string
-	Profiles        []database.Profile
-	Users           []userRow
-	Audit           []database.AuditEvent
-	Flash           string
-	CSRFToken       string
+	// DefaultKeyDays is the server-wide expiry a profile falls back to, shown
+	// so "default" in the table is a number rather than a mystery.
+	DefaultKeyDays int
+	Profiles       []database.Profile
+	Users          []userRow
+	Audit          []database.AuditEvent
+	Flash          string
+	CSRFToken      string
 }
 
 // Panel renders the admin page with profile and user lists.
@@ -194,6 +217,7 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 	flash := r.URL.Query().Get("flash")
 	if err := a.tmpl.Execute(w, adminData{
 		AvailableModels: a.models.Models(r.Context()),
+		DefaultKeyDays:  a.cfg.KeyDurationDays,
 		Profiles:        profiles,
 		Users:           users,
 		Audit:           audit,
