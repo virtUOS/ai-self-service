@@ -9,13 +9,24 @@ import "net/http"
 // Tightening it to nonces requires reworking those templates; until then the
 // policy still blocks external script/style/frame sources, which is what stops
 // an injected <script src> or a clickjacking frame.
-func SecurityHeaders(secure bool) func(http.Handler) http.Handler {
-	const csp = "default-src 'self'; " +
+//
+// idpOrigin must be the OIDC provider's origin. Chromium applies form-action to
+// redirects that FOLLOW a form submission, not just its immediate target, so
+// with only 'self' the sign-out form silently fails: the POST to /logout
+// succeeds and returns a 302 to the provider, and the browser then blocks that
+// navigation with no visible error.
+func SecurityHeaders(secure bool, idpOrigin string) func(http.Handler) http.Handler {
+	formAction := "form-action 'self'"
+	if idpOrigin != "" {
+		formAction += " " + idpOrigin
+	}
+
+	csp := "default-src 'self'; " +
 		"script-src 'self' 'unsafe-inline'; " +
 		"style-src 'self' 'unsafe-inline'; " +
 		"img-src 'self' data:; " +
 		"connect-src 'self'; " +
-		"form-action 'self'; " +
+		formAction + "; " +
 		"frame-ancestors 'none'; " +
 		"base-uri 'none'; " +
 		"object-src 'none'"

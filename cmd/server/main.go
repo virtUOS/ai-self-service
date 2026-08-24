@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -95,7 +96,13 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
-	r.Use(handlers.SecurityHeaders(cfg.CookieSecure))
+	// The sign-out form redirects to the OIDC provider, so its origin must be a
+	// permitted form-action target.
+	idpOrigin := ""
+	if u, err := url.Parse(cfg.OIDCIssuerURL); err == nil && u.Scheme != "" {
+		idpOrigin = u.Scheme + "://" + u.Host
+	}
+	r.Use(handlers.SecurityHeaders(cfg.CookieSecure, idpOrigin))
 	// chi fills in the matched pattern, so metrics label by route template
 	// rather than concrete path — otherwise every user id is a new series.
 	r.Use(metrics.Middleware(func(req *http.Request) string {
