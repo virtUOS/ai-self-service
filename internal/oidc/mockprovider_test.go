@@ -51,16 +51,16 @@ func newMockKeycloak(t *testing.T) *mockKeycloak {
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
 		base := m.server.URL
 		writeJSON(w, map[string]any{
-			"issuer":                       base,
-			"authorization_endpoint":       base + "/protocol/openid-connect/auth",
-			"token_endpoint":               base + "/protocol/openid-connect/token",
-			"jwks_uri":                     base + "/protocol/openid-connect/certs",
-			"end_session_endpoint":         base + "/protocol/openid-connect/logout",
-			"backchannel_logout_supported": true,
-			"response_types_supported":     []string{"code"},
-			"subject_types_supported":      []string{"public"},
+			"issuer":                                base,
+			"authorization_endpoint":                base + "/protocol/openid-connect/auth",
+			"token_endpoint":                        base + "/protocol/openid-connect/token",
+			"jwks_uri":                              base + "/protocol/openid-connect/certs",
+			"end_session_endpoint":                  base + "/protocol/openid-connect/logout",
+			"backchannel_logout_supported":          true,
+			"response_types_supported":              []string{"code"},
+			"subject_types_supported":               []string{"public"},
 			"id_token_signing_alg_values_supported": []string{"RS256"},
-			"scopes_supported": []string{"openid", "email", "profile"},
+			"scopes_supported":                      []string{"openid", "email", "profile"},
 		})
 	})
 

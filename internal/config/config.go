@@ -9,7 +9,7 @@ import (
 )
 
 type Config struct {
-	LiteLLMBaseURL  string
+	LiteLLMBaseURL   string
 	LiteLLMMasterKey string
 
 	OIDCIssuerURL    string
