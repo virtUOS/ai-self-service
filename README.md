@@ -15,7 +15,7 @@ A self-service web portal that lets users generate, manage, and renew their own 
 - **Self-service key management** — generate, extend, regenerate, and delete LiteLLM API keys
 - **Profile system** — per-user limits for models, tokens per minute (TPM), requests per minute (RPM), and budget
 - **OIDC authentication** — login, logout, and back-channel logout support
-- **Dual database backend** — SQLite (default) or PostgreSQL
+- **SQLite storage** — single file, no separate database server
 - **Admin panel** — manage profiles and assign them to users
 
 ## Configuration
@@ -32,9 +32,7 @@ Copy `.env.example` to `.env` and fill in the values:
 | `OIDC_REDIRECT_URL`  | yes      | —           | Callback URL (must match OIDC client config)                       |
 | `FRONTEND_URL`       | yes      | —           | Public base URL of this app (shown to users as the API base URL)   |
 | `ADMIN_EMAILS`       | no       | —           | Comma-separated list of admin email addresses                      |
-| `DB_TYPE`            | no       | `sqlite`    | `sqlite` or `postgres`                                             |
-| `DB_PATH`            | no       | `./data.db` | Path to SQLite file                                                |
-| `DB_DSN`             | no       | —           | PostgreSQL DSN (required when `DB_TYPE=postgres`)                  |
+| `DB_PATH`            | no       | `./data.db` | Path to the SQLite database file                                   |
 | `LISTEN_ADDR`        | no       | `:8080`     | Address and port to listen on                                      |
 | `COOKIE_SECURE`      | no       | `false`     | Set `true` when serving over HTTPS                                 |
 | `SESSION_DURATION`   | no       | `24h`       | How long a login session lasts                                     |
@@ -96,6 +94,6 @@ Register the application with your OIDC provider:
 ## Technology stack
 
 - **Go** with [chi](https://github.com/go-chi/chi) router
-- **bun** ORM with SQLite or PostgreSQL backend
+- **bun** ORM over SQLite
 - **coreos/go-oidc** for OIDC/OAuth2
 - Server-rendered HTML templates (no JavaScript framework)

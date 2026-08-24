@@ -2,7 +2,9 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -36,7 +38,7 @@ func (s *Store) RunMigrations(ctx context.Context) error {
 }
 
 func (s *Store) SeedDefaultProfile(ctx context.Context) error {
-	count, err := s.db.NewSelect().Model((*Profile)(nil)).Where("is_default = 1").Count(ctx)
+	count, err := s.db.NewSelect().Model((*Profile)(nil)).Where("is_default <> 0").Count(ctx)
 	if err != nil {
 		return err
 	}
@@ -74,11 +76,6 @@ func (s *Store) ListProfiles(ctx context.Context) ([]Profile, error) {
 	if err != nil {
 		return nil, err
 	}
-	for i := range profiles {
-		if err := parseModels(&profiles[i]); err != nil {
-			return nil, err
-		}
-	}
 	return profiles, nil
 }
 
@@ -88,18 +85,20 @@ func (s *Store) GetProfile(ctx context.Context, id int64) (*Profile, error) {
 	if err != nil {
 		return nil, err
 	}
-	return p, parseModels(p)
+	return p, nil
 }
 
 func (s *Store) GetDefaultProfile(ctx context.Context) (*Profile, error) {
 	p := &Profile{}
-	err := s.db.NewSelect().Model(p).Where("is_default = 1").Limit(1).Scan(ctx)
+	err := s.db.NewSelect().Model(p).Where("is_default <> 0").Limit(1).Scan(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return p, parseModels(p)
+	return p, nil
 }
 
+// CreateProfile inserts a profile. Marking it default demotes the previous
+// default in the same transaction, since the database permits only one.
 func (s *Store) CreateProfile(ctx context.Context, p *Profile) error {
 	now := time.Now()
 	p.CreatedAt = now
@@ -108,22 +107,54 @@ func (s *Store) CreateProfile(ctx context.Context, p *Profile) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.NewInsert().Model(p).
-		Value("models", "?", string(modelsJSON)).
-		Exec(ctx)
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if p.IsDefault {
+			if err := clearDefaultProfile(ctx, tx, 0); err != nil {
+				return err
+			}
+		}
+		_, err := tx.NewInsert().Model(p).
+			Value("models", "?", string(modelsJSON)).
+			Exec(ctx)
+		return err
+	})
+}
+
+// clearDefaultProfile demotes every default profile except keepID (0 keeps none).
+func clearDefaultProfile(ctx context.Context, tx bun.Tx, keepID int64) error {
+	q := tx.NewUpdate().Model((*Profile)(nil)).
+		Set("is_default = ?", false).
+		Where("is_default <> 0")
+	if keepID != 0 {
+		q = q.Where("id <> ?", keepID)
+	}
+	_, err := q.Exec(ctx)
 	return err
 }
 
+// UpdateProfile saves a profile, demoting any other default when this one is
+// marked as such.
 func (s *Store) UpdateProfile(ctx context.Context, p *Profile) error {
 	p.UpdatedAt = time.Now()
 	modelsJSON, err := json.Marshal(p.Models)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.NewUpdate().Model(p).
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if p.IsDefault {
+			if err := clearDefaultProfile(ctx, tx, p.ID); err != nil {
+				return err
+			}
+		}
+		return s.updateProfileTx(ctx, tx, p, string(modelsJSON))
+	})
+}
+
+func (s *Store) updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile, modelsJSON string) error {
+	_, err := tx.NewUpdate().Model(p).
 		Set("name = ?", p.Name).
 		Set("description = ?", p.Description).
-		Set("models = ?", string(modelsJSON)).
+		Set("models = ?", modelsJSON).
 		Set("tpm_limit = ?", p.TPMLimit).
 		Set("rpm_limit = ?", p.RPMLimit).
 		Set("max_budget = ?", p.MaxBudget).
@@ -138,13 +169,6 @@ func (s *Store) UpdateProfile(ctx context.Context, p *Profile) error {
 func (s *Store) DeleteProfile(ctx context.Context, id int64) error {
 	_, err := s.db.NewDelete().Model((*Profile)(nil)).Where("id = ?", id).Exec(ctx)
 	return err
-}
-
-// parseModels deserializes the JSON-encoded models field from the DB into []string.
-func parseModels(p *Profile) error {
-	// Models field is stored as JSON text; Bun will have scanned it as a string into the slice field.
-	// If bun already decoded it we're fine; otherwise decode manually.
-	return nil
 }
 
 // --- Users ---
@@ -237,13 +261,36 @@ func (s *Store) GetUserByOIDCSub(ctx context.Context, sub string) (*User, error)
 
 // --- API Keys ---
 
+// GetAPIKeyByUser returns the user's key, or (nil, nil) when they have none.
+// A missing key is an ordinary state here, not an error.
 func (s *Store) GetAPIKeyByUser(ctx context.Context, userID int64) (*APIKey, error) {
 	key := &APIKey{}
 	err := s.db.NewSelect().Model(key).Where("user_id = ?", userID).Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
 	return key, nil
+}
+
+// ReplaceAPIKey atomically swaps a user's key row: the old row (if any) is
+// removed and the new one inserted in one transaction. The unique index on
+// user_id means a non-transactional delete-then-insert could otherwise leave
+// the user with no key at all if the insert failed.
+func (s *Store) ReplaceAPIKey(ctx context.Context, k *APIKey) error {
+	k.CreatedAt = time.Now()
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewDelete().Model((*APIKey)(nil)).
+			Where("user_id = ?", k.UserID).Exec(ctx); err != nil {
+			return fmt.Errorf("remove previous key: %w", err)
+		}
+		if _, err := tx.NewInsert().Model(k).Exec(ctx); err != nil {
+			return fmt.Errorf("insert new key: %w", err)
+		}
+		return nil
+	})
 }
 
 func (s *Store) CreateAPIKey(ctx context.Context, k *APIKey) error {

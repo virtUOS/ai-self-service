@@ -13,10 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
 
@@ -38,21 +35,14 @@ func main() {
 	}
 
 	// ── Database ──────────────────────────────────────────────────────────────
-	var bunDB *bun.DB
-	switch cfg.DBType {
-	case "postgres":
-		sqldb, err := sql.Open("postgres", cfg.DBDSN)
-		if err != nil {
-			log.Fatalf("open postgres: %v", err)
-		}
-		bunDB = bun.NewDB(sqldb, pgdialect.New())
-	default:
-		sqldb, err := sql.Open(sqliteshim.ShimName, "file:"+cfg.DBPath+"?cache=shared&_foreign_keys=on")
-		if err != nil {
-			log.Fatalf("open sqlite: %v", err)
-		}
-		bunDB = bun.NewDB(sqldb, sqlitedialect.New())
+	// SQLite only. The dataset is a few thousand rows at most (one key per
+	// user), so a separate database server would add operational cost without
+	// buying anything.
+	sqldb, err := sql.Open(sqliteshim.ShimName, "file:"+cfg.DBPath+"?cache=shared&_foreign_keys=on")
+	if err != nil {
+		log.Fatalf("open sqlite: %v", err)
 	}
+	bunDB := bun.NewDB(sqldb, sqlitedialect.New())
 	defer bunDB.Close()
 
 	store := database.NewStore(bunDB)

@@ -46,7 +46,10 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiKey, _ := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
+	apiKey, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
+	if err != nil {
+		log.Printf("dashboard: load key: %v", err)
+	}
 
 	type data struct {
 		User            *database.User
@@ -160,11 +163,10 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	existing, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
-	if err == nil && existing != nil {
-		if delErr := u.litellm.DeleteKey(r.Context(), existing.LiteLLMKey); delErr != nil {
-			log.Printf("delete old LiteLLM key: %v", delErr)
-		}
-		_ = u.store.DeleteAPIKey(r.Context(), existing.ID)
+	if err != nil {
+		log.Printf("look up existing key: %v", err)
+		http.Error(w, "Failed to load your key", http.StatusInternalServerError)
+		return
 	}
 
 	profile, err := u.resolveProfile(r, su.User)
@@ -173,6 +175,8 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create the replacement BEFORE revoking the old one. The reverse order
+	// leaves the user with no working key whenever creation fails.
 	expiresAt := time.Now().AddDate(0, 0, u.cfg.KeyDurationDays)
 	params := profileToKeyParams(profile, su.User.Email)
 	key, err := u.litellm.CreateKey(r.Context(), su.User.Email, params, expiresAt)
@@ -185,13 +189,28 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	if len(prefix) > 12 {
 		prefix = prefix[:12]
 	}
-	if err := u.store.CreateAPIKey(r.Context(), &database.APIKey{
+	if err := u.store.ReplaceAPIKey(r.Context(), &database.APIKey{
 		UserID:     su.User.ID,
 		LiteLLMKey: key,
 		KeyPrefix:  prefix,
 		ExpiresAt:  expiresAt,
 	}); err != nil {
+		// The key exists upstream but could not be recorded, so nothing can
+		// ever revoke it through this app. Revoke it now rather than leaking it.
 		log.Printf("store api key: %v", err)
+		if delErr := u.litellm.DeleteKey(r.Context(), key); delErr != nil {
+			log.Printf("roll back orphaned LiteLLM key %s: %v", prefix, delErr)
+		}
+		http.Error(w, "Failed to save your key", http.StatusInternalServerError)
+		return
+	}
+
+	// The new key is stored; the old one is now unreferenced and safe to
+	// revoke. A failure here leaves a stale key that expires on its own.
+	if existing != nil {
+		if delErr := u.litellm.DeleteKey(r.Context(), existing.LiteLLMKey); delErr != nil {
+			log.Printf("revoke replaced LiteLLM key %s: %v", existing.KeyPrefix, delErr)
+		}
 	}
 
 	token, err := u.flash.Put(su.User.ID, key)
@@ -213,6 +232,10 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 
 	k, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
 	if err != nil {
+		http.Error(w, "Failed to load your key", http.StatusInternalServerError)
+		return
+	}
+	if k == nil {
 		http.Error(w, "No key found", http.StatusBadRequest)
 		return
 	}
@@ -238,7 +261,7 @@ func (u *UI) DeleteKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	k, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
-	if err != nil {
+	if err != nil || k == nil {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}

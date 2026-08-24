@@ -20,9 +20,7 @@ type Config struct {
 	FrontendURL string
 	AdminEmails []string
 
-	DBType string
 	DBPath string
-	DBDSN  string
 
 	ListenAddr      string
 	CookieSecure    bool
@@ -42,9 +40,7 @@ func Load() (*Config, error) {
 
 		FrontendURL: requireEnv("FRONTEND_URL"),
 
-		DBType: envOr("DB_TYPE", "sqlite"),
 		DBPath: envOr("DB_PATH", "./data.db"),
-		DBDSN:  os.Getenv("DB_DSN"),
 
 		ListenAddr: envOr("LISTEN_ADDR", ":8080"),
 	}
