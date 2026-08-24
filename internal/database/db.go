@@ -21,6 +21,16 @@ func NewStore(db *bun.DB) *Store {
 	return &Store{db: db}
 }
 
+// Close releases the underlying database handle.
+func (s *Store) Close() error { return s.db.Close() }
+
+// ExecRaw runs a statement directly. Intended for tests that need to provoke
+// database failures; production code should use the typed methods.
+func (s *Store) ExecRaw(ctx context.Context, query string, args ...any) error {
+	_, err := s.db.ExecContext(ctx, query, args...)
+	return err
+}
+
 func (s *Store) RunMigrations(ctx context.Context) error {
 	migrator := migrate.NewMigrator(s.db, migrations.Migrations)
 	if err := migrator.Init(ctx); err != nil {

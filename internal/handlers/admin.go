@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/ai-self-service/internal/keyprovider"
 	"github.com/virtuos/ai-self-service/internal/litellm"
 	"github.com/virtuos/ai-self-service/internal/session"
 	"github.com/virtuos/ai-self-service/web"
@@ -20,7 +21,7 @@ type Admin struct {
 	cfg      *config.Config
 	store    *database.Store
 	sessions *session.Manager
-	litellm  *litellm.Client
+	keys     keyprovider.Provider
 	tmpl     *template.Template
 	csrf     *session.CSRF
 }
@@ -33,9 +34,9 @@ func parseAdminTemplate() *template.Template {
 		ParseFS(web.TemplateFS, "templates/admin.html"))
 }
 
-func NewAdmin(cfg *config.Config, store *database.Store, sessions *session.Manager, ll *litellm.Client, csrf *session.CSRF) *Admin {
+func NewAdmin(cfg *config.Config, store *database.Store, sessions *session.Manager, keys keyprovider.Provider, csrf *session.CSRF) *Admin {
 	tmpl := parseAdminTemplate()
-	return &Admin{cfg: cfg, store: store, sessions: sessions, litellm: ll, tmpl: tmpl, csrf: csrf}
+	return &Admin{cfg: cfg, store: store, sessions: sessions, keys: keys, tmpl: tmpl, csrf: csrf}
 }
 
 // actorEmail identifies the admin performing the current request, for audit.
@@ -88,7 +89,7 @@ func (a *Admin) RevokeUserKey(w http.ResponseWriter, r *http.Request) {
 
 	// Revoke upstream first: if that fails the key is still live, so the local
 	// row must stay to keep it revocable.
-	if err := a.litellm.DeleteKey(r.Context(), key.LiteLLMKey); err != nil {
+	if err := a.keys.DeleteKey(r.Context(), key.LiteLLMKey); err != nil {
 		log.Printf("revoke: delete LiteLLM key %s: %v", key.KeyPrefix, err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+revoke+key+upstream#users", http.StatusFound)
 		return

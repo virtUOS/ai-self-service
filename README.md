@@ -114,6 +114,7 @@ Register the application with your OIDC provider:
 ## Technology stack
 
 - **Go** with [chi](https://github.com/go-chi/chi) router
+- Key issuance behind a `keyprovider.Provider` interface; LiteLLM is one adapter
 - **bun** ORM over SQLite
 - **coreos/go-oidc** for OIDC/OAuth2
 - Server-rendered HTML templates (no JavaScript framework)

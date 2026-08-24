@@ -69,10 +69,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("CSRF: %v", err)
 	}
-	llClient := litellm.NewClient(cfg.LiteLLMBaseURL, cfg.LiteLLMMasterKey)
+	// The adapter is what the handlers see; swapping gateways means writing a
+	// different keyprovider.Provider, not touching the handlers.
+	keys := litellm.NewProvider(litellm.NewClient(cfg.LiteLLMBaseURL, cfg.LiteLLMMasterKey))
 
-	ui := handlers.NewUI(cfg, store, sessions, oidcProvider, llClient, csrf)
-	admin := handlers.NewAdmin(cfg, store, sessions, llClient, csrf)
+	ui := handlers.NewUI(cfg, store, sessions, oidcProvider, keys, csrf)
+	admin := handlers.NewAdmin(cfg, store, sessions, keys, csrf)
 
 	// ── Router ────────────────────────────────────────────────────────────────
 	r := chi.NewRouter()

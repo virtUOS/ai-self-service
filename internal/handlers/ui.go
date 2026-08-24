@@ -8,6 +8,7 @@ import (
 
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/ai-self-service/internal/keyprovider"
 	"github.com/virtuos/ai-self-service/internal/litellm"
 	oidcpkg "github.com/virtuos/ai-self-service/internal/oidc"
 	"github.com/virtuos/ai-self-service/internal/session"
@@ -19,15 +20,15 @@ type UI struct {
 	store    *database.Store
 	sessions *session.Manager
 	oidc     *oidcpkg.Provider
-	litellm  *litellm.Client
+	keys     keyprovider.Provider
 	tmpl     *template.Template
 	flash    *keyFlash
 	csrf     *session.CSRF
 }
 
-func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager, oidc *oidcpkg.Provider, ll *litellm.Client, csrf *session.CSRF) *UI {
+func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager, oidc *oidcpkg.Provider, keys keyprovider.Provider, csrf *session.CSRF) *UI {
 	tmpl := template.Must(template.ParseFS(web.TemplateFS, "templates/dashboard.html"))
-	return &UI{cfg: cfg, store: store, sessions: sessions, oidc: oidc, litellm: ll, tmpl: tmpl, flash: newKeyFlash(), csrf: csrf}
+	return &UI{cfg: cfg, store: store, sessions: sessions, oidc: oidc, keys: keys, tmpl: tmpl, flash: newKeyFlash(), csrf: csrf}
 }
 
 func (u *UI) requireSession(r *http.Request) (*session.SessionUser, error) {
@@ -207,27 +208,32 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	// Create the replacement BEFORE revoking the old one. The reverse order
 	// leaves the user with no working key whenever creation fails.
 	expiresAt := time.Now().AddDate(0, 0, u.keyDuration(profile))
-	params := profileToKeyParams(profile, su.User.Email)
-	key, err := u.litellm.CreateKey(r.Context(), su.User.Email, params, expiresAt)
+	result, err := u.keys.CreateKey(r.Context(), keyprovider.KeyRequest{
+		Alias:     su.User.Email,
+		Owner:     su.User.Email,
+		ExpiresAt: expiresAt,
+		Limits:    profileLimits(profile),
+	})
 	if err != nil {
 		http.Error(w, "Failed to create key: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	key := result.Secret
 	prefix := key
 	if len(prefix) > 12 {
 		prefix = prefix[:12]
 	}
 	if err := u.store.ReplaceAPIKey(r.Context(), &database.APIKey{
 		UserID:     su.User.ID,
-		LiteLLMKey: key,
+		LiteLLMKey: result.Ref,
 		KeyPrefix:  prefix,
 		ExpiresAt:  expiresAt,
 	}); err != nil {
 		// The key exists upstream but could not be recorded, so nothing can
 		// ever revoke it through this app. Revoke it now rather than leaking it.
 		log.Printf("store api key: %v", err)
-		if delErr := u.litellm.DeleteKey(r.Context(), key); delErr != nil {
+		if delErr := u.keys.DeleteKey(r.Context(), result.Ref); delErr != nil {
 			log.Printf("roll back orphaned LiteLLM key %s: %v", prefix, delErr)
 		}
 		http.Error(w, "Failed to save your key", http.StatusInternalServerError)
@@ -237,7 +243,7 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	// The new key is stored; the old one is now unreferenced and safe to
 	// revoke. A failure here leaves a stale key that expires on its own.
 	if existing != nil {
-		if delErr := u.litellm.DeleteKey(r.Context(), existing.LiteLLMKey); delErr != nil {
+		if delErr := u.keys.DeleteKey(r.Context(), existing.LiteLLMKey); delErr != nil {
 			log.Printf("revoke replaced LiteLLM key %s: %v", existing.KeyPrefix, delErr)
 		}
 	}
@@ -277,7 +283,7 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newExpiry := time.Now().AddDate(0, 0, u.keyDuration(profile))
-	if err := u.litellm.UpdateKeyExpiry(r.Context(), k.LiteLLMKey, newExpiry); err != nil {
+	if err := u.keys.UpdateExpiry(r.Context(), k.LiteLLMKey, newExpiry); err != nil {
 		http.Error(w, "Failed to extend key: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -304,7 +310,7 @@ func (u *UI) DeleteKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := u.litellm.DeleteKey(r.Context(), k.LiteLLMKey); err != nil {
+	if err := u.keys.DeleteKey(r.Context(), k.LiteLLMKey); err != nil {
 		log.Printf("delete LiteLLM key: %v", err)
 	}
 	_ = u.store.DeleteAPIKey(r.Context(), k.ID)
@@ -361,28 +367,17 @@ func (u *UI) resolveProfile(r *http.Request, user *database.User) (*database.Pro
 	return u.store.GetDefaultProfile(r.Context())
 }
 
-func profileToKeyParams(p *database.Profile, email string) litellm.KeyParams {
-	models := p.Models
-	if len(models) == 0 {
-		models = nil // nil = all models in LiteLLM
+// profileLimits maps a profile onto the provider-neutral limits. Translating
+// those into a specific gateway's wire format is the adapter's job.
+func profileLimits(p *database.Profile) keyprovider.Limits {
+	if p == nil {
+		return keyprovider.Limits{}
 	}
-	params := litellm.KeyParams{
-		Models:         models,
-		TPMLimit:       p.TPMLimit,
-		RPMLimit:       p.RPMLimit,
-		MaxBudget:      p.MaxBudget,
-		BudgetDuration: p.BudgetDuration,
-		Metadata:       map[string]any{"user_email": email},
+	return keyprovider.Limits{
+		Models:            p.Models,
+		TokensPerMinute:   p.TPMLimit,
+		RequestsPerMinute: p.RPMLimit,
+		QuotaTokens:       p.QuotaTokens,
+		QuotaPeriod:       p.QuotaPeriod,
 	}
-
-	// A token quota is expressed upstream as a spend cap over a reset window.
-	// It takes precedence over any raw budget left on the profile, which only
-	// applies once commercial (really priced) models are in play.
-	if p.QuotaTokens > 0 && p.QuotaPeriod != "" {
-		budget := litellm.TokensToBudget(p.QuotaTokens)
-		period := p.QuotaPeriod
-		params.MaxBudget = &budget
-		params.BudgetDuration = &period
-	}
-	return params
 }
