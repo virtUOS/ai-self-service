@@ -114,6 +114,18 @@ in someone's pipeline.
 Without `SMTP_HOST` the portal logs what it would have sent. It does not
 silently pretend mail was delivered.
 
+## Languages
+
+The interface is German by default and English on request. Resolution order:
+
+1. an explicit choice, stored in a `lang` cookie by the switcher in the header
+2. the browser's `Accept-Language` (so a browser set to English gets English)
+3. German
+
+Messages live in `internal/i18n/messages.go`. A test asserts every key exists
+in both languages, so a partial translation cannot ship; a missing one falls
+back to English rather than rendering the key.
+
 ## Metrics
 
 Prometheus metrics are served on `/metrics`, labelled by route template so a

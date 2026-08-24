@@ -2,21 +2,21 @@ package handlers
 
 import (
 	"bytes"
-	"html/template"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/virtuos/ai-self-service/internal/database"
-	"github.com/virtuos/ai-self-service/web"
+	"github.com/virtuos/ai-self-service/internal/i18n"
 )
 
 // Templates are parsed at construction time in production; these tests catch
 // field/name drift between the handler structs and the HTML.
 func TestDashboardTemplateRenders(t *testing.T) {
-	tmpl := template.Must(template.ParseFS(web.TemplateFS, "templates/dashboard.html"))
+	tmpl := parseDashboardTemplate()
 	var buf bytes.Buffer
 	err := tmpl.Execute(&buf, dashboardData{
+		Lang:            i18n.DE,
 		User:            &database.User{Name: "Test", Email: "t@example.com"},
 		APIKey:          &database.APIKey{KeyPrefix: "sk-abc123", ExpiresAt: time.Now().Add(24 * time.Hour)},
 		NewKey:          "sk-brand-new",
@@ -28,9 +28,9 @@ func TestDashboardTemplateRenders(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 	out := buf.String()
-	// With a key present: logout + extend + regenerate + delete.
-	if n := strings.Count(out, `name="csrf_token" value="TOK123"`); n != 4 {
-		t.Errorf("csrf fields rendered = %d, want 4", n)
+	// language switcher + logout + extend + regenerate + delete.
+	if n := strings.Count(out, `name="csrf_token" value="TOK123"`); n != 5 {
+		t.Errorf("csrf fields rendered = %d, want 5", n)
 	}
 	if !strings.Contains(out, "sk-brand-new") {
 		t.Error("new key not rendered")
@@ -48,9 +48,10 @@ func TestDashboardTemplateRenders(t *testing.T) {
 
 // The no-key branch renders a different form set; it must be covered too.
 func TestDashboardTemplateNoKeyBranch(t *testing.T) {
-	tmpl := template.Must(template.ParseFS(web.TemplateFS, "templates/dashboard.html"))
+	tmpl := parseDashboardTemplate()
 	var buf bytes.Buffer
 	err := tmpl.Execute(&buf, dashboardData{
+		Lang:      i18n.DE,
 		User:      &database.User{Name: "Test", Email: "t@example.com"},
 		CSRFToken: "TOK789",
 	})
@@ -58,9 +59,9 @@ func TestDashboardTemplateNoKeyBranch(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 	out := buf.String()
-	// logout + generate
-	if n := strings.Count(out, `name="csrf_token" value="TOK789"`); n != 2 {
-		t.Errorf("csrf fields rendered = %d, want 2", n)
+	// language switcher + logout + generate
+	if n := strings.Count(out, `name="csrf_token" value="TOK789"`); n != 3 {
+		t.Errorf("csrf fields rendered = %d, want 3", n)
 	}
 	if forms, toks := strings.Count(out, "<form"), strings.Count(out, `name="csrf_token"`); forms != toks {
 		t.Errorf("%d forms but %d csrf fields", forms, toks)
@@ -82,9 +83,10 @@ func TestAdminTemplateRenders(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 	out := buf.String()
-	// the default profile hides its delete form; the second profile shows one
-	if n := strings.Count(out, `name="csrf_token" value="TOK456"`); n != 3 {
-		t.Errorf("csrf fields rendered = %d, want 3", n)
+	// language switcher + create form + user profile form + one delete form
+	// (the default profile hides its own delete)
+	if n := strings.Count(out, `name="csrf_token" value="TOK456"`); n != 4 {
+		t.Errorf("csrf fields rendered = %d, want 4", n)
 	}
 	// Quotas must render in tokens, formatted, not as raw spend.
 	if !strings.Contains(out, "1.5M per day") {
@@ -105,6 +107,7 @@ func TestAdminTooltipsRender(t *testing.T) {
 	tmpl := parseAdminTemplate()
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, adminData{
+		Lang:      i18n.DE,
 		Profiles:  []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
 		CSRFToken: "T",
 	}); err != nil {
@@ -115,7 +118,7 @@ func TestAdminTooltipsRender(t *testing.T) {
 	if n := strings.Count(out, `class="help"`); n < 10 {
 		t.Errorf("only %d tooltips rendered, want the full set", n)
 	}
-	for _, want := range []string{"Tokens per minute", "Requests per minute", "UTC"} {
+	for _, want := range []string{"Token pro Minute", "Anfragen pro Minute", "UTC"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("tooltip text %q missing", want)
 		}
@@ -127,9 +130,10 @@ func TestAdminTooltipsRender(t *testing.T) {
 }
 
 func TestDashboardTooltipsRender(t *testing.T) {
-	tmpl := template.Must(template.ParseFS(web.TemplateFS, "templates/dashboard.html"))
+	tmpl := parseDashboardTemplate()
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, dashboardData{
+		Lang:        i18n.DE,
 		User:        &database.User{Name: "T", Email: "t@x.de"},
 		APIKey:      &database.APIKey{KeyPrefix: "sk-a", ExpiresAt: time.Now().Add(48 * time.Hour)},
 		APIBaseURL:  "https://litellm.example.com/v1",

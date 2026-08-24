@@ -9,6 +9,7 @@ import (
 
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/ai-self-service/internal/i18n"
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 	"github.com/virtuos/ai-self-service/internal/litellm"
 	"github.com/virtuos/ai-self-service/internal/metrics"
@@ -29,7 +30,7 @@ type UI struct {
 }
 
 func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager, oidc *oidcpkg.Provider, keys keyprovider.Provider, csrf *session.CSRF) *UI {
-	tmpl := template.Must(template.ParseFS(web.TemplateFS, "templates/dashboard.html"))
+	tmpl := parseDashboardTemplate()
 	return &UI{cfg: cfg, store: store, sessions: sessions, oidc: oidc, keys: keys, tmpl: tmpl, flash: newKeyFlash(), csrf: csrf}
 }
 
@@ -41,9 +42,20 @@ func (u *UI) requireSession(r *http.Request) (*session.SessionUser, error) {
 	return u.sessions.Get(r.Context(), token)
 }
 
+// parseDashboardTemplate builds the dashboard template with its helpers.
+// Tests use it too, so a helper added here cannot be missed there.
+func parseDashboardTemplate() *template.Template {
+	return template.Must(template.New("dashboard.html").
+		Funcs(langFuncs()).
+		ParseFS(web.TemplateFS, "templates/dashboard.html"))
+}
+
 // dashboardData is what dashboard.html renders. Named rather than anonymous so
 // tests cannot drift from the handler's shape.
 type dashboardData struct {
+	Lang            i18n.Lang
+	Langs           []i18n.Lang
+	Path            string
 	User            *database.User
 	APIKey          *database.APIKey
 	NewKey          string
@@ -85,6 +97,8 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		slog.Error("dashboard: load key", "err", err)
 	}
 
+	lang := i18n.FromRequest(r)
+
 	// The dashboard advertises the extend duration and the fair-use quota, both
 	// of which come from the user's profile rather than the server default.
 	profile, err := u.resolveProfile(r, su.User)
@@ -109,6 +123,9 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		QuotaTokens:     profileQuota(profile),
 		QuotaPeriod:     profilePeriod(profile),
 		CSRFToken:       u.csrf.Token(w, r),
+		Lang:            lang,
+		Langs:           i18n.Supported,
+		Path:            r.URL.Path,
 	}); err != nil {
 		slog.Error("dashboard template", "err", err)
 	}

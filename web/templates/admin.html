@@ -3,15 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Admin — AI API Key Portal</title>
+  <title>{{T .Lang "admin.title"}}</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
 <header>
-  <h1>AI API Key Portal — Admin</h1>
+  <h1>{{T .Lang "admin.title"}}</h1>
   <nav>
-    <a href="/">Dashboard</a>
+    <a href="/">{{T .Lang "nav.dashboard"}}</a>
+    <form method="POST" action="/lang" class="lang-switch">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="return_to" value="{{.Path}}">
+      {{$cur := .Lang}}{{range .Langs}}{{if ne . $cur}}
+      <button type="submit" name="lang" value="{{.}}" title="{{.Name}}">{{.}}</button>
+      {{end}}{{end}}
+    </form>
   </nav>
 </header>
 
@@ -23,28 +30,28 @@
 
   <div class="card">
     <div class="tabs">
-      <button class="tab-btn active" onclick="showTab('profiles', this)">Profiles</button>
+      <button class="tab-btn active" onclick="showTab('profiles', this)">{{T .Lang "admin.profiles"}}</button>
       <button class="tab-btn" onclick="showTab('users', this)">Users</button>
-      <button class="tab-btn" onclick="showTab('audit', this)">Audit log</button>
+      <button class="tab-btn" onclick="showTab('audit', this)">{{T .Lang "admin.audit"}}</button>
     </div>
 
     <!-- ── Profiles tab ─────────────────────────────────── -->
     <div id="tab-profiles" class="tab-panel active">
 
-      <h2 style="margin-bottom:1.25rem">Profiles</h2>
+      <h2 style="margin-bottom:1.25rem">{{T .Lang "admin.profiles"}}</h2>
 
       <div class="table-wrap" style="margin-bottom:2rem">
         <table>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Description</th>
-              <th>Models</th>
-              <th>TPM <button type="button" class="help" data-help="Tokens per minute. Caps how fast a key can consume tokens, smoothing out bursts. It does not limit the total — use the usage limit for that.">?</button></th>
-              <th>RPM <button type="button" class="help" data-help="Requests per minute. Caps how many API calls a key can make each minute, regardless of their size.">?</button></th>
-              <th>Expiry <button type="button" class="help" data-help="How long a newly generated key stays valid. Users can extend it themselves for another full period.">?</button></th>
-              <th>Quota <button type="button" class="help" data-help="Fair-use token allowance and how often it resets. Requests fail once it is used up, then resume at the next reset.">?</button></th>
-              <th>Default</th>
+              <th>{{T .Lang "admin.col.name"}}</th>
+              <th>{{T .Lang "admin.col.description"}}</th>
+              <th>{{T .Lang "admin.col.models"}}</th>
+              <th>TPM <button type="button" class="help" data-help="{{T $.Lang "help.tpm"}}">?</button></th>
+              <th>RPM <button type="button" class="help" data-help="{{T $.Lang "help.rpm"}}">?</button></th>
+              <th>{{T .Lang "admin.col.expiry"}} <button type="button" class="help" data-help="{{T $.Lang "help.expiry"}}">?</button></th>
+              <th>{{T .Lang "admin.col.quota"}} <button type="button" class="help" data-help="{{T $.Lang "help.quota"}}">?</button></th>
+              <th>{{T .Lang "admin.col.default"}}</th>
               <th></th>
             </tr>
           </thead>
@@ -57,14 +64,14 @@
                 {{if .Models}}
                   {{range $i, $m := .Models}}{{if $i}}, {{end}}{{$m}}{{end}}
                 {{else}}
-                  <em class="text-faint">all models</em>
+                  <em class="text-faint">{{T $.Lang "admin.all"}}</em>
                 {{end}}
               </td>
-              <td>{{if .TPMLimit}}{{.TPMLimit}}{{else}}<em class="text-faint">unlimited</em>{{end}}</td>
-              <td>{{if .RPMLimit}}{{.RPMLimit}}{{else}}<em class="text-faint">unlimited</em>{{end}}</td>
+              <td>{{if .TPMLimit}}{{.TPMLimit}}{{else}}<em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>{{end}}</td>
+              <td>{{if .RPMLimit}}{{.RPMLimit}}{{else}}<em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>{{end}}</td>
               <td>{{if .KeyDurationDays}}{{.KeyDurationDays}} days{{else}}<em class="text-faint">{{$.DefaultKeyDays}} days (server default)</em>{{end}}</td>
               <td>
-                {{if .QuotaTokens}}{{fmtTokens .QuotaTokens}} {{fmtPeriod .QuotaPeriod}}{{else}}<em class="text-faint">unlimited</em>{{end}}
+                {{if .QuotaTokens}}{{fmtTokens .QuotaTokens}} {{fmtPeriod .QuotaPeriod}}{{else}}<em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>{{end}}
               </td>
               <td>{{if .IsDefault}}✓{{end}}</td>
               <td>
@@ -77,40 +84,40 @@
                             '{{if .KeyDurationDays}}{{.KeyDurationDays}}{{end}}',
                             '{{if .QuotaTokens}}{{.QuotaTokens}}{{end}}',
                             '{{.QuotaPeriod}}',
-                            {{.IsDefault}})">Edit</button>
+                            {{.IsDefault}})">{{T $.Lang "admin.edit"}}</button>
                   {{if not .IsDefault}}
                   <form method="POST" action="/admin/profiles/{{.ID}}/delete"
                         onsubmit="return confirm('Delete profile {{.Name}}?')">
                     <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                    <button class="btn btn-sm btn-danger">Delete</button>
+                    <button class="btn btn-sm btn-danger">{{T $.Lang "admin.delete"}}</button>
                   </form>
                   {{end}}
                 </div>
               </td>
             </tr>
             {{else}}
-            <tr><td colspan="9" class="text-faint" style="text-align:center">No profiles yet.</td></tr>
+            <tr><td colspan="9" class="text-faint" style="text-align:center">{{T .Lang "admin.noprofiles"}}</td></tr>
             {{end}}
           </tbody>
         </table>
       </div>
 
       <!-- Create / Edit form -->
-      <h3 id="profile-form-title">New profile</h3>
+      <h3 id="profile-form-title">{{T .Lang "admin.form.new"}}</h3>
       <form id="profile-form" method="POST" action="/admin/profiles" style="max-width:540px">
         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
         <input type="hidden" name="_id" id="pf-id" value="">
 
         <div class="form-group">
-          <label for="pf-name">Name *</label>
+          <label for="pf-name">{{T .Lang "admin.col.name"}} *</label>
           <input type="text" id="pf-name" name="name" required>
         </div>
         <div class="form-group">
-          <label for="pf-desc">Description</label>
+          <label for="pf-desc">{{T .Lang "admin.col.description"}}</label>
           <textarea id="pf-desc" name="description" rows="2"></textarea>
         </div>
         <div class="form-group">
-          <label for="pf-models">Allowed models <button type="button" class="help" data-help="Restrict this profile to specific models, e.g. Qwen/Qwen3.8-27B-FP8. Leave blank to allow every model the gateway offers.">?</button></label>
+          <label for="pf-models">{{T .Lang "admin.form.models"}} <button type="button" class="help" data-help="{{T $.Lang "help.models"}}">?</button></label>
           {{if .AvailableModels}}
           <div class="model-picker" id="pf-model-picker">
             {{range .AvailableModels}}
@@ -134,31 +141,31 @@
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
           <div class="form-group">
-            <label for="pf-tpm">TPM limit <button type="button" class="help" data-help="Tokens per minute — the maximum a key may consume in any minute. Use it to stop one runaway script saturating the GPUs. Blank means unlimited.">?</button></label>
+            <label for="pf-tpm">{{T .Lang "admin.form.tpm"}} <button type="button" class="help" data-help="Tokens per minute — the maximum a key may consume in any minute. Use it to stop one runaway script saturating the GPUs. Blank means unlimited.">?</button></label>
             <input type="number" id="pf-tpm" name="tpm_limit" min="0" placeholder="unlimited">
           </div>
           <div class="form-group">
-            <label for="pf-rpm">RPM limit <button type="button" class="help" data-help="Requests per minute — the maximum number of API calls per minute, however small each one is. Blank means unlimited.">?</button></label>
+            <label for="pf-rpm">{{T .Lang "admin.form.rpm"}} <button type="button" class="help" data-help="Requests per minute — the maximum number of API calls per minute, however small each one is. Blank means unlimited.">?</button></label>
             <input type="number" id="pf-rpm" name="rpm_limit" min="0" placeholder="unlimited">
           </div>
           <div class="form-group">
-            <label for="pf-expiry">Key validity (days) <button type="button" class="help" data-help="How many days a generated key lasts. Students might get 30, staff 365. Users can click Extend for another full period at any time. Blank uses the server default.">?</button></label>
+            <label for="pf-expiry">{{T .Lang "admin.form.validity"}} <button type="button" class="help" data-help="{{T $.Lang "help.validity"}}">?</button></label>
             <input type="number" id="pf-expiry" name="key_duration_days" min="0" placeholder="server default">
-            <div class="form-hint">How long a generated key lasts. Blank uses the server default.</div>
+            <div class="form-hint">{{T .Lang "admin.form.validity.hint"}}</div>
           </div>
           <div class="form-group">
-            <label for="pf-quota">Usage limit (tokens) <button type="button" class="help" data-help="Total tokens allowed per reset period, e.g. 1000000 for a million tokens. Once spent, requests fail until the period resets. Blank means no limit. Needs a reset period to take effect.">?</button></label>
+            <label for="pf-quota">{{T .Lang "admin.form.quota"}} <button type="button" class="help" data-help="{{T $.Lang "help.usagelimit"}}">?</button></label>
             <input type="number" id="pf-quota" name="quota_tokens" min="0" placeholder="unlimited">
-            <div class="form-hint">Fair-use allowance per period. Blank means no limit.</div>
+            <div class="form-hint">{{T .Lang "admin.form.quota.hint"}}</div>
           </div>
           <div class="form-group">
-            <label for="pf-period">Limit resets <button type="button" class="help" data-help="How often the usage limit goes back to zero. Resets happen on fixed UTC boundaries — daily at midnight UTC, weekly on Monday, monthly on the 1st — not a rolling window from when the key was made. Only one period per profile: the gateway cannot enforce a daily and a monthly cap at the same time.">?</button></label>
+            <label for="pf-period">{{T .Lang "admin.form.period"}} <button type="button" class="help" data-help="{{T $.Lang "help.period"}}">?</button></label>
             <select id="pf-period" name="quota_period">
-              <option value="">no limit</option>
-              <option value="1h">hourly</option>
-              <option value="24h">daily</option>
-              <option value="7d">weekly</option>
-              <option value="30d">monthly</option>
+              <option value="">{{T .Lang "period.none"}}</option>
+              <option value="1h">{{T .Lang "period.hourly"}}</option>
+              <option value="24h">{{T .Lang "period.daily"}}</option>
+              <option value="7d">{{T .Lang "period.weekly"}}</option>
+              <option value="30d">{{T .Lang "period.monthly"}}</option>
             </select>
             <div class="form-hint">Requests fail once the limit is hit, then resume automatically at the next reset. Boundaries are UTC (daily = midnight UTC).</div>
           </div>
@@ -166,12 +173,12 @@
         <div class="form-group">
           <div class="checkbox-row">
             <input type="checkbox" id="pf-default" name="is_default">
-            <label for="pf-default" style="margin:0">Default profile <button type="button" class="help" data-help="Applied to every user who has not been assigned a profile explicitly. Exactly one profile is the default; marking a new one moves it.">?</button></label>
+            <label for="pf-default" style="margin:0">{{T .Lang "admin.form.default"}} <button type="button" class="help" data-help="{{T $.Lang "help.defaultprofile"}}">?</button></label>
           </div>
         </div>
         <div class="btn-row">
-          <button type="submit" class="btn btn-primary" id="profile-submit-btn">Create profile</button>
-          <button type="button" class="btn btn-secondary" onclick="resetProfileForm()">Reset</button>
+          <button type="submit" class="btn btn-primary" id="profile-submit-btn">{{T .Lang "admin.form.create"}}</button>
+          <button type="button" class="btn btn-secondary" onclick="resetProfileForm()">{{T .Lang "admin.reset"}}</button>
         </div>
       </form>
     </div>
@@ -179,17 +186,17 @@
     <!-- ── Users tab ──────────────────────────────────────── -->
     <div id="tab-users" class="tab-panel">
 
-      <h2 style="margin-bottom:1.25rem">Users</h2>
+      <h2 style="margin-bottom:1.25rem">{{T .Lang "admin.users"}}</h2>
 
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Profile</th>
-              <th>API key</th>
-              <th>Change profile</th>
+              <th>{{T .Lang "admin.col.name"}}</th>
+              <th>{{T .Lang "admin.col.email"}}</th>
+              <th>{{T .Lang "admin.col.profile"}}</th>
+              <th>{{T .Lang "admin.col.apikey"}}</th>
+              <th>{{T .Lang "admin.col.changeprofile"}}</th>
             </tr>
           </thead>
           <tbody>
@@ -211,10 +218,10 @@
                         style="display:inline"
                         onsubmit="return confirm('Revoke the API key for {{.Email}}? They lose access immediately.')">
                     <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                    <button class="btn btn-sm btn-danger">Revoke</button>
+                    <button class="btn btn-sm btn-danger">{{T $.Lang "admin.revoke"}}</button>
                   </form>
                 {{else}}
-                  <em class="text-faint">none</em>
+                  <em class="text-faint">{{T $.Lang "admin.none"}}</em>
                 {{end}}
               </td>
               <td>
@@ -227,12 +234,12 @@
                     <option value="{{.ID}}"{{if eq .ID $pid}} selected{{end}}>{{.Name}}</option>
                     {{end}}
                   </select>
-                  <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                  <button type="submit" class="btn btn-sm btn-primary">{{T $.Lang "admin.save"}}</button>
                 </form>
               </td>
             </tr>
             {{else}}
-            <tr><td colspan="5" class="text-faint" style="text-align:center">No users yet.</td></tr>
+            <tr><td colspan="5" class="text-faint" style="text-align:center">{{T .Lang "admin.nousers"}}</td></tr>
             {{end}}
           </tbody>
         </table>
@@ -241,19 +248,19 @@
 
     <!-- ── Audit tab ──────────────────────────────────────── -->
     <div id="tab-audit" class="tab-panel">
-      <h2 style="margin-bottom:1.25rem">Audit log</h2>
+      <h2 style="margin-bottom:1.25rem">{{T .Lang "admin.audit"}}</h2>
       <p class="text-muted" style="margin-bottom:1rem;font-size:.9rem">
-        The 50 most recent key and profile changes.
+        {{T .Lang "admin.audit.note"}}
       </p>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>When</th>
-              <th>Action</th>
-              <th>Actor</th>
-              <th>Subject</th>
-              <th>Detail</th>
+              <th>{{T .Lang "admin.col.when"}}</th>
+              <th>{{T .Lang "admin.col.action"}}</th>
+              <th>{{T .Lang "admin.col.actor"}}</th>
+              <th>{{T .Lang "admin.col.subject"}}</th>
+              <th>{{T .Lang "admin.col.detail"}}</th>
             </tr>
           </thead>
           <tbody>
@@ -266,7 +273,7 @@
               <td class="text-faint">{{.Detail}}</td>
             </tr>
             {{else}}
-            <tr><td colspan="5" class="text-faint" style="text-align:center">No events recorded yet.</td></tr>
+            <tr><td colspan="5" class="text-faint" style="text-align:center">{{T .Lang "admin.noevents"}}</td></tr>
             {{end}}
           </tbody>
         </table>

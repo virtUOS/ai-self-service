@@ -369,3 +369,27 @@ tr:hover td { background: var(--tr-hover); }
   font-size: .8rem;
   word-break: break-all;
 }
+
+/* ── Language switcher ──────────────────────────────────────────────────── */
+/* Shows only the language you are NOT using, so one click swaps. */
+.lang-switch {
+  display: inline;
+  margin-right: .5rem;
+}
+
+.lang-switch button {
+  padding: .15rem .4rem;
+  font-size: .75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: inherit;
+  background: rgba(255, 255, 255, .12);
+  border: 1px solid rgba(255, 255, 255, .25);
+  border-radius: .25rem;
+  cursor: pointer;
+}
+
+.lang-switch button:hover {
+  background: rgba(255, 255, 255, .22);
+}

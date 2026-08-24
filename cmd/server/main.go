@@ -128,6 +128,7 @@ func main() {
 		r.Get("/callback", ui.Callback)
 		r.Post("/logout", ui.Logout)
 		r.Get("/session/status", ui.SessionStatus)
+		r.Post("/lang", handlers.SetLanguage(cfg.CookieSecure))
 
 		r.Get("/", ui.Dashboard)
 		r.Post("/key/generate", ui.GenerateKey)

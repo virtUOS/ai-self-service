@@ -3,19 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AI API Key Portal</title>
+  <title>{{T .Lang "app.title"}}</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
 <header>
-  <h1>AI API Key Portal</h1>
+  <h1>{{T .Lang "app.title"}}</h1>
   <nav>
-    {{if .IsAdmin}}<a href="/admin">Admin</a>{{end}}
+    {{if .IsAdmin}}<a href="/admin">{{T .Lang "nav.admin"}}</a>{{end}}
     <span style="opacity:.6;font-size:.85rem">{{.User.Name}}</span>
     <form method="POST" action="/logout" style="display:inline">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <button type="submit">Sign out</button>
+      <button type="submit">{{T .Lang "nav.signout"}}</button>
+    </form>
+    <form method="POST" action="/lang" class="lang-switch">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="return_to" value="{{.Path}}">
+      {{$cur := .Lang}}{{range .Langs}}{{if ne . $cur}}
+      <button type="submit" name="lang" value="{{.}}" title="{{.Name}}">{{.}}</button>
+      {{end}}{{end}}
     </form>
   </nav>
 </header>
@@ -25,23 +32,23 @@
   {{if .NewKey}}
   <div class="card">
     <div class="alert alert-warning">
-      <strong>Save your API key now.</strong> It will not be shown again after you leave this page.
+      <strong>{{T .Lang "dash.newkey.warning"}}</strong> {{T .Lang "dash.newkey.note"}}
     </div>
     <div style="margin-top:.75rem" class="key-box key-new">
       <span id="new-key-val">{{.NewKey}}</span>
-      <button class="copy-btn" onclick="copyText('new-key-val', this)">Copy</button>
+      <button class="copy-btn" onclick="copyText('new-key-val', this)">{{T .Lang "dash.copy"}}</button>
     </div>
   </div>
   {{end}}
 
   <div class="card">
-    <h2>Your account</h2>
+    <h2>{{T .Lang "dash.account"}}</h2>
     <dl class="info-grid">
-      <dt>Name</dt>  <dd>{{.User.Name}}</dd>
-      <dt>Email</dt> <dd>{{.User.Email}}</dd>
-      {{if .ProfileName}}<dt>Profile <button type="button" class="help" data-help="Your profile decides which models you can use, how long your key lasts and how many tokens you may use per period. An administrator assigns it.">?</button></dt> <dd>{{.ProfileName}}</dd>{{end}}
+      <dt>{{T .Lang "dash.name"}}</dt>  <dd>{{.User.Name}}</dd>
+      <dt>{{T .Lang "dash.email"}}</dt> <dd>{{.User.Email}}</dd>
+      {{if .ProfileName}}<dt>{{T .Lang "dash.profile"}} <button type="button" class="help" data-help="{{T .Lang "dash.profile.help"}}">?</button></dt> <dd>{{.ProfileName}}</dd>{{end}}
       {{if .QuotaTokens}}
-      <dt>Usage limit <button type="button" class="help" data-help="Your fair-use allowance. Requests stop working once it is used up and start again automatically at the next reset. Resets happen on UTC boundaries.">?</button></dt>
+      <dt>{{T .Lang "dash.usagelimit"}} <button type="button" class="help" data-help="{{T .Lang "dash.usagelimit.help"}}">?</button></dt>
       <dd>{{.QuotaTokens}} tokens {{.QuotaPeriod}}</dd>
       {{end}}
     </dl>
@@ -55,32 +62,30 @@
   </div>
 
   <div class="card">
-    <h2>API key</h2>
+    <h2>{{T .Lang "dash.apikey"}}</h2>
 
     {{if .APIKey}}
       {{if .ExpiryUrgent}}
       <div class="alert {{if lt .ExpiresInDays 0}}alert-danger{{else}}alert-warning{{end}}"
            style="margin-bottom:1.25rem">
         {{if lt .ExpiresInDays 0}}
-          <strong>Your key has expired.</strong> Generate a new one to restore access.
+          <strong>{{T .Lang "dash.expiry.expired"}}</strong> {{T .Lang "dash.expiry.expired.note"}}
         {{else if eq .ExpiresInDays 0}}
-          <strong>Your key expires today.</strong> Extend it to keep your access.
+          <strong>{{T .Lang "dash.expiry.today"}}</strong> {{T .Lang "dash.expiry.today.note"}}
         {{else}}
-          <strong>Your key expires in {{.ExpiresInDays}}
-          day{{if ne .ExpiresInDays 1}}s{{end}}.</strong>
-          Extend it now to avoid interruption.
+          <strong>{{.ExpiresInDays}} {{T .Lang "badge.left"}}</strong> {{T .Lang "dash.expiry.soon.note"}}
         {{end}}
       </div>
       {{end}}
 
       <dl class="info-grid" style="margin-bottom:1.25rem">
-        <dt>Key</dt>
+        <dt>{{T .Lang "dash.key"}}</dt>
         <dd>
           <div class="key-box">
             <span>{{.APIKey.KeyPrefix}}…</span>
           </div>
         </dd>
-        <dt>Expires <button type="button" class="help" data-help="When this key stops working. Click Extend for a full new period — you can do that at any time, as often as you like.">?</button></dt>
+        <dt>{{T .Lang "dash.expires"}} <button type="button" class="help" data-help="{{T .Lang "dash.expires.help"}}">?</button></dt>
         <dd>
           <span class="expiry" data-date="{{.APIKey.ExpiresAt.Format "2006-01-02"}}"></span>
           &nbsp;{{.APIKey.ExpiresAt.Format "2006-01-02"}}
@@ -90,26 +95,26 @@
       <div class="btn-row">
         <form method="POST" action="/key/extend">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-          <button type="submit" class="btn btn-secondary">Extend (+{{.KeyDurationDays}} days)</button>
+          <button type="submit" class="btn btn-secondary">{{T .Lang "dash.extend"}} (+{{.KeyDurationDays}} {{T .Lang "dash.days"}})</button>
         </form>
         <form method="POST" action="/key/generate"
-              onsubmit="return confirm('This will revoke your current key and generate a new one. Continue?')">
+              onsubmit="return confirm({{T .Lang "dash.confirm.regenerate"}})">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-          <button type="submit" class="btn btn-secondary">Regenerate</button>
+          <button type="submit" class="btn btn-secondary">{{T .Lang "dash.regenerate"}}</button>
         </form>
         <form method="POST" action="/key/delete"
-              onsubmit="return confirm('Delete your API key? You will lose access immediately.')">
+              onsubmit="return confirm({{T .Lang "dash.confirm.delete"}})">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-          <button type="submit" class="btn btn-danger">Delete</button>
+          <button type="submit" class="btn btn-danger">{{T .Lang "dash.delete"}}</button>
         </form>
       </div>
 
     {{else}}
 
-      <p class="text-muted" style="margin-bottom:1.25rem">You don't have an API key yet.</p>
+      <p class="text-muted" style="margin-bottom:1.25rem">{{T .Lang "dash.nokey"}}</p>
       <form method="POST" action="/key/generate">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <button type="submit" class="btn btn-primary">Generate API key</button>
+        <button type="submit" class="btn btn-primary">{{T .Lang "dash.generate"}}</button>
       </form>
 
     {{end}}
@@ -117,16 +122,16 @@
 
   {{if .APIKey}}
   <div class="card">
-    <h2>Using your key</h2>
+    <h2>{{T .Lang "dash.usage"}}</h2>
     <p class="text-muted" style="margin-bottom:.75rem;font-size:.9rem">
-      Configure your AI client with these settings:
+      {{T .Lang "dash.usage.note"}}
     </p>
     <dl class="info-grid">
-      <dt>Base URL <button type="button" class="help" data-help="Point your AI client at this address and give it your API key. It speaks the OpenAI API, so any OpenAI-compatible tool works.">?</button></dt>
+      <dt>{{T .Lang "dash.baseurl"}} <button type="button" class="help" data-help="{{T .Lang "dash.baseurl.help"}}">?</button></dt>
       <dd>
         <div class="key-box">
           <span id="base-url-val">{{.APIBaseURL}}</span>
-          <button class="copy-btn" onclick="copyText('base-url-val', this)">Copy</button>
+          <button class="copy-btn" onclick="copyText('base-url-val', this)">{{T .Lang "dash.copy"}}</button>
         </div>
       </dd>
     </dl>

@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/ai-self-service/internal/i18n"
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 	"github.com/virtuos/ai-self-service/internal/litellm"
 	"github.com/virtuos/ai-self-service/internal/metrics"
@@ -48,11 +49,11 @@ func formatPeriod(p string) string {
 // parseAdminTemplate builds the admin template with its helper functions.
 // Tests use it too, so a helper added here cannot be missed there.
 func parseAdminTemplate() *template.Template {
+	funcs := langFuncs()
+	funcs["fmtTokens"] = litellm.FormatTokens
+	funcs["fmtPeriod"] = formatPeriod
 	return template.Must(template.New("admin.html").
-		Funcs(template.FuncMap{
-			"fmtTokens": litellm.FormatTokens,
-			"fmtPeriod": formatPeriod,
-		}).
+		Funcs(funcs).
 		ParseFS(web.TemplateFS, "templates/admin.html"))
 }
 
@@ -161,6 +162,9 @@ type userRow struct {
 }
 
 type adminData struct {
+	Lang            i18n.Lang
+	Langs           []i18n.Lang
+	Path            string
 	AvailableModels []string
 	// DefaultKeyDays is the server-wide expiry a profile falls back to, shown
 	// so "default" in the table is a number rather than a mystery.
@@ -216,6 +220,9 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 	}
 	flash := r.URL.Query().Get("flash")
 	if err := a.tmpl.Execute(w, adminData{
+		Lang:            i18n.FromRequest(r),
+		Langs:           i18n.Supported,
+		Path:            r.URL.Path,
 		AvailableModels: a.models.Models(r.Context()),
 		DefaultKeyDays:  a.cfg.KeyDurationDays,
 		Profiles:        profiles,
