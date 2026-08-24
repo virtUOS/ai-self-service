@@ -187,3 +187,7 @@ Register the application with your OIDC provider:
 - **bun** ORM over SQLite
 - **coreos/go-oidc** for OIDC/OAuth2
 - Server-rendered HTML templates (no JavaScript framework)
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 virtUOS, Osnabrück University
