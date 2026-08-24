@@ -67,3 +67,28 @@ type Session struct {
 	ExpiresAt time.Time `bun:"expires_at,notnull"`
 	CreatedAt time.Time `bun:"created_at,notnull"`
 }
+
+// AuditAction values recorded in AuditEvent.Action.
+const (
+	AuditKeyGenerated = "key.generated"
+	AuditKeyExtended  = "key.extended"
+	AuditKeyDeleted   = "key.deleted"
+	AuditKeyRevoked   = "key.revoked" // by an admin, not the owner
+	AuditProfileSet   = "user.profile_set"
+)
+
+// AuditEvent is an append-only record of a key or profile change.
+//
+// Emails are stored rather than referenced so history survives the deletion of
+// the user or key it describes.
+type AuditEvent struct {
+	bun.BaseModel `bun:"table:audit_events"`
+
+	ID           int64     `bun:"id,pk,autoincrement"`
+	CreatedAt    time.Time `bun:"created_at,notnull"`
+	Action       string    `bun:"action,notnull"`
+	ActorEmail   string    `bun:"actor_email,notnull"`   // who performed it
+	SubjectEmail string    `bun:"subject_email,notnull"` // whose key/profile it was
+	SubjectID    *int64    `bun:"subject_id"`
+	Detail       string    `bun:"detail,notnull"`
+}

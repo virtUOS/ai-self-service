@@ -53,6 +53,20 @@ type dashboardData struct {
 	CSRFToken       string
 }
 
+// audit records a self-service action, attributing it to the user themselves.
+// A failed audit write must not fail the user's action.
+func (u *UI) audit(r *http.Request, action string, user *database.User, detail string) {
+	if err := u.store.RecordAudit(r.Context(), &database.AuditEvent{
+		Action:       action,
+		ActorEmail:   user.Email,
+		SubjectEmail: user.Email,
+		SubjectID:    &user.ID,
+		Detail:       detail,
+	}); err != nil {
+		log.Printf("audit %s: %v", action, err)
+	}
+}
+
 // Dashboard renders the user dashboard.
 func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 	su, err := u.requireSession(r)
@@ -228,6 +242,8 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	u.audit(r, database.AuditKeyGenerated, su.User, "key "+prefix)
+
 	token, err := u.flash.Put(su.User.ID, key)
 	if err != nil {
 		log.Printf("stash new key: %v", err)
@@ -269,6 +285,8 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 		log.Printf("update key expiry in db: %v", err)
 	}
 
+	u.audit(r, database.AuditKeyExtended, su.User, "until "+newExpiry.Format("2006-01-02"))
+
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
@@ -290,6 +308,7 @@ func (u *UI) DeleteKey(w http.ResponseWriter, r *http.Request) {
 		log.Printf("delete LiteLLM key: %v", err)
 	}
 	_ = u.store.DeleteAPIKey(r.Context(), k.ID)
+	u.audit(r, database.AuditKeyDeleted, su.User, "key "+k.KeyPrefix)
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 

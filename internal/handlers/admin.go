@@ -20,6 +20,7 @@ type Admin struct {
 	cfg      *config.Config
 	store    *database.Store
 	sessions *session.Manager
+	litellm  *litellm.Client
 	tmpl     *template.Template
 	csrf     *session.CSRF
 }
@@ -32,9 +33,72 @@ func parseAdminTemplate() *template.Template {
 		ParseFS(web.TemplateFS, "templates/admin.html"))
 }
 
-func NewAdmin(cfg *config.Config, store *database.Store, sessions *session.Manager, csrf *session.CSRF) *Admin {
+func NewAdmin(cfg *config.Config, store *database.Store, sessions *session.Manager, ll *litellm.Client, csrf *session.CSRF) *Admin {
 	tmpl := parseAdminTemplate()
-	return &Admin{cfg: cfg, store: store, sessions: sessions, tmpl: tmpl, csrf: csrf}
+	return &Admin{cfg: cfg, store: store, sessions: sessions, litellm: ll, tmpl: tmpl, csrf: csrf}
+}
+
+// actorEmail identifies the admin performing the current request, for audit.
+func (a *Admin) actorEmail(r *http.Request) string {
+	su, err := a.sessions.Get(r.Context(), a.sessions.TokenFromRequest(r))
+	if err != nil || su == nil {
+		return "unknown"
+	}
+	return su.User.Email
+}
+
+// audit records an event without failing the request if the write fails.
+func (a *Admin) audit(r *http.Request, action, subjectEmail string, subjectID *int64, detail string) {
+	if err := a.store.RecordAudit(r.Context(), &database.AuditEvent{
+		Action:       action,
+		ActorEmail:   a.actorEmail(r),
+		SubjectEmail: subjectEmail,
+		SubjectID:    subjectID,
+		Detail:       detail,
+	}); err != nil {
+		log.Printf("audit %s: %v", action, err)
+	}
+}
+
+// RevokeUserKey handles POST /admin/users/{id}/key/revoke, deleting another
+// user's key both upstream and locally.
+func (a *Admin) RevokeUserKey(w http.ResponseWriter, r *http.Request) {
+	userID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+
+	user, err := a.store.GetUserByID(r.Context(), userID)
+	if err != nil {
+		http.Redirect(w, r, "/admin?flash=User+not+found#users", http.StatusFound)
+		return
+	}
+
+	key, err := a.store.GetAPIKeyByUser(r.Context(), userID)
+	if err != nil {
+		log.Printf("revoke: load key for user %d: %v", userID, err)
+		http.Redirect(w, r, "/admin?flash=Failed+to+load+key#users", http.StatusFound)
+		return
+	}
+	if key == nil {
+		http.Redirect(w, r, "/admin?flash=User+has+no+key#users", http.StatusFound)
+		return
+	}
+
+	// Revoke upstream first: if that fails the key is still live, so the local
+	// row must stay to keep it revocable.
+	if err := a.litellm.DeleteKey(r.Context(), key.LiteLLMKey); err != nil {
+		log.Printf("revoke: delete LiteLLM key %s: %v", key.KeyPrefix, err)
+		http.Redirect(w, r, "/admin?flash=Failed+to+revoke+key+upstream#users", http.StatusFound)
+		return
+	}
+	if err := a.store.DeleteAPIKey(r.Context(), key.ID); err != nil {
+		log.Printf("revoke: delete local key row %d: %v", key.ID, err)
+	}
+
+	a.audit(r, database.AuditKeyRevoked, user.Email, &userID, "key "+key.KeyPrefix)
+	http.Redirect(w, r, "/admin?flash=Key+revoked#users", http.StatusFound)
 }
 
 // Middleware checks that the current session belongs to an admin user.
@@ -61,11 +125,16 @@ func (a *Admin) Middleware(next http.Handler) http.Handler {
 type userRow struct {
 	database.User
 	ProfileIDVal int64 // 0 if no profile assigned
+	KeyPrefix    string
+	KeyExpires   string
+	KeyExpired   bool
+	HasKey       bool
 }
 
 type adminData struct {
 	Profiles  []database.Profile
 	Users     []userRow
+	Audit     []database.AuditEvent
 	Flash     string
 	CSRFToken string
 }
@@ -83,18 +152,40 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to load users", http.StatusInternalServerError)
 		return
 	}
+	// One query for all keys rather than one per user.
+	keys, err := a.store.ListAPIKeys(r.Context())
+	if err != nil {
+		log.Printf("list api keys: %v", err)
+	}
+	keyByUser := make(map[int64]database.APIKey, len(keys))
+	for _, k := range keys {
+		keyByUser[k.UserID] = k
+	}
+
 	users := make([]userRow, len(rawUsers))
 	for i, u := range rawUsers {
 		row := userRow{User: u}
 		if u.ProfileID != nil {
 			row.ProfileIDVal = *u.ProfileID
 		}
+		if k, ok := keyByUser[u.ID]; ok {
+			row.HasKey = true
+			row.KeyPrefix = k.KeyPrefix
+			row.KeyExpires = k.ExpiresAt.Format("2006-01-02")
+			row.KeyExpired = time.Now().After(k.ExpiresAt)
+		}
 		users[i] = row
+	}
+
+	audit, err := a.store.ListAuditEvents(r.Context(), 50)
+	if err != nil {
+		log.Printf("list audit events: %v", err)
 	}
 	flash := r.URL.Query().Get("flash")
 	if err := a.tmpl.Execute(w, adminData{
 		Profiles:  profiles,
 		Users:     users,
+		Audit:     audit,
 		Flash:     flash,
 		CSRFToken: a.csrf.Token(w, r),
 	}); err != nil {
@@ -217,7 +308,20 @@ func (a *Admin) SetUserProfile(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin?flash=Failed+to+update+user+profile", http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, "/admin?flash=User+profile+updated", http.StatusFound)
+
+	detail := "cleared"
+	if profileID != nil {
+		if p, err := a.store.GetProfile(r.Context(), *profileID); err == nil {
+			detail = p.Name
+		}
+	}
+	subjectEmail := ""
+	if u, err := a.store.GetUserByID(r.Context(), userID); err == nil {
+		subjectEmail = u.Email
+	}
+	a.audit(r, database.AuditProfileSet, subjectEmail, &userID, detail)
+
+	http.Redirect(w, r, "/admin?flash=User+profile+updated#users", http.StatusFound)
 }
 
 // --- helpers ---

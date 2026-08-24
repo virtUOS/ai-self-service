@@ -72,7 +72,7 @@ func main() {
 	llClient := litellm.NewClient(cfg.LiteLLMBaseURL, cfg.LiteLLMMasterKey)
 
 	ui := handlers.NewUI(cfg, store, sessions, oidcProvider, llClient, csrf)
-	admin := handlers.NewAdmin(cfg, store, sessions, csrf)
+	admin := handlers.NewAdmin(cfg, store, sessions, llClient, csrf)
 
 	// ── Router ────────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -110,6 +110,7 @@ func main() {
 		r.Post("/profiles/{id}", admin.UpdateProfile)
 		r.Post("/profiles/{id}/delete", admin.DeleteProfile)
 		r.Post("/users/{id}/profile", admin.SetUserProfile)
+		r.Post("/users/{id}/key/revoke", admin.RevokeUserKey)
 	})
 
 	// Liveness/readiness for the reverse proxy and orchestrator.

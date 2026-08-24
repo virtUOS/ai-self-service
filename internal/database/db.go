@@ -363,3 +363,33 @@ func (s *Store) GetSessionIDToken(ctx context.Context, sessionID int64) (string,
 	}
 	return sess.IDToken, nil
 }
+
+// --- Audit log ---
+
+// RecordAudit appends an audit event. Failures are returned but callers should
+// treat them as non-fatal: losing an audit row must not fail the user's action.
+func (s *Store) RecordAudit(ctx context.Context, e *AuditEvent) error {
+	e.CreatedAt = time.Now()
+	_, err := s.db.NewInsert().Model(e).Exec(ctx)
+	return err
+}
+
+// ListAuditEvents returns the most recent events, newest first.
+func (s *Store) ListAuditEvents(ctx context.Context, limit int) ([]AuditEvent, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var events []AuditEvent
+	err := s.db.NewSelect().Model(&events).
+		OrderExpr("created_at DESC, id DESC").
+		Limit(limit).
+		Scan(ctx)
+	return events, err
+}
+
+// ListAPIKeys returns every stored key, for the admin overview.
+func (s *Store) ListAPIKeys(ctx context.Context) ([]APIKey, error) {
+	var keys []APIKey
+	err := s.db.NewSelect().Model(&keys).Scan(ctx)
+	return keys, err
+}

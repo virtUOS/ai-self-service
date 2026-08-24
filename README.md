@@ -51,7 +51,11 @@ The server runs database migrations and seeds a default profile on startup.
 Users whose email appears in `ADMIN_EMAILS` see an **Admin** link in the header. The admin panel at `/admin` provides:
 
 - **Profiles** — create and edit profiles with model restrictions, TPM/RPM limits, and budget caps. Mark one profile as default; it applies to users with no explicit profile assignment.
-- **Users** — view all users who have ever logged in and assign them to a profile.
+- **Users** — view everyone who has logged in, see their key prefix and expiry,
+  assign a profile, and revoke a key.
+- **Audit log** — the 50 most recent key and profile changes, recording who did
+  what to whom. Rows outlive the key and user they describe, so revoking does
+  not erase the history.
 
 Profile fields:
 
@@ -96,6 +100,7 @@ priced at `0` or `null` accrues no spend, so a quota over it never triggers.
 | `POST` | `/admin/profiles/{id}`        | Update a profile                                          |
 | `POST` | `/admin/profiles/{id}/delete` | Delete a profile                                          |
 | `POST` | `/admin/users/{id}/profile`   | Assign a profile to a user                                |
+| `POST` | `/admin/users/{id}/key/revoke`| Revoke another user's API key                             |
 
 ## OIDC client registration
 

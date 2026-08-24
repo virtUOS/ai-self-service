@@ -25,6 +25,7 @@
     <div class="tabs">
       <button class="tab-btn active" onclick="showTab('profiles', this)">Profiles</button>
       <button class="tab-btn" onclick="showTab('users', this)">Users</button>
+      <button class="tab-btn" onclick="showTab('audit', this)">Audit log</button>
     </div>
 
     <!-- ── Profiles tab ─────────────────────────────────── -->
@@ -169,6 +170,7 @@
               <th>Name</th>
               <th>Email</th>
               <th>Profile</th>
+              <th>API key</th>
               <th>Change profile</th>
             </tr>
           </thead>
@@ -180,6 +182,22 @@
               <td>{{.Email}}</td>
               <td>
                 {{if .Profile}}{{.Profile.Name}}{{else}}<em class="text-faint">default</em>{{end}}
+              </td>
+              <td>
+                {{if .HasKey}}
+                  <code>{{.KeyPrefix}}…</code>
+                  <span class="badge {{if .KeyExpired}}badge-expired{{else}}badge-ok{{end}}">
+                    {{if .KeyExpired}}expired{{else}}{{.KeyExpires}}{{end}}
+                  </span>
+                  <form method="POST" action="/admin/users/{{.ID}}/key/revoke"
+                        style="display:inline"
+                        onsubmit="return confirm('Revoke the API key for {{.Email}}? They lose access immediately.')">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <button class="btn btn-sm btn-danger">Revoke</button>
+                  </form>
+                {{else}}
+                  <em class="text-faint">none</em>
+                {{end}}
               </td>
               <td>
                 <form method="POST" action="/admin/users/{{.ID}}/profile"
@@ -196,7 +214,41 @@
               </td>
             </tr>
             {{else}}
-            <tr><td colspan="4" class="text-faint" style="text-align:center">No users yet.</td></tr>
+            <tr><td colspan="5" class="text-faint" style="text-align:center">No users yet.</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Audit tab ──────────────────────────────────────── -->
+    <div id="tab-audit" class="tab-panel">
+      <h2 style="margin-bottom:1.25rem">Audit log</h2>
+      <p class="text-muted" style="margin-bottom:1rem;font-size:.9rem">
+        The 50 most recent key and profile changes.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Action</th>
+              <th>Actor</th>
+              <th>Subject</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Audit}}
+            <tr>
+              <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+              <td><code>{{.Action}}</code></td>
+              <td>{{.ActorEmail}}</td>
+              <td>{{.SubjectEmail}}</td>
+              <td class="text-faint">{{.Detail}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="5" class="text-faint" style="text-align:center">No events recorded yet.</td></tr>
             {{end}}
           </tbody>
         </table>
@@ -242,6 +294,7 @@ function resetProfileForm() {
 
 // Restore tab from hash
 if (location.hash === '#users') showTab('users', document.querySelectorAll('.tab-btn')[1]);
+if (location.hash === '#audit') showTab('audit', document.querySelectorAll('.tab-btn')[2]);
 </script>
 
 </body>
