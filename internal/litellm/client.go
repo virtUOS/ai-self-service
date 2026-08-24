@@ -26,13 +26,13 @@ func NewClient(baseURL, masterKey string) *Client {
 }
 
 type KeyParams struct {
-	KeyAlias       string   `json:"key_alias,omitempty"`
-	Models         []string `json:"models,omitempty"`
-	TPMLimit       *int64   `json:"tpm_limit,omitempty"`
-	RPMLimit       *int64   `json:"rpm_limit,omitempty"`
-	MaxBudget      *float64 `json:"max_budget,omitempty"`
-	BudgetDuration *string  `json:"budget_duration,omitempty"`
-	Duration       string   `json:"duration,omitempty"`
+	KeyAlias       string         `json:"key_alias,omitempty"`
+	Models         []string       `json:"models,omitempty"`
+	TPMLimit       *int64         `json:"tpm_limit,omitempty"`
+	RPMLimit       *int64         `json:"rpm_limit,omitempty"`
+	MaxBudget      *float64       `json:"max_budget,omitempty"`
+	BudgetDuration *string        `json:"budget_duration,omitempty"`
+	Duration       string         `json:"duration,omitempty"`
 	Metadata       map[string]any `json:"metadata,omitempty"`
 }
 

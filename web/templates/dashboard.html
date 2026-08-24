@@ -14,6 +14,7 @@
     {{if .IsAdmin}}<a href="/admin">Admin</a>{{end}}
     <span style="opacity:.6;font-size:.85rem">{{.User.Name}}</span>
     <form method="POST" action="/logout" style="display:inline">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <button type="submit">Sign out</button>
     </form>
   </nav>
@@ -38,13 +39,38 @@
     <dl class="info-grid">
       <dt>Name</dt>  <dd>{{.User.Name}}</dd>
       <dt>Email</dt> <dd>{{.User.Email}}</dd>
+      {{if .ProfileName}}<dt>Profile</dt> <dd>{{.ProfileName}}</dd>{{end}}
+      {{if .QuotaTokens}}
+      <dt>Usage limit</dt>
+      <dd>{{.QuotaTokens}} tokens {{.QuotaPeriod}}</dd>
+      {{end}}
     </dl>
+    {{if .QuotaTokens}}
+    <p class="text-muted" style="margin-top:.75rem;font-size:.85rem">
+      Requests fail once the limit is reached and resume automatically when the
+      period resets.
+    </p>
+    {{end}}
   </div>
 
   <div class="card">
     <h2>API key</h2>
 
     {{if .APIKey}}
+      {{if .ExpiryUrgent}}
+      <div class="alert {{if lt .ExpiresInDays 0}}alert-danger{{else}}alert-warning{{end}}"
+           style="margin-bottom:1.25rem">
+        {{if lt .ExpiresInDays 0}}
+          <strong>Your key has expired.</strong> Generate a new one to restore access.
+        {{else if eq .ExpiresInDays 0}}
+          <strong>Your key expires today.</strong> Extend it to keep your access.
+        {{else}}
+          <strong>Your key expires in {{.ExpiresInDays}}
+          day{{if ne .ExpiresInDays 1}}s{{end}}.</strong>
+          Extend it now to avoid interruption.
+        {{end}}
+      </div>
+      {{end}}
 
       <dl class="info-grid" style="margin-bottom:1.25rem">
         <dt>Key</dt>
@@ -62,14 +88,17 @@
 
       <div class="btn-row">
         <form method="POST" action="/key/extend">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button type="submit" class="btn btn-secondary">Extend (+{{.KeyDurationDays}} days)</button>
         </form>
         <form method="POST" action="/key/generate"
               onsubmit="return confirm('This will revoke your current key and generate a new one. Continue?')">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button type="submit" class="btn btn-secondary">Regenerate</button>
         </form>
         <form method="POST" action="/key/delete"
               onsubmit="return confirm('Delete your API key? You will lose access immediately.')">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button type="submit" class="btn btn-danger">Delete</button>
         </form>
       </div>
@@ -78,6 +107,7 @@
 
       <p class="text-muted" style="margin-bottom:1.25rem">You don't have an API key yet.</p>
       <form method="POST" action="/key/generate">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button type="submit" class="btn btn-primary">Generate API key</button>
       </form>
 

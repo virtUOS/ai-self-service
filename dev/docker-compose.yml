@@ -1,0 +1,24 @@
+# Local Keycloak for developing against the same IdP the university runs
+# (production is https://login.uni-osnabrueck.de/realms/virtuos).
+#
+#   docker compose -f dev/docker-compose.yml up -d
+#
+# Admin console: http://localhost:8081  (admin / admin)
+# Realm, client and two test users are imported from realm-export.json.
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm", "--http-port=8081"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8081 && echo -e 'GET /realms/virtuos HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | head -1 | grep -q '200 OK'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30

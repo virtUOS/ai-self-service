@@ -1,0 +1,66 @@
+package litellm
+
+import (
+	"context"
+	"time"
+
+	"github.com/virtuos/ai-self-service/internal/keyprovider"
+)
+
+// Provider adapts the LiteLLM client to keyprovider.Provider.
+//
+// This is where LiteLLM's vocabulary is translated into the application's. In
+// particular a token quota becomes a spend cap over a reset window, because
+// LiteLLM enforces budgets in currency and has no native token quota.
+type Provider struct {
+	client *Client
+}
+
+// NewProvider wraps a client as a keyprovider.Provider.
+func NewProvider(c *Client) *Provider { return &Provider{client: c} }
+
+var _ keyprovider.Provider = (*Provider)(nil)
+
+func (p *Provider) CreateKey(ctx context.Context, req keyprovider.KeyRequest) (keyprovider.KeyResult, error) {
+	secret, err := p.client.CreateKey(ctx, req.Alias, toKeyParams(req), req.ExpiresAt)
+	if err != nil {
+		return keyprovider.KeyResult{}, err
+	}
+	// LiteLLM revokes by the key itself, so the ref is the secret.
+	return keyprovider.KeyResult{Secret: secret, Ref: secret}, nil
+}
+
+func (p *Provider) DeleteKey(ctx context.Context, ref string) error {
+	return p.client.DeleteKey(ctx, ref)
+}
+
+func (p *Provider) UpdateExpiry(ctx context.Context, ref string, expiresAt time.Time) error {
+	return p.client.UpdateKeyExpiry(ctx, ref, expiresAt)
+}
+
+// toKeyParams converts the neutral request into LiteLLM's wire shape.
+func toKeyParams(req keyprovider.KeyRequest) KeyParams {
+	models := req.Limits.Models
+	if len(models) == 0 {
+		// LiteLLM reads an empty list as "no models"; nil means "all".
+		models = nil
+	}
+
+	params := KeyParams{
+		Models:   models,
+		TPMLimit: req.Limits.TokensPerMinute,
+		RPMLimit: req.Limits.RequestsPerMinute,
+		Metadata: map[string]any{"user_email": req.Owner},
+	}
+
+	// A token allowance is expressed upstream as a spend cap that resets each
+	// period. Priced identically for input and output, so the conversion is
+	// exact regardless of how the tokens are actually used.
+	if req.Limits.QuotaTokens > 0 && req.Limits.QuotaPeriod != "" {
+		budget := TokensToBudget(req.Limits.QuotaTokens)
+		period := req.Limits.QuotaPeriod
+		params.MaxBudget = &budget
+		params.BudgetDuration = &period
+	}
+	return params
+}

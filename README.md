@@ -13,9 +13,11 @@ A self-service web portal that lets users generate, manage, and renew their own 
 ## Features
 
 - **Self-service key management** — generate, extend, regenerate, and delete LiteLLM API keys
-- **Profile system** — per-user limits for models, tokens per minute (TPM), requests per minute (RPM), and budget
+- **Profile system** — per-user key validity, fair-use token quotas, model restrictions and TPM/RPM limits
+- **Expiry notifications** — users are warned before their key expires, in the
+  dashboard and (when SMTP is configured) by email
 - **OIDC authentication** — login, logout, and back-channel logout support
-- **Dual database backend** — SQLite (default) or PostgreSQL
+- **SQLite storage** — single file, no separate database server
 - **Admin panel** — manage profiles and assign them to users
 
 ## Configuration
@@ -32,13 +34,16 @@ Copy `.env.example` to `.env` and fill in the values:
 | `OIDC_REDIRECT_URL`  | yes      | —           | Callback URL (must match OIDC client config)                       |
 | `FRONTEND_URL`       | yes      | —           | Public base URL of this app (shown to users as the API base URL)   |
 | `ADMIN_EMAILS`       | no       | —           | Comma-separated list of admin email addresses                      |
-| `DB_TYPE`            | no       | `sqlite`    | `sqlite` or `postgres`                                             |
-| `DB_PATH`            | no       | `./data.db` | Path to SQLite file                                                |
-| `DB_DSN`             | no       | —           | PostgreSQL DSN (required when `DB_TYPE=postgres`)                  |
+| `DB_PATH`            | no       | `./data.db` | Path to the SQLite database file                                   |
 | `LISTEN_ADDR`        | no       | `:8080`     | Address and port to listen on                                      |
 | `COOKIE_SECURE`      | no       | `false`     | Set `true` when serving over HTTPS                                 |
 | `SESSION_DURATION`   | no       | `24h`       | How long a login session lasts                                     |
-| `KEY_DURATION_DAYS`  | no       | `90`        | Default validity period for generated keys                         |
+| `KEY_DURATION_DAYS`  | no       | `90`        | Default key validity; profiles may override it                     |
+| `SMTP_HOST`          | no       | —           | `host:port` of a mail relay; unset disables expiry emails          |
+| `SMTP_FROM`          | no       | `noreply@uni-osnabrueck.de` | Sender address for expiry emails                   |
+| `SMTP_USERNAME`      | no       | —           | Only if the relay requires authentication                          |
+| `SMTP_PASSWORD`      | no       | —           | Only if the relay requires authentication                          |
+| `LOG_LEVEL`          | no       | `info`      | `debug`, `info`, `warn` or `error`                                 |
 
 ## Running
 
@@ -53,17 +58,64 @@ The server runs database migrations and seeds a default profile on startup.
 Users whose email appears in `ADMIN_EMAILS` see an **Admin** link in the header. The admin panel at `/admin` provides:
 
 - **Profiles** — create and edit profiles with model restrictions, TPM/RPM limits, and budget caps. Mark one profile as default; it applies to users with no explicit profile assignment.
-- **Users** — view all users who have ever logged in and assign them to a profile.
+- **Users** — view everyone who has logged in, see their key prefix and expiry,
+  assign a profile, and revoke a key.
+- **Audit log** — the 50 most recent key and profile changes, recording who did
+  what to whom. Rows outlive the key and user they describe, so revoking does
+  not erase the history.
 
 Profile fields:
 
-| Field           | Description                                                       |
-| --------------- | ----------------------------------------------------------------- |
-| Models          | Comma-separated list of allowed LiteLLM model names (empty = all models) |
-| TPM limit       | Maximum tokens per minute                                         |
-| RPM limit       | Maximum requests per minute                                       |
-| Max budget      | Maximum spend before the key is blocked                           |
-| Budget duration | Budget reset period (e.g. `30d`, `1mo`)                           |
+| Field            | Description                                                              |
+| ---------------- | ------------------------------------------------------------------------ |
+| Models           | Comma-separated list of allowed model names (empty = all models)          |
+| Key validity     | How long a generated key lasts, in days (blank = `KEY_DURATION_DAYS`)     |
+| Usage limit      | Fair-use allowance in **tokens** per period (blank = unlimited)           |
+| Limit resets     | `hourly`, `daily`, `weekly` or `monthly`                                  |
+| TPM limit        | Maximum tokens per minute — burst control, complements the usage limit    |
+| RPM limit        | Maximum requests per minute                                               |
+
+Different cohorts get different profiles: students might get 30-day keys with a
+1M-token daily allowance, lecturers 365-day keys with no quota.
+
+### How usage limits work
+
+Admins configure quotas in **tokens**; LiteLLM enforces spend. The portal
+converts using a nominal per-token price (`internal/litellm/quota.go`), so a
+1,000,000-token daily allowance becomes a $0.10 cap that resets every 24h.
+Requests fail with HTTP 429 once the allowance is spent and resume when the
+period resets.
+
+This requires every model in LiteLLM to carry that same nominal price. A model
+priced at `0` or `null` accrues no spend, so a quota over it never triggers.
+
+## Expiry notifications
+
+Keys expire, so users are warned before they do — otherwise a key dies silently
+in someone's pipeline.
+
+- The dashboard shows a warning once a key is within 14 days of expiring, and
+  an error once it has expired.
+- With `SMTP_HOST` set, an email goes out at 14, 3 and 1 days before expiry.
+  Each notice is sent at most once per key and threshold; a delivery failure
+  leaves it pending so the next run retries.
+
+Without `SMTP_HOST` the portal logs what it would have sent. It does not
+silently pretend mail was delivered.
+
+## Metrics
+
+Prometheus metrics are served on `/metrics`, labelled by route template so a
+per-user path does not create a time series per user. In the deployment Caddy
+restricts the endpoint to the monitoring host.
+
+| Metric | Meaning |
+| ------ | ------- |
+| `aiselfservice_http_requests_total` | requests by route, method, status |
+| `aiselfservice_http_request_duration_seconds` | latency by route |
+| `aiselfservice_key_operations_total` | key issue/extend/revoke by outcome |
+| `aiselfservice_active_keys` | keys currently issued |
+| `aiselfservice_keys_expiring_7d` | keys expiring within a week |
 
 ## Routes
 
@@ -83,6 +135,7 @@ Profile fields:
 | `POST` | `/admin/profiles/{id}`        | Update a profile                                          |
 | `POST` | `/admin/profiles/{id}/delete` | Delete a profile                                          |
 | `POST` | `/admin/users/{id}/profile`   | Assign a profile to a user                                |
+| `POST` | `/admin/users/{id}/key/revoke`| Revoke another user's API key                             |
 
 ## OIDC client registration
 
@@ -96,6 +149,7 @@ Register the application with your OIDC provider:
 ## Technology stack
 
 - **Go** with [chi](https://github.com/go-chi/chi) router
-- **bun** ORM with SQLite or PostgreSQL backend
+- Key issuance behind a `keyprovider.Provider` interface; LiteLLM is one adapter
+- **bun** ORM over SQLite
 - **coreos/go-oidc** for OIDC/OAuth2
 - Server-rendered HTML templates (no JavaScript framework)

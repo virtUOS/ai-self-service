@@ -9,7 +9,7 @@ import (
 )
 
 type Config struct {
-	LiteLLMBaseURL  string
+	LiteLLMBaseURL   string
 	LiteLLMMasterKey string
 
 	OIDCIssuerURL    string
@@ -20,9 +20,14 @@ type Config struct {
 	FrontendURL string
 	AdminEmails []string
 
-	DBType string
 	DBPath string
-	DBDSN  string
+
+	// SMTPHost enables expiry emails when set (host:port). Without it the
+	// portal logs what it would have sent and relies on the dashboard warning.
+	SMTPHost     string
+	SMTPFrom     string
+	SMTPUsername string
+	SMTPPassword string
 
 	ListenAddr      string
 	CookieSecure    bool
@@ -42,9 +47,12 @@ func Load() (*Config, error) {
 
 		FrontendURL: requireEnv("FRONTEND_URL"),
 
-		DBType: envOr("DB_TYPE", "sqlite"),
 		DBPath: envOr("DB_PATH", "./data.db"),
-		DBDSN:  os.Getenv("DB_DSN"),
+
+		SMTPHost:     os.Getenv("SMTP_HOST"),
+		SMTPFrom:     envOr("SMTP_FROM", "noreply@uni-osnabrueck.de"),
+		SMTPUsername: os.Getenv("SMTP_USERNAME"),
+		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
 
 		ListenAddr: envOr("LISTEN_ADDR", ":8080"),
 	}

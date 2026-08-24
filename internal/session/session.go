@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -46,7 +45,6 @@ func (m *Manager) Create(ctx context.Context, userID int64, idToken string) (str
 func (m *Manager) Get(ctx context.Context, token string) (*SessionUser, error) {
 	sess, err := m.store.GetSessionByToken(ctx, token)
 	if err != nil {
-		log.Printf("session.Get: GetSessionByToken error: %v", err)
 		return nil, err
 	}
 	if time.Now().After(sess.ExpiresAt) {
@@ -55,7 +53,6 @@ func (m *Manager) Get(ctx context.Context, token string) (*SessionUser, error) {
 	}
 	user, err := m.store.GetUserByID(ctx, sess.UserID)
 	if err != nil {
-		log.Printf("session.Get: GetUserByID(%d) error: %v", sess.UserID, err)
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 	return &SessionUser{SessionID: sess.ID, IDToken: sess.IDToken, User: user}, nil

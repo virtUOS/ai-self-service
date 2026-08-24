@@ -2,13 +2,15 @@ package handlers
 
 import (
 	"html/template"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/ai-self-service/internal/keyprovider"
 	"github.com/virtuos/ai-self-service/internal/litellm"
+	"github.com/virtuos/ai-self-service/internal/metrics"
 	oidcpkg "github.com/virtuos/ai-self-service/internal/oidc"
 	"github.com/virtuos/ai-self-service/internal/session"
 	"github.com/virtuos/ai-self-service/web"
@@ -19,22 +21,54 @@ type UI struct {
 	store    *database.Store
 	sessions *session.Manager
 	oidc     *oidcpkg.Provider
-	litellm  *litellm.Client
+	keys     keyprovider.Provider
 	tmpl     *template.Template
+	flash    *keyFlash
+	csrf     *session.CSRF
 }
 
-func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager, oidc *oidcpkg.Provider, ll *litellm.Client) *UI {
+func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager, oidc *oidcpkg.Provider, keys keyprovider.Provider, csrf *session.CSRF) *UI {
 	tmpl := template.Must(template.ParseFS(web.TemplateFS, "templates/dashboard.html"))
-	return &UI{cfg: cfg, store: store, sessions: sessions, oidc: oidc, litellm: ll, tmpl: tmpl}
+	return &UI{cfg: cfg, store: store, sessions: sessions, oidc: oidc, keys: keys, tmpl: tmpl, flash: newKeyFlash(), csrf: csrf}
 }
 
 func (u *UI) requireSession(r *http.Request) (*session.SessionUser, error) {
 	token := u.sessions.TokenFromRequest(r)
-	log.Printf("requireSession: token present=%v", token != "")
 	if token == "" {
 		return nil, http.ErrNoCookie
 	}
 	return u.sessions.Get(r.Context(), token)
+}
+
+// dashboardData is what dashboard.html renders. Named rather than anonymous so
+// tests cannot drift from the handler's shape.
+type dashboardData struct {
+	User            *database.User
+	APIKey          *database.APIKey
+	NewKey          string
+	IsAdmin         bool
+	FrontendURL     string
+	KeyDurationDays int
+	ExpiresInDays   int
+	ExpiryUrgent    bool
+	ProfileName     string
+	QuotaTokens     string
+	QuotaPeriod     string
+	CSRFToken       string
+}
+
+// audit records a self-service action, attributing it to the user themselves.
+// A failed audit write must not fail the user's action.
+func (u *UI) audit(r *http.Request, action string, user *database.User, detail string) {
+	if err := u.store.RecordAudit(r.Context(), &database.AuditEvent{
+		Action:       action,
+		ActorEmail:   user.Email,
+		SubjectEmail: user.Email,
+		SubjectID:    &user.ID,
+		Detail:       detail,
+	}); err != nil {
+		slog.Error("record audit event", "action", action, "err", err)
+	}
 }
 
 // Dashboard renders the user dashboard.
@@ -45,29 +79,37 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiKey, _ := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
-
-	type data struct {
-		User            *database.User
-		APIKey          *database.APIKey
-		NewKey          string
-		IsAdmin         bool
-		FrontendURL     string
-		KeyDurationDays int
+	apiKey, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
+	if err != nil {
+		slog.Error("dashboard: load key", "err", err)
 	}
 
-	// Pull a one-time new key from the query string (set after generate/regenerate redirect).
-	newKey := r.URL.Query().Get("newkey")
+	// The dashboard advertises the extend duration and the fair-use quota, both
+	// of which come from the user's profile rather than the server default.
+	profile, err := u.resolveProfile(r, su.User)
+	if err != nil {
+		slog.Error("dashboard: resolve profile", "err", err)
+	}
 
-	if err := u.tmpl.Execute(w, data{
+	// Redeem a one-time new key stashed by GenerateKey. The secret never
+	// appears in the URL; the query string carries only an opaque token.
+	newKey := u.flash.Take(su.User.ID, r.URL.Query().Get("k"))
+
+	if err := u.tmpl.Execute(w, dashboardData{
 		User:            su.User,
 		APIKey:          apiKey,
 		NewKey:          newKey,
 		IsAdmin:         u.cfg.IsAdmin(su.User.Email),
 		FrontendURL:     u.cfg.FrontendURL,
-		KeyDurationDays: u.cfg.KeyDurationDays,
+		KeyDurationDays: u.keyDuration(profile),
+		ExpiresInDays:   daysUntilExpiry(apiKey),
+		ExpiryUrgent:    isExpiryUrgent(apiKey),
+		ProfileName:     profileName(profile),
+		QuotaTokens:     profileQuota(profile),
+		QuotaPeriod:     profilePeriod(profile),
+		CSRFToken:       u.csrf.Token(w, r),
 	}); err != nil {
-		log.Printf("dashboard template: %v", err)
+		slog.Error("dashboard template", "err", err)
 	}
 }
 
@@ -80,31 +122,26 @@ func (u *UI) Login(w http.ResponseWriter, r *http.Request) {
 func (u *UI) Callback(w http.ResponseWriter, r *http.Request) {
 	result, err := u.oidc.HandleCallback(w, r)
 	if err != nil {
-		log.Printf("callback: OIDC error: %v", err)
+		slog.Error("callback: OIDC error", "err", err)
 		http.Error(w, "Authentication failed: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("callback: authenticated %s (%s)", result.UserInfo.Email, result.UserInfo.Subject)
-
 	user, err := u.oidc.GetOrCreateUser(r.Context(), result.UserInfo)
 	if err != nil {
-		log.Printf("callback: get/create user: %v", err)
+		slog.Error("callback: get/create user", "err", err)
 		http.Error(w, "Failed to load user", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("callback: user id=%d email=%s", user.ID, user.Email)
-
 	token, err := u.sessions.Create(r.Context(), user.ID, result.IDToken)
 	if err != nil {
-		log.Printf("callback: create session for user %d: %v", user.ID, err)
+		slog.Error("callback: create session", "user_id", user.ID, "err", err)
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
 		return
 	}
 
 	u.sessions.SetCookie(w, token)
-	log.Printf("callback: session created, redirecting to /")
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
@@ -137,7 +174,7 @@ func (u *UI) BackchannelLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := u.sessions.DeleteByOIDCSub(r.Context(), sub); err != nil {
-		log.Printf("backchannel logout: delete sessions: %v", err)
+		slog.Error("backchannel logout: delete sessions", "err", err)
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -161,11 +198,10 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	existing, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
-	if err == nil && existing != nil {
-		if delErr := u.litellm.DeleteKey(r.Context(), existing.LiteLLMKey); delErr != nil {
-			log.Printf("delete old LiteLLM key: %v", delErr)
-		}
-		_ = u.store.DeleteAPIKey(r.Context(), existing.ID)
+	if err != nil {
+		slog.Error("look up existing key", "err", err)
+		http.Error(w, "Failed to load your key", http.StatusInternalServerError)
+		return
 	}
 
 	profile, err := u.resolveProfile(r, su.User)
@@ -174,28 +210,61 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expiresAt := time.Now().AddDate(0, 0, u.cfg.KeyDurationDays)
-	params := profileToKeyParams(profile, su.User.Email)
-	key, err := u.litellm.CreateKey(r.Context(), su.User.Email, params, expiresAt)
+	// Create the replacement BEFORE revoking the old one. The reverse order
+	// leaves the user with no working key whenever creation fails.
+	expiresAt := time.Now().AddDate(0, 0, u.keyDuration(profile))
+	result, err := u.keys.CreateKey(r.Context(), keyprovider.KeyRequest{
+		Alias:     su.User.Email,
+		Owner:     su.User.Email,
+		ExpiresAt: expiresAt,
+		Limits:    profileLimits(profile),
+	})
 	if err != nil {
+		metrics.KeyOperations.WithLabelValues("generate", "provider_error").Inc()
 		http.Error(w, "Failed to create key: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	key := result.Secret
 	prefix := key
 	if len(prefix) > 12 {
 		prefix = prefix[:12]
 	}
-	if err := u.store.CreateAPIKey(r.Context(), &database.APIKey{
+	if err := u.store.ReplaceAPIKey(r.Context(), &database.APIKey{
 		UserID:     su.User.ID,
-		LiteLLMKey: key,
+		LiteLLMKey: result.Ref,
 		KeyPrefix:  prefix,
 		ExpiresAt:  expiresAt,
 	}); err != nil {
-		log.Printf("store api key: %v", err)
+		// The key exists upstream but could not be recorded, so nothing can
+		// ever revoke it through this app. Revoke it now rather than leaking it.
+		slog.Error("store api key", "err", err)
+		if delErr := u.keys.DeleteKey(r.Context(), result.Ref); delErr != nil {
+			slog.Error("roll back orphaned key", "key_prefix", prefix, "err", delErr)
+		}
+		metrics.KeyOperations.WithLabelValues("generate", "store_error").Inc()
+		http.Error(w, "Failed to save your key", http.StatusInternalServerError)
+		return
 	}
 
-	http.Redirect(w, r, "/?newkey="+key, http.StatusFound)
+	// The new key is stored; the old one is now unreferenced and safe to
+	// revoke. A failure here leaves a stale key that expires on its own.
+	if existing != nil {
+		if delErr := u.keys.DeleteKey(r.Context(), existing.LiteLLMKey); delErr != nil {
+			slog.Error("revoke replaced key", "key_prefix", existing.KeyPrefix, "err", delErr)
+		}
+	}
+
+	metrics.KeyOperations.WithLabelValues("generate", "success").Inc()
+	u.audit(r, database.AuditKeyGenerated, su.User, "key "+prefix)
+
+	token, err := u.flash.Put(su.User.ID, key)
+	if err != nil {
+		slog.Error("stash new key", "err", err)
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, "/?k="+token, http.StatusFound)
 }
 
 // ExtendKey extends the user's key expiry by KEY_DURATION_DAYS from now.
@@ -208,18 +277,30 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 
 	k, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
 	if err != nil {
+		http.Error(w, "Failed to load your key", http.StatusInternalServerError)
+		return
+	}
+	if k == nil {
 		http.Error(w, "No key found", http.StatusBadRequest)
 		return
 	}
 
-	newExpiry := time.Now().AddDate(0, 0, u.cfg.KeyDurationDays)
-	if err := u.litellm.UpdateKeyExpiry(r.Context(), k.LiteLLMKey, newExpiry); err != nil {
+	profile, err := u.resolveProfile(r, su.User)
+	if err != nil {
+		http.Error(w, "Failed to load profile", http.StatusInternalServerError)
+		return
+	}
+	newExpiry := time.Now().AddDate(0, 0, u.keyDuration(profile))
+	if err := u.keys.UpdateExpiry(r.Context(), k.LiteLLMKey, newExpiry); err != nil {
 		http.Error(w, "Failed to extend key: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if err := u.store.UpdateAPIKeyExpiry(r.Context(), k.ID, newExpiry); err != nil {
-		log.Printf("update key expiry in db: %v", err)
+		slog.Error("update key expiry in db", "err", err)
 	}
+
+	metrics.KeyOperations.WithLabelValues("extend", "success").Inc()
+	u.audit(r, database.AuditKeyExtended, su.User, "until "+newExpiry.Format("2006-01-02"))
 
 	http.Redirect(w, r, "/", http.StatusFound)
 }
@@ -233,16 +314,77 @@ func (u *UI) DeleteKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	k, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
-	if err != nil {
+	if err != nil || k == nil {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
 
-	if err := u.litellm.DeleteKey(r.Context(), k.LiteLLMKey); err != nil {
-		log.Printf("delete LiteLLM key: %v", err)
+	if err := u.keys.DeleteKey(r.Context(), k.LiteLLMKey); err != nil {
+		slog.Error("delete LiteLLM key", "err", err)
 	}
 	_ = u.store.DeleteAPIKey(r.Context(), k.ID)
+	metrics.KeyOperations.WithLabelValues("delete", "success").Inc()
+	u.audit(r, database.AuditKeyDeleted, su.User, "key "+k.KeyPrefix)
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// daysUntilExpiry reports whole days remaining; negative once expired.
+func daysUntilExpiry(k *database.APIKey) int {
+	if k == nil {
+		return 0
+	}
+	return int(time.Until(k.ExpiresAt).Hours() / 24)
+}
+
+// isExpiryUrgent marks the point where the dashboard nags rather than informs.
+// It matches the widest email threshold so both channels agree.
+func isExpiryUrgent(k *database.APIKey) bool {
+	if k == nil {
+		return false
+	}
+	return time.Until(k.ExpiresAt) < 14*24*time.Hour
+}
+
+func profileName(p *database.Profile) string {
+	if p == nil {
+		return ""
+	}
+	return p.Name
+}
+
+// profileQuota renders the fair-use allowance, or "" when there is none.
+func profileQuota(p *database.Profile) string {
+	if p == nil || p.QuotaTokens <= 0 || p.QuotaPeriod == "" {
+		return ""
+	}
+	return litellm.FormatTokens(p.QuotaTokens)
+}
+
+func profilePeriod(p *database.Profile) string {
+	if p == nil || p.QuotaTokens <= 0 {
+		return ""
+	}
+	switch p.QuotaPeriod {
+	case "1h":
+		return "per hour"
+	case "24h":
+		return "per day"
+	case "7d":
+		return "per week"
+	case "30d":
+		return "per month"
+	default:
+		return ""
+	}
+}
+
+// keyDuration returns the profile's expiry in days, falling back to the
+// server-wide default when the profile does not set one.
+func (u *UI) keyDuration(p *database.Profile) int {
+	if p != nil && p.KeyDurationDays > 0 {
+		return p.KeyDurationDays
+	}
+	return u.cfg.KeyDurationDays
 }
 
 func (u *UI) resolveProfile(r *http.Request, user *database.User) (*database.Profile, error) {
@@ -252,19 +394,17 @@ func (u *UI) resolveProfile(r *http.Request, user *database.User) (*database.Pro
 	return u.store.GetDefaultProfile(r.Context())
 }
 
-func profileToKeyParams(p *database.Profile, email string) litellm.KeyParams {
-	models := p.Models
-	if len(models) == 0 {
-		models = nil // nil = all models in LiteLLM
+// profileLimits maps a profile onto the provider-neutral limits. Translating
+// those into a specific gateway's wire format is the adapter's job.
+func profileLimits(p *database.Profile) keyprovider.Limits {
+	if p == nil {
+		return keyprovider.Limits{}
 	}
-	params := litellm.KeyParams{
-		Models:         models,
-		TPMLimit:       p.TPMLimit,
-		RPMLimit:       p.RPMLimit,
-		MaxBudget:      p.MaxBudget,
-		BudgetDuration: p.BudgetDuration,
-		Metadata:       map[string]any{"user_email": email},
+	return keyprovider.Limits{
+		Models:            p.Models,
+		TokensPerMinute:   p.TPMLimit,
+		RequestsPerMinute: p.RPMLimit,
+		QuotaTokens:       p.QuotaTokens,
+		QuotaPeriod:       p.QuotaPeriod,
 	}
-	return params
 }
-

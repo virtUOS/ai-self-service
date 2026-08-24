@@ -1,0 +1,57 @@
+// Package keyprovider defines how the portal issues and revokes API keys,
+// independently of which gateway actually does it.
+//
+// The types here are the application's own vocabulary. They deliberately do not
+// mirror any provider's request shape: a provider adapter translates. That
+// keeps provider quirks — LiteLLM enforcing quotas as spend rather than tokens,
+// for instance — from leaking into handlers and templates.
+package keyprovider
+
+import (
+	"context"
+	"time"
+)
+
+// Limits are the constraints applied to an issued key.
+type Limits struct {
+	// Models the key may use. Empty means no restriction.
+	Models []string
+
+	// TokensPerMinute and RequestsPerMinute bound bursts. Nil means unlimited.
+	TokensPerMinute   *int64
+	RequestsPerMinute *int64
+
+	// QuotaTokens is a fair-use allowance consumed over QuotaPeriod, after
+	// which requests fail until the period resets. Zero means unlimited.
+	QuotaTokens int64
+	QuotaPeriod string // "1h" | "24h" | "7d" | "30d"
+}
+
+// KeyRequest describes a key to be created.
+type KeyRequest struct {
+	// Alias identifies the key in the provider's own UI.
+	Alias string
+	// Owner is recorded as metadata so a key can be traced back to a person.
+	Owner     string
+	ExpiresAt time.Time
+	Limits    Limits
+}
+
+// KeyResult is what a provider returns when a key is created.
+type KeyResult struct {
+	// Secret is shown to the user once and never stored in full.
+	Secret string
+	// Ref identifies the key for later revocation. For providers that can
+	// revoke by an opaque id this is that id; otherwise it is the secret.
+	Ref string
+}
+
+// Provider issues and revokes keys on an upstream gateway.
+type Provider interface {
+	// CreateKey issues a new key.
+	CreateKey(ctx context.Context, req KeyRequest) (KeyResult, error)
+	// DeleteKey revokes a key by the Ref returned from CreateKey.
+	DeleteKey(ctx context.Context, ref string) error
+	// UpdateExpiry moves a key's expiry.
+	UpdateExpiry(ctx context.Context, ref string, expiresAt time.Time) error
+}

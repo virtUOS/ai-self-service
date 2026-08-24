@@ -25,6 +25,7 @@
     <div class="tabs">
       <button class="tab-btn active" onclick="showTab('profiles', this)">Profiles</button>
       <button class="tab-btn" onclick="showTab('users', this)">Users</button>
+      <button class="tab-btn" onclick="showTab('audit', this)">Audit log</button>
     </div>
 
     <!-- ── Profiles tab ─────────────────────────────────── -->
@@ -41,7 +42,8 @@
               <th>Models</th>
               <th>TPM</th>
               <th>RPM</th>
-              <th>Budget</th>
+              <th>Expiry</th>
+              <th>Quota</th>
               <th>Default</th>
               <th></th>
             </tr>
@@ -60,11 +62,9 @@
               </td>
               <td>{{if .TPMLimit}}{{.TPMLimit}}{{else}}&mdash;{{end}}</td>
               <td>{{if .RPMLimit}}{{.RPMLimit}}{{else}}&mdash;{{end}}</td>
+              <td>{{if .KeyDurationDays}}{{.KeyDurationDays}}d{{else}}<em class="text-faint">default</em>{{end}}</td>
               <td>
-                {{if .MaxBudget}}
-                  {{printf "%.2f" .MaxBudget}}
-                  {{if .BudgetDuration}} / {{.BudgetDuration}}{{end}}
-                {{else}}&mdash;{{end}}
+                {{if .QuotaTokens}}{{fmtTokens .QuotaTokens}} / {{.QuotaPeriod}}{{else}}&mdash;{{end}}
               </td>
               <td>{{if .IsDefault}}✓{{end}}</td>
               <td>
@@ -74,12 +74,14 @@
                             '{{range $i,$m := .Models}}{{if $i}},{{end}}{{$m}}{{end}}',
                             '{{if .TPMLimit}}{{.TPMLimit}}{{end}}',
                             '{{if .RPMLimit}}{{.RPMLimit}}{{end}}',
-                            '{{if .MaxBudget}}{{printf "%.2f" .MaxBudget}}{{end}}',
-                            '{{if .BudgetDuration}}{{.BudgetDuration}}{{end}}',
+                            '{{if .KeyDurationDays}}{{.KeyDurationDays}}{{end}}',
+                            '{{if .QuotaTokens}}{{.QuotaTokens}}{{end}}',
+                            '{{.QuotaPeriod}}',
                             {{.IsDefault}})">Edit</button>
                   {{if not .IsDefault}}
                   <form method="POST" action="/admin/profiles/{{.ID}}/delete"
                         onsubmit="return confirm('Delete profile {{.Name}}?')">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                     <button class="btn btn-sm btn-danger">Delete</button>
                   </form>
                   {{end}}
@@ -87,7 +89,7 @@
               </td>
             </tr>
             {{else}}
-            <tr><td colspan="8" class="text-faint" style="text-align:center">No profiles yet.</td></tr>
+            <tr><td colspan="9" class="text-faint" style="text-align:center">No profiles yet.</td></tr>
             {{end}}
           </tbody>
         </table>
@@ -96,6 +98,7 @@
       <!-- Create / Edit form -->
       <h3 id="profile-form-title">New profile</h3>
       <form id="profile-form" method="POST" action="/admin/profiles" style="max-width:540px">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
         <input type="hidden" name="_id" id="pf-id" value="">
 
         <div class="form-group">
@@ -121,12 +124,25 @@
             <input type="number" id="pf-rpm" name="rpm_limit" min="0" placeholder="unlimited">
           </div>
           <div class="form-group">
-            <label for="pf-budget">Max budget ($)</label>
-            <input type="number" id="pf-budget" name="max_budget" step="0.01" min="0" placeholder="unlimited">
+            <label for="pf-expiry">Key validity (days)</label>
+            <input type="number" id="pf-expiry" name="key_duration_days" min="0" placeholder="server default">
+            <div class="form-hint">How long a generated key lasts. Blank uses the server default.</div>
           </div>
           <div class="form-group">
-            <label for="pf-bdur">Budget duration</label>
-            <input type="text" id="pf-bdur" name="budget_duration" placeholder="30d / monthly">
+            <label for="pf-quota">Usage limit (tokens)</label>
+            <input type="number" id="pf-quota" name="quota_tokens" min="0" placeholder="unlimited">
+            <div class="form-hint">Fair-use allowance per period. Blank means no limit.</div>
+          </div>
+          <div class="form-group">
+            <label for="pf-period">Limit resets</label>
+            <select id="pf-period" name="quota_period">
+              <option value="">no limit</option>
+              <option value="1h">hourly</option>
+              <option value="24h">daily</option>
+              <option value="7d">weekly</option>
+              <option value="30d">monthly</option>
+            </select>
+            <div class="form-hint">Requests fail once the limit is hit, then resume at the reset.</div>
           </div>
         </div>
         <div class="form-group">
@@ -154,6 +170,7 @@
               <th>Name</th>
               <th>Email</th>
               <th>Profile</th>
+              <th>API key</th>
               <th>Change profile</th>
             </tr>
           </thead>
@@ -167,8 +184,25 @@
                 {{if .Profile}}{{.Profile.Name}}{{else}}<em class="text-faint">default</em>{{end}}
               </td>
               <td>
+                {{if .HasKey}}
+                  <code>{{.KeyPrefix}}…</code>
+                  <span class="badge {{if .KeyExpired}}badge-expired{{else}}badge-ok{{end}}">
+                    {{if .KeyExpired}}expired{{else}}{{.KeyExpires}}{{end}}
+                  </span>
+                  <form method="POST" action="/admin/users/{{.ID}}/key/revoke"
+                        style="display:inline"
+                        onsubmit="return confirm('Revoke the API key for {{.Email}}? They lose access immediately.')">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <button class="btn btn-sm btn-danger">Revoke</button>
+                  </form>
+                {{else}}
+                  <em class="text-faint">none</em>
+                {{end}}
+              </td>
+              <td>
                 <form method="POST" action="/admin/users/{{.ID}}/profile"
                       style="display:flex;gap:.5rem;align-items:center">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                   <select name="profile_id" style="width:auto">
                     <option value="0"{{if eq $pid 0}} selected{{end}}>(default)</option>
                     {{range $.Profiles}}
@@ -180,7 +214,41 @@
               </td>
             </tr>
             {{else}}
-            <tr><td colspan="4" class="text-faint" style="text-align:center">No users yet.</td></tr>
+            <tr><td colspan="5" class="text-faint" style="text-align:center">No users yet.</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Audit tab ──────────────────────────────────────── -->
+    <div id="tab-audit" class="tab-panel">
+      <h2 style="margin-bottom:1.25rem">Audit log</h2>
+      <p class="text-muted" style="margin-bottom:1rem;font-size:.9rem">
+        The 50 most recent key and profile changes.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Action</th>
+              <th>Actor</th>
+              <th>Subject</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Audit}}
+            <tr>
+              <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+              <td><code>{{.Action}}</code></td>
+              <td>{{.ActorEmail}}</td>
+              <td>{{.SubjectEmail}}</td>
+              <td class="text-faint">{{.Detail}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="5" class="text-faint" style="text-align:center">No events recorded yet.</td></tr>
             {{end}}
           </tbody>
         </table>
@@ -198,15 +266,16 @@ function showTab(name, btn) {
   btn.classList.add('active');
 }
 
-function openEditProfile(id, name, desc, models, tpm, rpm, budget, bdur, isDefault) {
+function openEditProfile(id, name, desc, models, tpm, rpm, expiry, quota, period, isDefault) {
   document.getElementById('pf-id').value = id;
   document.getElementById('pf-name').value = name;
   document.getElementById('pf-desc').value = desc;
   document.getElementById('pf-models').value = models;
   document.getElementById('pf-tpm').value = tpm;
   document.getElementById('pf-rpm').value = rpm;
-  document.getElementById('pf-budget').value = budget;
-  document.getElementById('pf-bdur').value = bdur;
+  document.getElementById('pf-expiry').value = expiry;
+  document.getElementById('pf-quota').value = quota;
+  document.getElementById('pf-period').value = period;
   document.getElementById('pf-default').checked = isDefault;
   document.getElementById('profile-form-title').textContent = 'Edit profile: ' + name;
   document.getElementById('profile-submit-btn').textContent = 'Update profile';
@@ -225,6 +294,7 @@ function resetProfileForm() {
 
 // Restore tab from hash
 if (location.hash === '#users') showTab('users', document.querySelectorAll('.tab-btn')[1]);
+if (location.hash === '#audit') showTab('audit', document.querySelectorAll('.tab-btn')[2]);
 </script>
 
 </body>

@@ -2,7 +2,9 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,6 +19,16 @@ type Store struct {
 
 func NewStore(db *bun.DB) *Store {
 	return &Store{db: db}
+}
+
+// Close releases the underlying database handle.
+func (s *Store) Close() error { return s.db.Close() }
+
+// ExecRaw runs a statement directly. Intended for tests that need to provoke
+// database failures; production code should use the typed methods.
+func (s *Store) ExecRaw(ctx context.Context, query string, args ...any) error {
+	_, err := s.db.ExecContext(ctx, query, args...)
+	return err
 }
 
 func (s *Store) RunMigrations(ctx context.Context) error {
@@ -36,7 +48,7 @@ func (s *Store) RunMigrations(ctx context.Context) error {
 }
 
 func (s *Store) SeedDefaultProfile(ctx context.Context) error {
-	count, err := s.db.NewSelect().Model((*Profile)(nil)).Where("is_default = 1").Count(ctx)
+	count, err := s.db.NewSelect().Model((*Profile)(nil)).Where("is_default <> 0").Count(ctx)
 	if err != nil {
 		return err
 	}
@@ -74,11 +86,6 @@ func (s *Store) ListProfiles(ctx context.Context) ([]Profile, error) {
 	if err != nil {
 		return nil, err
 	}
-	for i := range profiles {
-		if err := parseModels(&profiles[i]); err != nil {
-			return nil, err
-		}
-	}
 	return profiles, nil
 }
 
@@ -88,18 +95,20 @@ func (s *Store) GetProfile(ctx context.Context, id int64) (*Profile, error) {
 	if err != nil {
 		return nil, err
 	}
-	return p, parseModels(p)
+	return p, nil
 }
 
 func (s *Store) GetDefaultProfile(ctx context.Context) (*Profile, error) {
 	p := &Profile{}
-	err := s.db.NewSelect().Model(p).Where("is_default = 1").Limit(1).Scan(ctx)
+	err := s.db.NewSelect().Model(p).Where("is_default <> 0").Limit(1).Scan(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return p, parseModels(p)
+	return p, nil
 }
 
+// CreateProfile inserts a profile. Marking it default demotes the previous
+// default in the same transaction, since the database permits only one.
 func (s *Store) CreateProfile(ctx context.Context, p *Profile) error {
 	now := time.Now()
 	p.CreatedAt = now
@@ -108,26 +117,61 @@ func (s *Store) CreateProfile(ctx context.Context, p *Profile) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.NewInsert().Model(p).
-		Value("models", "?", string(modelsJSON)).
-		Exec(ctx)
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if p.IsDefault {
+			if err := clearDefaultProfile(ctx, tx, 0); err != nil {
+				return err
+			}
+		}
+		_, err := tx.NewInsert().Model(p).
+			Value("models", "?", string(modelsJSON)).
+			Exec(ctx)
+		return err
+	})
+}
+
+// clearDefaultProfile demotes every default profile except keepID (0 keeps none).
+func clearDefaultProfile(ctx context.Context, tx bun.Tx, keepID int64) error {
+	q := tx.NewUpdate().Model((*Profile)(nil)).
+		Set("is_default = ?", false).
+		Where("is_default <> 0")
+	if keepID != 0 {
+		q = q.Where("id <> ?", keepID)
+	}
+	_, err := q.Exec(ctx)
 	return err
 }
 
+// UpdateProfile saves a profile, demoting any other default when this one is
+// marked as such.
 func (s *Store) UpdateProfile(ctx context.Context, p *Profile) error {
 	p.UpdatedAt = time.Now()
 	modelsJSON, err := json.Marshal(p.Models)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.NewUpdate().Model(p).
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if p.IsDefault {
+			if err := clearDefaultProfile(ctx, tx, p.ID); err != nil {
+				return err
+			}
+		}
+		return s.updateProfileTx(ctx, tx, p, string(modelsJSON))
+	})
+}
+
+func (s *Store) updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile, modelsJSON string) error {
+	_, err := tx.NewUpdate().Model(p).
 		Set("name = ?", p.Name).
 		Set("description = ?", p.Description).
-		Set("models = ?", string(modelsJSON)).
+		Set("models = ?", modelsJSON).
 		Set("tpm_limit = ?", p.TPMLimit).
 		Set("rpm_limit = ?", p.RPMLimit).
 		Set("max_budget = ?", p.MaxBudget).
 		Set("budget_duration = ?", p.BudgetDuration).
+		Set("key_duration_days = ?", p.KeyDurationDays).
+		Set("quota_tokens = ?", p.QuotaTokens).
+		Set("quota_period = ?", p.QuotaPeriod).
 		Set("is_default = ?", p.IsDefault).
 		Set("updated_at = ?", p.UpdatedAt).
 		Where("id = ?", p.ID).
@@ -138,13 +182,6 @@ func (s *Store) UpdateProfile(ctx context.Context, p *Profile) error {
 func (s *Store) DeleteProfile(ctx context.Context, id int64) error {
 	_, err := s.db.NewDelete().Model((*Profile)(nil)).Where("id = ?", id).Exec(ctx)
 	return err
-}
-
-// parseModels deserializes the JSON-encoded models field from the DB into []string.
-func parseModels(p *Profile) error {
-	// Models field is stored as JSON text; Bun will have scanned it as a string into the slice field.
-	// If bun already decoded it we're fine; otherwise decode manually.
-	return nil
 }
 
 // --- Users ---
@@ -237,13 +274,36 @@ func (s *Store) GetUserByOIDCSub(ctx context.Context, sub string) (*User, error)
 
 // --- API Keys ---
 
+// GetAPIKeyByUser returns the user's key, or (nil, nil) when they have none.
+// A missing key is an ordinary state here, not an error.
 func (s *Store) GetAPIKeyByUser(ctx context.Context, userID int64) (*APIKey, error) {
 	key := &APIKey{}
 	err := s.db.NewSelect().Model(key).Where("user_id = ?", userID).Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
 	return key, nil
+}
+
+// ReplaceAPIKey atomically swaps a user's key row: the old row (if any) is
+// removed and the new one inserted in one transaction. The unique index on
+// user_id means a non-transactional delete-then-insert could otherwise leave
+// the user with no key at all if the insert failed.
+func (s *Store) ReplaceAPIKey(ctx context.Context, k *APIKey) error {
+	k.CreatedAt = time.Now()
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewDelete().Model((*APIKey)(nil)).
+			Where("user_id = ?", k.UserID).Exec(ctx); err != nil {
+			return fmt.Errorf("remove previous key: %w", err)
+		}
+		if _, err := tx.NewInsert().Model(k).Exec(ctx); err != nil {
+			return fmt.Errorf("insert new key: %w", err)
+		}
+		return nil
+	})
 }
 
 func (s *Store) CreateAPIKey(ctx context.Context, k *APIKey) error {
@@ -312,4 +372,72 @@ func (s *Store) GetSessionIDToken(ctx context.Context, sessionID int64) (string,
 		return "", err
 	}
 	return sess.IDToken, nil
+}
+
+// --- Audit log ---
+
+// RecordAudit appends an audit event. Failures are returned but callers should
+// treat them as non-fatal: losing an audit row must not fail the user's action.
+func (s *Store) RecordAudit(ctx context.Context, e *AuditEvent) error {
+	e.CreatedAt = time.Now()
+	_, err := s.db.NewInsert().Model(e).Exec(ctx)
+	return err
+}
+
+// ListAuditEvents returns the most recent events, newest first.
+func (s *Store) ListAuditEvents(ctx context.Context, limit int) ([]AuditEvent, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var events []AuditEvent
+	err := s.db.NewSelect().Model(&events).
+		OrderExpr("created_at DESC, id DESC").
+		Limit(limit).
+		Scan(ctx)
+	return events, err
+}
+
+// ListAPIKeys returns every stored key, for the admin overview.
+func (s *Store) ListAPIKeys(ctx context.Context) ([]APIKey, error) {
+	var keys []APIKey
+	err := s.db.NewSelect().Model(&keys).Scan(ctx)
+	return keys, err
+}
+
+// --- Expiry notifications ---
+
+// KeysExpiringWithin returns keys expiring in the next window that have not yet
+// had a notice recorded for daysBefore, joined to their owner.
+//
+// Already-expired keys are excluded: a warning after the fact is noise, and the
+// user has already discovered the problem.
+func (s *Store) KeysExpiringWithin(ctx context.Context, daysBefore int) ([]ExpiringKey, error) {
+	cutoff := time.Now().AddDate(0, 0, daysBefore)
+
+	var rows []ExpiringKey
+	err := s.db.NewSelect().
+		Model((*APIKey)(nil)).
+		ColumnExpr("api_key.*").
+		ColumnExpr("u.email AS email").
+		ColumnExpr("u.name AS name").
+		Join("JOIN users AS u ON u.id = api_key.user_id").
+		Where("api_key.expires_at <= ?", cutoff).
+		Where("api_key.expires_at > ?", time.Now()).
+		Where(`NOT EXISTS (
+			SELECT 1 FROM expiry_notices n
+			WHERE n.api_key_id = api_key.id AND n.days_before = ?
+		)`, daysBefore).
+		Scan(ctx, &rows)
+	return rows, err
+}
+
+// MarkExpiryNoticeSent records a delivered warning. The unique index makes this
+// the point at which a concurrent duplicate is rejected.
+func (s *Store) MarkExpiryNoticeSent(ctx context.Context, keyID int64, daysBefore int) error {
+	_, err := s.db.NewInsert().Model(&ExpiryNotice{
+		APIKeyID:   keyID,
+		DaysBefore: daysBefore,
+		SentAt:     time.Now(),
+	}).Exec(ctx)
+	return err
 }

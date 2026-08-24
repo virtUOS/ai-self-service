@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"html/template"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +11,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/ai-self-service/internal/litellm"
+	"github.com/virtuos/ai-self-service/internal/metrics"
 	"github.com/virtuos/ai-self-service/internal/session"
 	"github.com/virtuos/ai-self-service/web"
 )
@@ -19,12 +22,87 @@ type Admin struct {
 	cfg      *config.Config
 	store    *database.Store
 	sessions *session.Manager
+	keys     keyprovider.Provider
 	tmpl     *template.Template
+	csrf     *session.CSRF
 }
 
-func NewAdmin(cfg *config.Config, store *database.Store, sessions *session.Manager) *Admin {
-	tmpl := template.Must(template.ParseFS(web.TemplateFS, "templates/admin.html"))
-	return &Admin{cfg: cfg, store: store, sessions: sessions, tmpl: tmpl}
+// parseAdminTemplate builds the admin template with its helper functions.
+// Tests use it too, so a helper added here cannot be missed there.
+func parseAdminTemplate() *template.Template {
+	return template.Must(template.New("admin.html").
+		Funcs(template.FuncMap{"fmtTokens": litellm.FormatTokens}).
+		ParseFS(web.TemplateFS, "templates/admin.html"))
+}
+
+func NewAdmin(cfg *config.Config, store *database.Store, sessions *session.Manager, keys keyprovider.Provider, csrf *session.CSRF) *Admin {
+	tmpl := parseAdminTemplate()
+	return &Admin{cfg: cfg, store: store, sessions: sessions, keys: keys, tmpl: tmpl, csrf: csrf}
+}
+
+// actorEmail identifies the admin performing the current request, for audit.
+func (a *Admin) actorEmail(r *http.Request) string {
+	su, err := a.sessions.Get(r.Context(), a.sessions.TokenFromRequest(r))
+	if err != nil || su == nil {
+		return "unknown"
+	}
+	return su.User.Email
+}
+
+// audit records an event without failing the request if the write fails.
+func (a *Admin) audit(r *http.Request, action, subjectEmail string, subjectID *int64, detail string) {
+	if err := a.store.RecordAudit(r.Context(), &database.AuditEvent{
+		Action:       action,
+		ActorEmail:   a.actorEmail(r),
+		SubjectEmail: subjectEmail,
+		SubjectID:    subjectID,
+		Detail:       detail,
+	}); err != nil {
+		slog.Error("record audit event", "action", action, "err", err)
+	}
+}
+
+// RevokeUserKey handles POST /admin/users/{id}/key/revoke, deleting another
+// user's key both upstream and locally.
+func (a *Admin) RevokeUserKey(w http.ResponseWriter, r *http.Request) {
+	userID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+
+	user, err := a.store.GetUserByID(r.Context(), userID)
+	if err != nil {
+		http.Redirect(w, r, "/admin?flash=User+not+found#users", http.StatusFound)
+		return
+	}
+
+	key, err := a.store.GetAPIKeyByUser(r.Context(), userID)
+	if err != nil {
+		slog.Error("revoke: load key", "user_id", userID, "err", err)
+		http.Redirect(w, r, "/admin?flash=Failed+to+load+key#users", http.StatusFound)
+		return
+	}
+	if key == nil {
+		http.Redirect(w, r, "/admin?flash=User+has+no+key#users", http.StatusFound)
+		return
+	}
+
+	// Revoke upstream first: if that fails the key is still live, so the local
+	// row must stay to keep it revocable.
+	if err := a.keys.DeleteKey(r.Context(), key.LiteLLMKey); err != nil {
+		slog.Error("revoke: delete upstream key", "key_prefix", key.KeyPrefix, "err", err)
+		metrics.KeyOperations.WithLabelValues("revoke", "provider_error").Inc()
+		http.Redirect(w, r, "/admin?flash=Failed+to+revoke+key+upstream#users", http.StatusFound)
+		return
+	}
+	if err := a.store.DeleteAPIKey(r.Context(), key.ID); err != nil {
+		slog.Error("revoke: delete local key row", "key_id", key.ID, "err", err)
+	}
+
+	metrics.KeyOperations.WithLabelValues("revoke", "success").Inc()
+	a.audit(r, database.AuditKeyRevoked, user.Email, &userID, "key "+key.KeyPrefix)
+	http.Redirect(w, r, "/admin?flash=Key+revoked#users", http.StatusFound)
 }
 
 // Middleware checks that the current session belongs to an admin user.
@@ -51,12 +129,18 @@ func (a *Admin) Middleware(next http.Handler) http.Handler {
 type userRow struct {
 	database.User
 	ProfileIDVal int64 // 0 if no profile assigned
+	KeyPrefix    string
+	KeyExpires   string
+	KeyExpired   bool
+	HasKey       bool
 }
 
 type adminData struct {
-	Profiles []database.Profile
-	Users    []userRow
-	Flash    string
+	Profiles  []database.Profile
+	Users     []userRow
+	Audit     []database.AuditEvent
+	Flash     string
+	CSRFToken string
 }
 
 // Panel renders the admin page with profile and user lists.
@@ -68,21 +152,48 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 	}
 	rawUsers, err := a.store.ListUsers(r.Context())
 	if err != nil {
-		log.Printf("list users: %v", err)
+		slog.Error("list users", "err", err)
 		http.Error(w, "Failed to load users", http.StatusInternalServerError)
 		return
 	}
+	// One query for all keys rather than one per user.
+	keys, err := a.store.ListAPIKeys(r.Context())
+	if err != nil {
+		slog.Error("list api keys", "err", err)
+	}
+	keyByUser := make(map[int64]database.APIKey, len(keys))
+	for _, k := range keys {
+		keyByUser[k.UserID] = k
+	}
+
 	users := make([]userRow, len(rawUsers))
 	for i, u := range rawUsers {
 		row := userRow{User: u}
 		if u.ProfileID != nil {
 			row.ProfileIDVal = *u.ProfileID
 		}
+		if k, ok := keyByUser[u.ID]; ok {
+			row.HasKey = true
+			row.KeyPrefix = k.KeyPrefix
+			row.KeyExpires = k.ExpiresAt.Format("2006-01-02")
+			row.KeyExpired = time.Now().After(k.ExpiresAt)
+		}
 		users[i] = row
 	}
+
+	audit, err := a.store.ListAuditEvents(r.Context(), 50)
+	if err != nil {
+		slog.Error("list audit events", "err", err)
+	}
 	flash := r.URL.Query().Get("flash")
-	if err := a.tmpl.Execute(w, adminData{Profiles: profiles, Users: users, Flash: flash}); err != nil {
-		log.Printf("admin template: %v", err)
+	if err := a.tmpl.Execute(w, adminData{
+		Profiles:  profiles,
+		Users:     users,
+		Audit:     audit,
+		Flash:     flash,
+		CSRFToken: a.csrf.Token(w, r),
+	}); err != nil {
+		slog.Error("admin template", "err", err)
 	}
 }
 
@@ -101,16 +212,21 @@ func (a *Admin) CreateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	p.TPMLimit = parseOptionalInt64(r.FormValue("tpm_limit"))
 	p.RPMLimit = parseOptionalInt64(r.FormValue("rpm_limit"))
-	p.MaxBudget = parseOptionalFloat64(r.FormValue("max_budget"))
-	p.BudgetDuration = parseOptionalString(r.FormValue("budget_duration"))
+	p.KeyDurationDays = parseNonNegativeInt(r.FormValue("key_duration_days"))
+	p.QuotaTokens = parseNonNegativeInt64(r.FormValue("quota_tokens"))
+	p.QuotaPeriod = strings.TrimSpace(r.FormValue("quota_period"))
 
 	if p.Name == "" {
 		http.Redirect(w, r, "/admin?flash=Name+is+required", http.StatusFound)
 		return
 	}
+	if !litellm.IsValidQuotaPeriod(p.QuotaPeriod) {
+		http.Redirect(w, r, "/admin?flash=Invalid+quota+period", http.StatusFound)
+		return
+	}
 
 	if err := a.store.CreateProfile(r.Context(), p); err != nil {
-		log.Printf("create profile: %v", err)
+		slog.Error("create profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+create+profile", http.StatusFound)
 		return
 	}
@@ -139,11 +255,17 @@ func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	p.TPMLimit = parseOptionalInt64(r.FormValue("tpm_limit"))
 	p.RPMLimit = parseOptionalInt64(r.FormValue("rpm_limit"))
-	p.MaxBudget = parseOptionalFloat64(r.FormValue("max_budget"))
-	p.BudgetDuration = parseOptionalString(r.FormValue("budget_duration"))
+	p.KeyDurationDays = parseNonNegativeInt(r.FormValue("key_duration_days"))
+	p.QuotaTokens = parseNonNegativeInt64(r.FormValue("quota_tokens"))
+	p.QuotaPeriod = strings.TrimSpace(r.FormValue("quota_period"))
+
+	if !litellm.IsValidQuotaPeriod(p.QuotaPeriod) {
+		http.Redirect(w, r, "/admin?flash=Invalid+quota+period", http.StatusFound)
+		return
+	}
 
 	if err := a.store.UpdateProfile(r.Context(), p); err != nil {
-		log.Printf("update profile: %v", err)
+		slog.Error("update profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+update+profile", http.StatusFound)
 		return
 	}
@@ -158,7 +280,7 @@ func (a *Admin) DeleteProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.store.DeleteProfile(r.Context(), id); err != nil {
-		log.Printf("delete profile: %v", err)
+		slog.Error("delete profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+delete+profile", http.StatusFound)
 		return
 	}
@@ -186,11 +308,24 @@ func (a *Admin) SetUserProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := a.store.SetUserProfile(r.Context(), userID, profileID); err != nil {
-		log.Printf("set user profile: %v", err)
+		slog.Error("set user profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+update+user+profile", http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, "/admin?flash=User+profile+updated", http.StatusFound)
+
+	detail := "cleared"
+	if profileID != nil {
+		if p, err := a.store.GetProfile(r.Context(), *profileID); err == nil {
+			detail = p.Name
+		}
+	}
+	subjectEmail := ""
+	if u, err := a.store.GetUserByID(r.Context(), userID); err == nil {
+		subjectEmail = u.Email
+	}
+	a.audit(r, database.AuditProfileSet, subjectEmail, &userID, detail)
+
+	http.Redirect(w, r, "/admin?flash=User+profile+updated#users", http.StatusFound)
 }
 
 // --- helpers ---
@@ -218,22 +353,21 @@ func parseOptionalInt64(s string) *int64 {
 	return &v
 }
 
-func parseOptionalFloat64(s string) *float64 {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil
-	}
-	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return nil
-	}
-	return &v
+// parseNonNegativeInt reads an optional whole number, treating blank, invalid
+// and negative input as 0 ("not set").
+func parseNonNegativeInt(s string) int {
+	v := parseNonNegativeInt64(s)
+	return int(v)
 }
 
-func parseOptionalString(s string) *string {
+func parseNonNegativeInt64(s string) int64 {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return nil
+		return 0
 	}
-	return &s
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || v < 0 {
+		return 0
+	}
+	return v
 }
