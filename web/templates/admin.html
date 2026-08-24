@@ -31,7 +31,7 @@
   <div class="card">
     <div class="tabs">
       <button class="tab-btn active" onclick="showTab('profiles', this)">{{T .Lang "admin.profiles"}}</button>
-      <button class="tab-btn" onclick="showTab('users', this)">Users</button>
+      <button class="tab-btn" onclick="showTab('users', this)">{{T .Lang "admin.users"}}</button>
       <button class="tab-btn" onclick="showTab('audit', this)">{{T .Lang "admin.audit"}}</button>
     </div>
 
@@ -141,11 +141,11 @@
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
           <div class="form-group">
-            <label for="pf-tpm">{{T .Lang "admin.form.tpm"}} <button type="button" class="help" data-help="Tokens per minute — the maximum a key may consume in any minute. Use it to stop one runaway script saturating the GPUs. Blank means unlimited.">?</button></label>
+            <label for="pf-tpm">{{T .Lang "admin.form.tpm"}} <button type="button" class="help" data-help="{{T .Lang "help.tpm"}}">?</button></label>
             <input type="number" id="pf-tpm" name="tpm_limit" min="0" placeholder="unlimited">
           </div>
           <div class="form-group">
-            <label for="pf-rpm">{{T .Lang "admin.form.rpm"}} <button type="button" class="help" data-help="Requests per minute — the maximum number of API calls per minute, however small each one is. Blank means unlimited.">?</button></label>
+            <label for="pf-rpm">{{T .Lang "admin.form.rpm"}} <button type="button" class="help" data-help="{{T .Lang "help.rpm"}}">?</button></label>
             <input type="number" id="pf-rpm" name="rpm_limit" min="0" placeholder="unlimited">
           </div>
           <div class="form-group">
@@ -167,7 +167,7 @@
               <option value="7d">{{T .Lang "period.weekly"}}</option>
               <option value="30d">{{T .Lang "period.monthly"}}</option>
             </select>
-            <div class="form-hint">Requests fail once the limit is hit, then resume automatically at the next reset. Boundaries are UTC (daily = midnight UTC).</div>
+            <div class="form-hint">{{T .Lang "admin.form.period.hint"}}</div>
           </div>
         </div>
         <div class="form-group">
@@ -206,7 +206,7 @@
               <td>{{.Name}}</td>
               <td>{{.Email}}</td>
               <td>
-                {{if .Profile}}{{.Profile.Name}}{{else}}<em class="text-faint">default</em>{{end}}
+                {{if .Profile}}{{.Profile.Name}}{{else}}<em class="text-faint">{{T $.Lang "admin.default"}}</em>{{end}}
               </td>
               <td>
                 {{if .HasKey}}
@@ -273,7 +273,7 @@
               <td class="text-faint">{{.Detail}}</td>
             </tr>
             {{else}}
-            <tr><td colspan="5" class="text-faint" style="text-align:center">{{T .Lang "admin.noevents"}}</td></tr>
+            <tr><td colspan="5" class="text-faint" style="text-align:center">{{T $.Lang "admin.noevents"}}</td></tr>
             {{end}}
           </tbody>
         </table>

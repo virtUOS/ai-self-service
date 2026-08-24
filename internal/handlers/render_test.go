@@ -224,3 +224,72 @@ func TestFormatPeriod(t *testing.T) {
 		}
 	}
 }
+
+// Nothing user-facing may remain in English on a German page. This catches
+// strings that were added later and never wired to the catalogue.
+func TestAdminPageFullyGerman(t *testing.T) {
+	var buf bytes.Buffer
+	err := parseAdminTemplate().Execute(&buf, adminData{
+		Lang:            i18n.DE,
+		Langs:           i18n.Supported,
+		DefaultKeyDays:  90,
+		AvailableModels: []string{"Qwen/Qwen3.8-27B-FP8"},
+		Profiles:        []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
+		Users:           []userRow{{User: database.User{ID: 2, Name: "U", Email: "u@x.de"}}},
+		CSRFToken:       "T",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+
+	// Phrases that only appear if a string was missed.
+	for _, english := range []string{
+		"Requests fail once the limit is hit",
+		"Tokens per minute",
+		"Requests per minute",
+		">Users<",
+		">Profiles<",
+		">Audit log<",
+		"Allowed models",
+		"Usage limit (tokens)",
+	} {
+		if strings.Contains(out, english) {
+			t.Errorf("untranslated on the German page: %q", english)
+		}
+	}
+	// And confirm the German actually rendered.
+	for _, german := range []string{"Benutzende", "Audit-Log", "Token pro Minute"} {
+		if !strings.Contains(out, german) {
+			t.Errorf("expected German text %q missing", german)
+		}
+	}
+}
+
+func TestDashboardPageFullyGerman(t *testing.T) {
+	var buf bytes.Buffer
+	err := parseDashboardTemplate().Execute(&buf, dashboardData{
+		Lang:  i18n.DE,
+		Langs: i18n.Supported,
+		User:  &database.User{Name: "T", Email: "t@x.de"},
+		APIKey: &database.APIKey{
+			KeyPrefix: "sk-a", ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
+		},
+		APIBaseURL: "https://litellm.example.com/v1",
+		CSRFToken:  "T",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, english := range []string{
+		"Your account", "API key</h2>", "Using your key", "Base URL</dt>",
+	} {
+		if strings.Contains(out, english) {
+			t.Errorf("untranslated on the German dashboard: %q", english)
+		}
+	}
+	if !strings.Contains(out, "Ihr Konto") {
+		t.Error("German dashboard did not render")
+	}
+}
