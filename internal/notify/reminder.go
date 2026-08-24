@@ -3,7 +3,7 @@ package notify
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/virtuos/ai-self-service/internal/database"
@@ -41,12 +41,12 @@ func (r *Reminder) Run(ctx context.Context) error {
 			msg := r.message(k, days)
 			if err := r.notifier.Notify(ctx, msg); err != nil {
 				// Leave the notice unrecorded so the next run retries.
-				log.Printf("notify %s about key %s: %v", k.Email, k.KeyPrefix, err)
+				slog.Error("notify %s about key %s", "err", k.Email, k.KeyPrefix, err)
 				continue
 			}
 			if err := r.store.MarkExpiryNoticeSent(ctx, k.ID, days); err != nil {
 				// A duplicate here means a concurrent run already sent it.
-				log.Printf("record expiry notice for key %d: %v", k.ID, err)
+				slog.Error("record expiry notice", "key_id", k.ID, "err", err)
 			}
 		}
 	}
@@ -57,7 +57,7 @@ func (r *Reminder) Run(ctx context.Context) error {
 func (r *Reminder) Start(ctx context.Context, every time.Duration) {
 	// Run once at startup so a restart does not delay overdue notices.
 	if err := r.Run(ctx); err != nil {
-		log.Printf("expiry reminder: %v", err)
+		slog.Error("expiry reminder", "err", err)
 	}
 	t := time.NewTicker(every)
 	defer t.Stop()
@@ -65,7 +65,7 @@ func (r *Reminder) Start(ctx context.Context, every time.Duration) {
 		select {
 		case <-t.C:
 			if err := r.Run(ctx); err != nil {
-				log.Printf("expiry reminder: %v", err)
+				slog.Error("expiry reminder", "err", err)
 			}
 		case <-ctx.Done():
 			return

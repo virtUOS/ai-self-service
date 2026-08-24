@@ -43,6 +43,7 @@ Copy `.env.example` to `.env` and fill in the values:
 | `SMTP_FROM`          | no       | `noreply@uni-osnabrueck.de` | Sender address for expiry emails                   |
 | `SMTP_USERNAME`      | no       | —           | Only if the relay requires authentication                          |
 | `SMTP_PASSWORD`      | no       | —           | Only if the relay requires authentication                          |
+| `LOG_LEVEL`          | no       | `info`      | `debug`, `info`, `warn` or `error`                                 |
 
 ## Running
 
@@ -101,6 +102,20 @@ in someone's pipeline.
 
 Without `SMTP_HOST` the portal logs what it would have sent. It does not
 silently pretend mail was delivered.
+
+## Metrics
+
+Prometheus metrics are served on `/metrics`, labelled by route template so a
+per-user path does not create a time series per user. In the deployment Caddy
+restricts the endpoint to the monitoring host.
+
+| Metric | Meaning |
+| ------ | ------- |
+| `aiselfservice_http_requests_total` | requests by route, method, status |
+| `aiselfservice_http_request_duration_seconds` | latency by route |
+| `aiselfservice_key_operations_total` | key issue/extend/revoke by outcome |
+| `aiselfservice_active_keys` | keys currently issued |
+| `aiselfservice_keys_expiring_7d` | keys expiring within a week |
 
 ## Routes
 

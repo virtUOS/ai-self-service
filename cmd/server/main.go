@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,6 +23,7 @@ import (
 	"github.com/virtuos/ai-self-service/internal/database"
 	"github.com/virtuos/ai-self-service/internal/handlers"
 	"github.com/virtuos/ai-self-service/internal/litellm"
+	"github.com/virtuos/ai-self-service/internal/metrics"
 	"github.com/virtuos/ai-self-service/internal/notify"
 	oidcpkg "github.com/virtuos/ai-self-service/internal/oidc"
 	"github.com/virtuos/ai-self-service/internal/session"
@@ -29,6 +32,15 @@ import (
 
 func main() {
 	_ = godotenv.Load()
+
+	// Structured logs so the aggregator can filter on fields rather than
+	// grepping formatted strings. LOG_LEVEL raises or lowers verbosity without
+	// a rebuild; text stays readable in a terminal and in journald.
+	level := slog.LevelInfo
+	if err := level.UnmarshalText([]byte(os.Getenv("LOG_LEVEL"))); err != nil && os.Getenv("LOG_LEVEL") != "" {
+		fmt.Fprintf(os.Stderr, "invalid LOG_LEVEL %q, using info\n", os.Getenv("LOG_LEVEL"))
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -56,7 +68,7 @@ func main() {
 		log.Fatalf("seed default profile: %v", err)
 	}
 	if err := store.DeleteExpiredSessions(ctx); err != nil {
-		log.Printf("cleanup sessions: %v", err)
+		slog.Error("cleanup sessions", "err", err)
 	}
 
 	// ── Dependencies ──────────────────────────────────────────────────────────
@@ -84,6 +96,14 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 	r.Use(handlers.SecurityHeaders(cfg.CookieSecure))
+	// chi fills in the matched pattern, so metrics label by route template
+	// rather than concrete path — otherwise every user id is a new series.
+	r.Use(metrics.Middleware(func(req *http.Request) string {
+		if rctx := chi.RouteContext(req.Context()); rctx != nil {
+			return rctx.RoutePattern()
+		}
+		return ""
+	}))
 
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(web.StaticFS))))
 
@@ -115,6 +135,9 @@ func main() {
 		r.Post("/users/{id}/profile", admin.SetUserProfile)
 		r.Post("/users/{id}/key/revoke", admin.RevokeUserKey)
 	})
+
+	// Scraped by the monitoring host; Caddy restricts it to those IPs.
+	r.Handle("/metrics", metrics.Handler())
 
 	// Liveness/readiness for the reverse proxy and orchestrator.
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -150,13 +173,33 @@ func main() {
 			Host: cfg.SMTPHost, From: cfg.SMTPFrom,
 			Username: cfg.SMTPUsername, Password: cfg.SMTPPassword,
 		}
-		log.Printf("expiry notifications via %s", cfg.SMTPHost)
+		slog.Info("expiry notifications enabled", "relay", cfg.SMTPHost)
 	} else {
-		log.Print("SMTP_HOST unset: expiry notifications will not be delivered")
+		slog.Warn("SMTP_HOST unset: expiry notifications will not be delivered")
 	}
 	reminderCtx, stopReminder := context.WithCancel(context.Background())
 	go notify.NewReminder(store, notifier, cfg.FrontendURL, nil).
 		Start(reminderCtx, 6*time.Hour)
+
+	// Refresh key gauges alongside the other periodic work. Reading them from
+	// the database keeps them correct across restarts.
+	refreshGauges := func() {
+		ctx := context.Background()
+		keys, err := store.ListAPIKeys(ctx)
+		if err != nil {
+			slog.Error("metrics: list keys", "err", err)
+			return
+		}
+		soon := 0
+		cutoff := time.Now().AddDate(0, 0, 7)
+		for _, k := range keys {
+			if k.ExpiresAt.Before(cutoff) {
+				soon++
+			}
+		}
+		metrics.SetKeyGauges(len(keys), soon)
+	}
+	refreshGauges()
 
 	// Expire stale sessions periodically; previously this ran once at startup
 	// and rows accumulated for the lifetime of the process.
@@ -168,8 +211,9 @@ func main() {
 			select {
 			case <-t.C:
 				if err := store.DeleteExpiredSessions(context.Background()); err != nil {
-					log.Printf("cleanup sessions: %v", err)
+					slog.Error("cleanup sessions", "err", err)
 				}
+				refreshGauges()
 			case <-stopCleanup:
 				return
 			}
@@ -178,7 +222,7 @@ func main() {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		log.Printf("listening on %s", cfg.ListenAddr)
+		slog.Info("listening", "addr", cfg.ListenAddr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- err
 		}
@@ -191,7 +235,7 @@ func main() {
 	case err := <-serverErr:
 		log.Fatalf("server: %v", err)
 	case <-quit:
-		log.Println("shutting down")
+		slog.Info("shutting down")
 	}
 
 	close(stopCleanup)
@@ -199,6 +243,6 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Printf("graceful shutdown: %v", err)
+		slog.Error("graceful shutdown", "err", err)
 	}
 }

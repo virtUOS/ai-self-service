@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"html/template"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,6 +13,7 @@ import (
 	"github.com/virtuos/ai-self-service/internal/database"
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 	"github.com/virtuos/ai-self-service/internal/litellm"
+	"github.com/virtuos/ai-self-service/internal/metrics"
 	"github.com/virtuos/ai-self-service/internal/session"
 	"github.com/virtuos/ai-self-service/web"
 )
@@ -57,7 +58,7 @@ func (a *Admin) audit(r *http.Request, action, subjectEmail string, subjectID *i
 		SubjectID:    subjectID,
 		Detail:       detail,
 	}); err != nil {
-		log.Printf("audit %s: %v", action, err)
+		slog.Error("record audit event", "action", action, "err", err)
 	}
 }
 
@@ -78,7 +79,7 @@ func (a *Admin) RevokeUserKey(w http.ResponseWriter, r *http.Request) {
 
 	key, err := a.store.GetAPIKeyByUser(r.Context(), userID)
 	if err != nil {
-		log.Printf("revoke: load key for user %d: %v", userID, err)
+		slog.Error("revoke: load key", "user_id", userID, "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+load+key#users", http.StatusFound)
 		return
 	}
@@ -90,14 +91,16 @@ func (a *Admin) RevokeUserKey(w http.ResponseWriter, r *http.Request) {
 	// Revoke upstream first: if that fails the key is still live, so the local
 	// row must stay to keep it revocable.
 	if err := a.keys.DeleteKey(r.Context(), key.LiteLLMKey); err != nil {
-		log.Printf("revoke: delete LiteLLM key %s: %v", key.KeyPrefix, err)
+		slog.Error("revoke: delete upstream key", "key_prefix", key.KeyPrefix, "err", err)
+		metrics.KeyOperations.WithLabelValues("revoke", "provider_error").Inc()
 		http.Redirect(w, r, "/admin?flash=Failed+to+revoke+key+upstream#users", http.StatusFound)
 		return
 	}
 	if err := a.store.DeleteAPIKey(r.Context(), key.ID); err != nil {
-		log.Printf("revoke: delete local key row %d: %v", key.ID, err)
+		slog.Error("revoke: delete local key row", "key_id", key.ID, "err", err)
 	}
 
+	metrics.KeyOperations.WithLabelValues("revoke", "success").Inc()
 	a.audit(r, database.AuditKeyRevoked, user.Email, &userID, "key "+key.KeyPrefix)
 	http.Redirect(w, r, "/admin?flash=Key+revoked#users", http.StatusFound)
 }
@@ -149,14 +152,14 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 	}
 	rawUsers, err := a.store.ListUsers(r.Context())
 	if err != nil {
-		log.Printf("list users: %v", err)
+		slog.Error("list users", "err", err)
 		http.Error(w, "Failed to load users", http.StatusInternalServerError)
 		return
 	}
 	// One query for all keys rather than one per user.
 	keys, err := a.store.ListAPIKeys(r.Context())
 	if err != nil {
-		log.Printf("list api keys: %v", err)
+		slog.Error("list api keys", "err", err)
 	}
 	keyByUser := make(map[int64]database.APIKey, len(keys))
 	for _, k := range keys {
@@ -180,7 +183,7 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 
 	audit, err := a.store.ListAuditEvents(r.Context(), 50)
 	if err != nil {
-		log.Printf("list audit events: %v", err)
+		slog.Error("list audit events", "err", err)
 	}
 	flash := r.URL.Query().Get("flash")
 	if err := a.tmpl.Execute(w, adminData{
@@ -190,7 +193,7 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 		Flash:     flash,
 		CSRFToken: a.csrf.Token(w, r),
 	}); err != nil {
-		log.Printf("admin template: %v", err)
+		slog.Error("admin template", "err", err)
 	}
 }
 
@@ -223,7 +226,7 @@ func (a *Admin) CreateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := a.store.CreateProfile(r.Context(), p); err != nil {
-		log.Printf("create profile: %v", err)
+		slog.Error("create profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+create+profile", http.StatusFound)
 		return
 	}
@@ -262,7 +265,7 @@ func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := a.store.UpdateProfile(r.Context(), p); err != nil {
-		log.Printf("update profile: %v", err)
+		slog.Error("update profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+update+profile", http.StatusFound)
 		return
 	}
@@ -277,7 +280,7 @@ func (a *Admin) DeleteProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.store.DeleteProfile(r.Context(), id); err != nil {
-		log.Printf("delete profile: %v", err)
+		slog.Error("delete profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+delete+profile", http.StatusFound)
 		return
 	}
@@ -305,7 +308,7 @@ func (a *Admin) SetUserProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := a.store.SetUserProfile(r.Context(), userID, profileID); err != nil {
-		log.Printf("set user profile: %v", err)
+		slog.Error("set user profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+update+user+profile", http.StatusFound)
 		return
 	}

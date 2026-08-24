@@ -9,7 +9,7 @@ package notify
 
 import (
 	"context"
-	"log"
+	"log/slog"
 )
 
 // Message is a notification addressed to one person.
@@ -29,6 +29,7 @@ type Notifier interface {
 type Discard struct{}
 
 func (Discard) Notify(_ context.Context, msg Message) error {
-	log.Printf("notify: no mail transport configured, dropping message to %s (%q)", msg.To, msg.Subject)
+	slog.Warn("no mail transport configured, dropping notification",
+		"to", msg.To, "subject", msg.Subject)
 	return nil
 }

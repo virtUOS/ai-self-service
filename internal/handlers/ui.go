@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"html/template"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -10,6 +10,7 @@ import (
 	"github.com/virtuos/ai-self-service/internal/database"
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 	"github.com/virtuos/ai-self-service/internal/litellm"
+	"github.com/virtuos/ai-self-service/internal/metrics"
 	oidcpkg "github.com/virtuos/ai-self-service/internal/oidc"
 	"github.com/virtuos/ai-self-service/internal/session"
 	"github.com/virtuos/ai-self-service/web"
@@ -66,7 +67,7 @@ func (u *UI) audit(r *http.Request, action string, user *database.User, detail s
 		SubjectID:    &user.ID,
 		Detail:       detail,
 	}); err != nil {
-		log.Printf("audit %s: %v", action, err)
+		slog.Error("record audit event", "action", action, "err", err)
 	}
 }
 
@@ -80,14 +81,14 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 
 	apiKey, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
 	if err != nil {
-		log.Printf("dashboard: load key: %v", err)
+		slog.Error("dashboard: load key", "err", err)
 	}
 
 	// The dashboard advertises the extend duration and the fair-use quota, both
 	// of which come from the user's profile rather than the server default.
 	profile, err := u.resolveProfile(r, su.User)
 	if err != nil {
-		log.Printf("dashboard: resolve profile: %v", err)
+		slog.Error("dashboard: resolve profile", "err", err)
 	}
 
 	// Redeem a one-time new key stashed by GenerateKey. The secret never
@@ -108,7 +109,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		QuotaPeriod:     profilePeriod(profile),
 		CSRFToken:       u.csrf.Token(w, r),
 	}); err != nil {
-		log.Printf("dashboard template: %v", err)
+		slog.Error("dashboard template", "err", err)
 	}
 }
 
@@ -121,21 +122,21 @@ func (u *UI) Login(w http.ResponseWriter, r *http.Request) {
 func (u *UI) Callback(w http.ResponseWriter, r *http.Request) {
 	result, err := u.oidc.HandleCallback(w, r)
 	if err != nil {
-		log.Printf("callback: OIDC error: %v", err)
+		slog.Error("callback: OIDC error", "err", err)
 		http.Error(w, "Authentication failed: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	user, err := u.oidc.GetOrCreateUser(r.Context(), result.UserInfo)
 	if err != nil {
-		log.Printf("callback: get/create user: %v", err)
+		slog.Error("callback: get/create user", "err", err)
 		http.Error(w, "Failed to load user", http.StatusInternalServerError)
 		return
 	}
 
 	token, err := u.sessions.Create(r.Context(), user.ID, result.IDToken)
 	if err != nil {
-		log.Printf("callback: create session for user %d: %v", user.ID, err)
+		slog.Error("callback: create session", "user_id", user.ID, "err", err)
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
 		return
 	}
@@ -173,7 +174,7 @@ func (u *UI) BackchannelLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := u.sessions.DeleteByOIDCSub(r.Context(), sub); err != nil {
-		log.Printf("backchannel logout: delete sessions: %v", err)
+		slog.Error("backchannel logout: delete sessions", "err", err)
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -198,7 +199,7 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 
 	existing, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
 	if err != nil {
-		log.Printf("look up existing key: %v", err)
+		slog.Error("look up existing key", "err", err)
 		http.Error(w, "Failed to load your key", http.StatusInternalServerError)
 		return
 	}
@@ -219,6 +220,7 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 		Limits:    profileLimits(profile),
 	})
 	if err != nil {
+		metrics.KeyOperations.WithLabelValues("generate", "provider_error").Inc()
 		http.Error(w, "Failed to create key: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -236,10 +238,11 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		// The key exists upstream but could not be recorded, so nothing can
 		// ever revoke it through this app. Revoke it now rather than leaking it.
-		log.Printf("store api key: %v", err)
+		slog.Error("store api key", "err", err)
 		if delErr := u.keys.DeleteKey(r.Context(), result.Ref); delErr != nil {
-			log.Printf("roll back orphaned LiteLLM key %s: %v", prefix, delErr)
+			slog.Error("roll back orphaned key", "key_prefix", prefix, "err", delErr)
 		}
+		metrics.KeyOperations.WithLabelValues("generate", "store_error").Inc()
 		http.Error(w, "Failed to save your key", http.StatusInternalServerError)
 		return
 	}
@@ -248,15 +251,16 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	// revoke. A failure here leaves a stale key that expires on its own.
 	if existing != nil {
 		if delErr := u.keys.DeleteKey(r.Context(), existing.LiteLLMKey); delErr != nil {
-			log.Printf("revoke replaced LiteLLM key %s: %v", existing.KeyPrefix, delErr)
+			slog.Error("revoke replaced key", "key_prefix", existing.KeyPrefix, "err", delErr)
 		}
 	}
 
+	metrics.KeyOperations.WithLabelValues("generate", "success").Inc()
 	u.audit(r, database.AuditKeyGenerated, su.User, "key "+prefix)
 
 	token, err := u.flash.Put(su.User.ID, key)
 	if err != nil {
-		log.Printf("stash new key: %v", err)
+		slog.Error("stash new key", "err", err)
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
@@ -292,9 +296,10 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := u.store.UpdateAPIKeyExpiry(r.Context(), k.ID, newExpiry); err != nil {
-		log.Printf("update key expiry in db: %v", err)
+		slog.Error("update key expiry in db", "err", err)
 	}
 
+	metrics.KeyOperations.WithLabelValues("extend", "success").Inc()
 	u.audit(r, database.AuditKeyExtended, su.User, "until "+newExpiry.Format("2006-01-02"))
 
 	http.Redirect(w, r, "/", http.StatusFound)
@@ -315,9 +320,10 @@ func (u *UI) DeleteKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := u.keys.DeleteKey(r.Context(), k.LiteLLMKey); err != nil {
-		log.Printf("delete LiteLLM key: %v", err)
+		slog.Error("delete LiteLLM key", "err", err)
 	}
 	_ = u.store.DeleteAPIKey(r.Context(), k.ID)
+	metrics.KeyOperations.WithLabelValues("delete", "success").Inc()
 	u.audit(r, database.AuditKeyDeleted, su.User, "key "+k.KeyPrefix)
 	http.Redirect(w, r, "/", http.StatusFound)
 }
