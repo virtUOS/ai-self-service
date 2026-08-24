@@ -40,10 +40,10 @@
               <th>Name</th>
               <th>Description</th>
               <th>Models</th>
-              <th>TPM</th>
-              <th>RPM</th>
-              <th>Expiry</th>
-              <th>Quota</th>
+              <th>TPM <span class="help" tabindex="0" data-help="Tokens per minute. Caps how fast a key can consume tokens, smoothing out bursts. It does not limit the total — use the usage limit for that.">?</span></th>
+              <th>RPM <span class="help" tabindex="0" data-help="Requests per minute. Caps how many API calls a key can make each minute, regardless of their size.">?</span></th>
+              <th>Expiry <span class="help" tabindex="0" data-help="How long a newly generated key stays valid. Users can extend it themselves for another full period.">?</span></th>
+              <th>Quota <span class="help" tabindex="0" data-help="Fair-use token allowance and how often it resets. Requests fail once it is used up, then resume at the next reset.">?</span></th>
               <th>Default</th>
               <th></th>
             </tr>
@@ -110,31 +110,31 @@
           <textarea id="pf-desc" name="description" rows="2"></textarea>
         </div>
         <div class="form-group">
-          <label for="pf-models">Allowed models</label>
+          <label for="pf-models">Allowed models <span class="help" tabindex="0" data-help="Restrict this profile to specific models, e.g. Qwen/Qwen3.8-27B-FP8. Leave blank to allow every model the gateway offers.">?</span></label>
           <input type="text" id="pf-models" name="models" placeholder="gpt-4o, claude-3-5-sonnet, …">
           <div class="form-hint">Comma-separated model IDs. Leave blank to allow all models.</div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
           <div class="form-group">
-            <label for="pf-tpm">TPM limit</label>
+            <label for="pf-tpm">TPM limit <span class="help" tabindex="0" data-help="Tokens per minute — the maximum a key may consume in any minute. Use it to stop one runaway script saturating the GPUs. Blank means unlimited.">?</span></label>
             <input type="number" id="pf-tpm" name="tpm_limit" min="0" placeholder="unlimited">
           </div>
           <div class="form-group">
-            <label for="pf-rpm">RPM limit</label>
+            <label for="pf-rpm">RPM limit <span class="help" tabindex="0" data-help="Requests per minute — the maximum number of API calls per minute, however small each one is. Blank means unlimited.">?</span></label>
             <input type="number" id="pf-rpm" name="rpm_limit" min="0" placeholder="unlimited">
           </div>
           <div class="form-group">
-            <label for="pf-expiry">Key validity (days)</label>
+            <label for="pf-expiry">Key validity (days) <span class="help" tabindex="0" data-help="How many days a generated key lasts. Students might get 30, staff 365. Users can click Extend for another full period at any time. Blank uses the server default.">?</span></label>
             <input type="number" id="pf-expiry" name="key_duration_days" min="0" placeholder="server default">
             <div class="form-hint">How long a generated key lasts. Blank uses the server default.</div>
           </div>
           <div class="form-group">
-            <label for="pf-quota">Usage limit (tokens)</label>
+            <label for="pf-quota">Usage limit (tokens) <span class="help" tabindex="0" data-help="Total tokens allowed per reset period, e.g. 1000000 for a million tokens. Once spent, requests fail until the period resets. Blank means no limit. Needs a reset period to take effect.">?</span></label>
             <input type="number" id="pf-quota" name="quota_tokens" min="0" placeholder="unlimited">
             <div class="form-hint">Fair-use allowance per period. Blank means no limit.</div>
           </div>
           <div class="form-group">
-            <label for="pf-period">Limit resets</label>
+            <label for="pf-period">Limit resets <span class="help" tabindex="0" data-help="How often the usage limit goes back to zero. Resets happen on fixed UTC boundaries — daily at midnight UTC, weekly on Monday, monthly on the 1st — not a rolling window from when the key was made. Only one period per profile: the gateway cannot enforce a daily and a monthly cap at the same time.">?</span></label>
             <select id="pf-period" name="quota_period">
               <option value="">no limit</option>
               <option value="1h">hourly</option>
@@ -142,13 +142,13 @@
               <option value="7d">weekly</option>
               <option value="30d">monthly</option>
             </select>
-            <div class="form-hint">Requests fail once the limit is hit, then resume at the reset.</div>
+            <div class="form-hint">Requests fail once the limit is hit, then resume automatically at the next reset. Boundaries are UTC (daily = midnight UTC).</div>
           </div>
         </div>
         <div class="form-group">
           <div class="checkbox-row">
             <input type="checkbox" id="pf-default" name="is_default">
-            <label for="pf-default" style="margin:0">Default profile</label>
+            <label for="pf-default" style="margin:0">Default profile <span class="help" tabindex="0" data-help="Applied to every user who has not been assigned a profile explicitly. Exactly one profile is the default; marking a new one moves it.">?</span></label>
           </div>
         </div>
         <div class="btn-row">

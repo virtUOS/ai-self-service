@@ -89,6 +89,17 @@ period resets.
 This requires every model in LiteLLM to carry that same nominal price. A model
 priced at `0` or `null` accrues no spend, so a quota over it never triggers.
 
+**One period per profile.** A profile cannot combine caps the way Anthropic's
+plans do (e.g. 100k/day *and* 1M/month). LiteLLM v1.97.0 accepts stacked
+windows via `budget_limits`, and even computes their reset times, but does not
+enforce them — verified by driving spend far past a stacked cap and watching
+requests succeed. The same is true of budget objects attached with `budget_id`.
+Only the classic `max_budget` + `budget_duration` pair is enforced.
+
+For fair use the shorter period is usually the binding one: 100k/day already
+caps a user near 3M/month. If stacked windows become necessary, re-test on a
+newer LiteLLM before building enforcement into this app.
+
 ## Expiry notifications
 
 Keys expire, so users are warned before they do — otherwise a key dies silently

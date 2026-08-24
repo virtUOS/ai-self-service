@@ -97,3 +97,49 @@ func TestAdminTemplateRenders(t *testing.T) {
 		t.Errorf("%d forms but %d csrf fields", forms, toks)
 	}
 }
+
+// Tooltips explain jargon like TPM to admins who do not know it. Assert they
+// render with real text, since Go's contextual escaping would mangle a badly
+// quoted attribute rather than fail loudly.
+func TestAdminTooltipsRender(t *testing.T) {
+	tmpl := parseAdminTemplate()
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, adminData{
+		Profiles:  []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
+		CSRFToken: "T",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+
+	if n := strings.Count(out, `class="help"`); n < 10 {
+		t.Errorf("only %d tooltips rendered, want the full set", n)
+	}
+	for _, want := range []string{"Tokens per minute", "Requests per minute", "UTC"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("tooltip text %q missing", want)
+		}
+	}
+	// A mangled attribute shows up as escaped quotes inside data-help.
+	if strings.Contains(out, `data-help="ZgotmplZ`) {
+		t.Error("tooltip attribute was neutered by contextual escaping")
+	}
+}
+
+func TestDashboardTooltipsRender(t *testing.T) {
+	tmpl := template.Must(template.ParseFS(web.TemplateFS, "templates/dashboard.html"))
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, dashboardData{
+		User:        &database.User{Name: "T", Email: "t@x.de"},
+		APIKey:      &database.APIKey{KeyPrefix: "sk-a", ExpiresAt: time.Now().Add(48 * time.Hour)},
+		APIBaseURL:  "https://litellm.example.com/v1",
+		QuotaTokens: "1M", QuotaPeriod: "per day", ProfileName: "students",
+		CSRFToken: "T",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if n := strings.Count(out, `class="help"`); n < 4 {
+		t.Errorf("only %d tooltips rendered on the dashboard", n)
+	}
+}

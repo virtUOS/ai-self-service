@@ -39,16 +39,17 @@
     <dl class="info-grid">
       <dt>Name</dt>  <dd>{{.User.Name}}</dd>
       <dt>Email</dt> <dd>{{.User.Email}}</dd>
-      {{if .ProfileName}}<dt>Profile</dt> <dd>{{.ProfileName}}</dd>{{end}}
+      {{if .ProfileName}}<dt>Profile <span class="help" tabindex="0" data-help="Your profile decides which models you can use, how long your key lasts and how many tokens you may use per period. An administrator assigns it.">?</span></dt> <dd>{{.ProfileName}}</dd>{{end}}
       {{if .QuotaTokens}}
-      <dt>Usage limit</dt>
+      <dt>Usage limit <span class="help" tabindex="0" data-help="Your fair-use allowance. Requests stop working once it is used up and start again automatically at the next reset. Resets happen on UTC boundaries.">?</span></dt>
       <dd>{{.QuotaTokens}} tokens {{.QuotaPeriod}}</dd>
       {{end}}
     </dl>
     {{if .QuotaTokens}}
     <p class="text-muted" style="margin-top:.75rem;font-size:.85rem">
-      Requests fail once the limit is reached and resume automatically when the
-      period resets.
+      Requests fail once the limit is reached and resume automatically at the
+      next reset (UTC boundaries: daily at midnight UTC, weekly on Monday,
+      monthly on the 1st).
     </p>
     {{end}}
   </div>
@@ -79,7 +80,7 @@
             <span>{{.APIKey.KeyPrefix}}…</span>
           </div>
         </dd>
-        <dt>Expires</dt>
+        <dt>Expires <span class="help" tabindex="0" data-help="When this key stops working. Click Extend for a full new period — you can do that at any time, as often as you like.">?</span></dt>
         <dd>
           <span class="expiry" data-date="{{.APIKey.ExpiresAt.Format "2006-01-02"}}"></span>
           &nbsp;{{.APIKey.ExpiresAt.Format "2006-01-02"}}
@@ -121,7 +122,7 @@
       Configure your AI client with these settings:
     </p>
     <dl class="info-grid">
-      <dt>Base URL</dt>
+      <dt>Base URL <span class="help" tabindex="0" data-help="Point your AI client at this address and give it your API key. It speaks the OpenAI API, so any OpenAI-compatible tool works.">?</span></dt>
       <dd>
         <div class="key-box">
           <span id="base-url-val">{{.APIBaseURL}}</span>

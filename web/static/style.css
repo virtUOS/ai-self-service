@@ -279,3 +279,61 @@ tr:hover td { background: var(--tr-hover); }
   .card { padding: 1.25rem; }
   header { padding: 0 1rem; }
 }
+
+/* ── Help tooltips ──────────────────────────────────────────────────────── */
+/* A dotted-underline marker that reveals an explanation on hover or focus, so
+   admins do not have to know what TPM means to configure a profile. */
+.help {
+  position: relative;
+  display: inline-block;
+  margin-left: .3rem;
+  width: 1rem;
+  height: 1rem;
+  line-height: 1rem;
+  text-align: center;
+  font-size: .7rem;
+  font-weight: 600;
+  color: var(--text-muted, #94a3b8);
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  cursor: help;
+  user-select: none;
+}
+
+.help::after {
+  content: attr(data-help);
+  position: absolute;
+  bottom: calc(100% + .5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 16rem;
+  max-width: 24rem;
+  padding: .6rem .75rem;
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: .375rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
+  font-size: .8rem;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .12s ease;
+  z-index: 20;
+}
+
+.help:hover::after,
+.help:focus::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Near the right edge the tooltip would overflow; anchor it to the right. */
+.help.help-left::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
