@@ -20,7 +20,7 @@ func TestDashboardTemplateRenders(t *testing.T) {
 		User:            &database.User{Name: "Test", Email: "t@example.com"},
 		APIKey:          &database.APIKey{KeyPrefix: "sk-abc123", ExpiresAt: time.Now().Add(24 * time.Hour)},
 		NewKey:          "sk-brand-new",
-		FrontendURL:     "https://example.com",
+		APIBaseURL:      "https://litellm.example.com/v1",
 		KeyDurationDays: 90,
 		CSRFToken:       "TOK123",
 	})
@@ -34,6 +34,11 @@ func TestDashboardTemplateRenders(t *testing.T) {
 	}
 	if !strings.Contains(out, "sk-brand-new") {
 		t.Error("new key not rendered")
+	}
+	// The API base must be the gateway, not the portal: a client pointed at the
+	// portal gets 404s because it serves HTML, not the OpenAI API.
+	if !strings.Contains(out, "https://litellm.example.com/v1") {
+		t.Error("dashboard does not show the gateway API base URL")
 	}
 	// Every form must carry a token — none may post unprotected.
 	if forms, toks := strings.Count(out, "<form"), strings.Count(out, `name="csrf_token"`); forms != toks {

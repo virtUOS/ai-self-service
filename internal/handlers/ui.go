@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/virtuos/ai-self-service/internal/config"
@@ -47,7 +48,7 @@ type dashboardData struct {
 	APIKey          *database.APIKey
 	NewKey          string
 	IsAdmin         bool
-	FrontendURL     string
+	APIBaseURL      string
 	KeyDurationDays int
 	ExpiresInDays   int
 	ExpiryUrgent    bool
@@ -100,7 +101,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		APIKey:          apiKey,
 		NewKey:          newKey,
 		IsAdmin:         u.cfg.IsAdmin(su.User.Email),
-		FrontendURL:     u.cfg.FrontendURL,
+		APIBaseURL:      strings.TrimRight(u.cfg.LiteLLMBaseURL, "/") + "/v1",
 		KeyDurationDays: u.keyDuration(profile),
 		ExpiresInDays:   daysUntilExpiry(apiKey),
 		ExpiryUrgent:    isExpiryUrgent(apiKey),
