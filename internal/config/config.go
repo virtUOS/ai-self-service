@@ -22,6 +22,13 @@ type Config struct {
 
 	DBPath string
 
+	// SMTPHost enables expiry emails when set (host:port). Without it the
+	// portal logs what it would have sent and relies on the dashboard warning.
+	SMTPHost     string
+	SMTPFrom     string
+	SMTPUsername string
+	SMTPPassword string
+
 	ListenAddr      string
 	CookieSecure    bool
 	SessionDuration time.Duration
@@ -41,6 +48,11 @@ func Load() (*Config, error) {
 		FrontendURL: requireEnv("FRONTEND_URL"),
 
 		DBPath: envOr("DB_PATH", "./data.db"),
+
+		SMTPHost:     os.Getenv("SMTP_HOST"),
+		SMTPFrom:     envOr("SMTP_FROM", "noreply@uni-osnabrueck.de"),
+		SMTPUsername: os.Getenv("SMTP_USERNAME"),
+		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
 
 		ListenAddr: envOr("LISTEN_ADDR", ":8080"),
 	}

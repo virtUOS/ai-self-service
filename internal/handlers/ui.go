@@ -48,6 +48,8 @@ type dashboardData struct {
 	IsAdmin         bool
 	FrontendURL     string
 	KeyDurationDays int
+	ExpiresInDays   int
+	ExpiryUrgent    bool
 	ProfileName     string
 	QuotaTokens     string
 	QuotaPeriod     string
@@ -99,6 +101,8 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		IsAdmin:         u.cfg.IsAdmin(su.User.Email),
 		FrontendURL:     u.cfg.FrontendURL,
 		KeyDurationDays: u.keyDuration(profile),
+		ExpiresInDays:   daysUntilExpiry(apiKey),
+		ExpiryUrgent:    isExpiryUrgent(apiKey),
 		ProfileName:     profileName(profile),
 		QuotaTokens:     profileQuota(profile),
 		QuotaPeriod:     profilePeriod(profile),
@@ -316,6 +320,23 @@ func (u *UI) DeleteKey(w http.ResponseWriter, r *http.Request) {
 	_ = u.store.DeleteAPIKey(r.Context(), k.ID)
 	u.audit(r, database.AuditKeyDeleted, su.User, "key "+k.KeyPrefix)
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// daysUntilExpiry reports whole days remaining; negative once expired.
+func daysUntilExpiry(k *database.APIKey) int {
+	if k == nil {
+		return 0
+	}
+	return int(time.Until(k.ExpiresAt).Hours() / 24)
+}
+
+// isExpiryUrgent marks the point where the dashboard nags rather than informs.
+// It matches the widest email threshold so both channels agree.
+func isExpiryUrgent(k *database.APIKey) bool {
+	if k == nil {
+		return false
+	}
+	return time.Until(k.ExpiresAt) < 14*24*time.Hour
 }
 
 func profileName(p *database.Profile) string {

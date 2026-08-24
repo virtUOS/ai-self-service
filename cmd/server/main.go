@@ -21,6 +21,7 @@ import (
 	"github.com/virtuos/ai-self-service/internal/database"
 	"github.com/virtuos/ai-self-service/internal/handlers"
 	"github.com/virtuos/ai-self-service/internal/litellm"
+	"github.com/virtuos/ai-self-service/internal/notify"
 	oidcpkg "github.com/virtuos/ai-self-service/internal/oidc"
 	"github.com/virtuos/ai-self-service/internal/session"
 	"github.com/virtuos/ai-self-service/web"
@@ -140,6 +141,23 @@ func main() {
 		IdleTimeout:       120 * time.Second,
 	}
 
+	// Warn users before their keys expire. Without SMTP configured this logs
+	// what it would have sent; the dashboard warning still reaches anyone who
+	// visits.
+	var notifier notify.Notifier = notify.Discard{}
+	if cfg.SMTPHost != "" {
+		notifier = &notify.SMTP{
+			Host: cfg.SMTPHost, From: cfg.SMTPFrom,
+			Username: cfg.SMTPUsername, Password: cfg.SMTPPassword,
+		}
+		log.Printf("expiry notifications via %s", cfg.SMTPHost)
+	} else {
+		log.Print("SMTP_HOST unset: expiry notifications will not be delivered")
+	}
+	reminderCtx, stopReminder := context.WithCancel(context.Background())
+	go notify.NewReminder(store, notifier, cfg.FrontendURL, nil).
+		Start(reminderCtx, 6*time.Hour)
+
 	// Expire stale sessions periodically; previously this ran once at startup
 	// and rows accumulated for the lifetime of the process.
 	stopCleanup := make(chan struct{})
@@ -177,6 +195,7 @@ func main() {
 	}
 
 	close(stopCleanup)
+	stopReminder()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {

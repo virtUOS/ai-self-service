@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"testing"
+	"time"
 
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
@@ -82,4 +83,34 @@ func TestProfileLimitsNil(t *testing.T) {
 		t.Errorf("nil profile gave %#v", got)
 	}
 	_ = keyprovider.Limits{}
+}
+
+// The dashboard warning must escalate as expiry approaches and agree with the
+// widest email threshold, so the two channels do not contradict each other.
+func TestExpiryWarningThresholds(t *testing.T) {
+	cases := []struct {
+		name   string
+		in     time.Duration
+		days   int
+		urgent bool
+	}{
+		{"no key", 0, 0, false},
+		{"fresh 90d", 90*24*time.Hour + time.Minute, 90, false},
+		{"just outside window", 15*24*time.Hour + time.Minute, 15, false},
+		{"inside window", 13*24*time.Hour + time.Minute, 13, true},
+		{"tomorrow", 25*time.Hour + time.Minute, 1, true},
+		{"expired", -48 * time.Hour, -2, true},
+	}
+	for _, c := range cases {
+		var k *database.APIKey
+		if c.name != "no key" {
+			k = &database.APIKey{ExpiresAt: time.Now().Add(c.in)}
+		}
+		if got := daysUntilExpiry(k); got != c.days {
+			t.Errorf("%s: days = %d, want %d", c.name, got, c.days)
+		}
+		if got := isExpiryUrgent(k); got != c.urgent {
+			t.Errorf("%s: urgent = %v, want %v", c.name, got, c.urgent)
+		}
+	}
 }

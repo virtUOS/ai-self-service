@@ -57,6 +57,20 @@
     <h2>API key</h2>
 
     {{if .APIKey}}
+      {{if .ExpiryUrgent}}
+      <div class="alert {{if lt .ExpiresInDays 0}}alert-danger{{else}}alert-warning{{end}}"
+           style="margin-bottom:1.25rem">
+        {{if lt .ExpiresInDays 0}}
+          <strong>Your key has expired.</strong> Generate a new one to restore access.
+        {{else if eq .ExpiresInDays 0}}
+          <strong>Your key expires today.</strong> Extend it to keep your access.
+        {{else}}
+          <strong>Your key expires in {{.ExpiresInDays}}
+          day{{if ne .ExpiresInDays 1}}s{{end}}.</strong>
+          Extend it now to avoid interruption.
+        {{end}}
+      </div>
+      {{end}}
 
       <dl class="info-grid" style="margin-bottom:1.25rem">
         <dt>Key</dt>

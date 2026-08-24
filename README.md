@@ -14,6 +14,8 @@ A self-service web portal that lets users generate, manage, and renew their own 
 
 - **Self-service key management** — generate, extend, regenerate, and delete LiteLLM API keys
 - **Profile system** — per-user key validity, fair-use token quotas, model restrictions and TPM/RPM limits
+- **Expiry notifications** — users are warned before their key expires, in the
+  dashboard and (when SMTP is configured) by email
 - **OIDC authentication** — login, logout, and back-channel logout support
 - **SQLite storage** — single file, no separate database server
 - **Admin panel** — manage profiles and assign them to users
@@ -37,6 +39,10 @@ Copy `.env.example` to `.env` and fill in the values:
 | `COOKIE_SECURE`      | no       | `false`     | Set `true` when serving over HTTPS                                 |
 | `SESSION_DURATION`   | no       | `24h`       | How long a login session lasts                                     |
 | `KEY_DURATION_DAYS`  | no       | `90`        | Default key validity; profiles may override it                     |
+| `SMTP_HOST`          | no       | —           | `host:port` of a mail relay; unset disables expiry emails          |
+| `SMTP_FROM`          | no       | `noreply@uni-osnabrueck.de` | Sender address for expiry emails                   |
+| `SMTP_USERNAME`      | no       | —           | Only if the relay requires authentication                          |
+| `SMTP_PASSWORD`      | no       | —           | Only if the relay requires authentication                          |
 
 ## Running
 
@@ -81,6 +87,20 @@ period resets.
 
 This requires every model in LiteLLM to carry that same nominal price. A model
 priced at `0` or `null` accrues no spend, so a quota over it never triggers.
+
+## Expiry notifications
+
+Keys expire, so users are warned before they do — otherwise a key dies silently
+in someone's pipeline.
+
+- The dashboard shows a warning once a key is within 14 days of expiring, and
+  an error once it has expired.
+- With `SMTP_HOST` set, an email goes out at 14, 3 and 1 days before expiry.
+  Each notice is sent at most once per key and threshold; a delivery failure
+  leaves it pending so the next run retries.
+
+Without `SMTP_HOST` the portal logs what it would have sent. It does not
+silently pretend mail was delivered.
 
 ## Routes
 

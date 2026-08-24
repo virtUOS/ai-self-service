@@ -403,3 +403,41 @@ func (s *Store) ListAPIKeys(ctx context.Context) ([]APIKey, error) {
 	err := s.db.NewSelect().Model(&keys).Scan(ctx)
 	return keys, err
 }
+
+// --- Expiry notifications ---
+
+// KeysExpiringWithin returns keys expiring in the next window that have not yet
+// had a notice recorded for daysBefore, joined to their owner.
+//
+// Already-expired keys are excluded: a warning after the fact is noise, and the
+// user has already discovered the problem.
+func (s *Store) KeysExpiringWithin(ctx context.Context, daysBefore int) ([]ExpiringKey, error) {
+	cutoff := time.Now().AddDate(0, 0, daysBefore)
+
+	var rows []ExpiringKey
+	err := s.db.NewSelect().
+		Model((*APIKey)(nil)).
+		ColumnExpr("api_key.*").
+		ColumnExpr("u.email AS email").
+		ColumnExpr("u.name AS name").
+		Join("JOIN users AS u ON u.id = api_key.user_id").
+		Where("api_key.expires_at <= ?", cutoff).
+		Where("api_key.expires_at > ?", time.Now()).
+		Where(`NOT EXISTS (
+			SELECT 1 FROM expiry_notices n
+			WHERE n.api_key_id = api_key.id AND n.days_before = ?
+		)`, daysBefore).
+		Scan(ctx, &rows)
+	return rows, err
+}
+
+// MarkExpiryNoticeSent records a delivered warning. The unique index makes this
+// the point at which a concurrent duplicate is rejected.
+func (s *Store) MarkExpiryNoticeSent(ctx context.Context, keyID int64, daysBefore int) error {
+	_, err := s.db.NewInsert().Model(&ExpiryNotice{
+		APIKeyID:   keyID,
+		DaysBefore: daysBefore,
+		SentAt:     time.Now(),
+	}).Exec(ctx)
+	return err
+}

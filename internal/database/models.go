@@ -92,3 +92,21 @@ type AuditEvent struct {
 	SubjectID    *int64    `bun:"subject_id"`
 	Detail       string    `bun:"detail,notnull"`
 }
+
+// ExpiryNotice records that a user was warned about a key nearing expiry,
+// so the reminder job does not mail them again for the same threshold.
+type ExpiryNotice struct {
+	bun.BaseModel `bun:"table:expiry_notices"`
+
+	ID         int64     `bun:"id,pk,autoincrement"`
+	APIKeyID   int64     `bun:"api_key_id,notnull"`
+	DaysBefore int       `bun:"days_before,notnull"`
+	SentAt     time.Time `bun:"sent_at,notnull"`
+}
+
+// ExpiringKey pairs a key with its owner, for the reminder job.
+type ExpiringKey struct {
+	APIKey
+	Email string
+	Name  string
+}
