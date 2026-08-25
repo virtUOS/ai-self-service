@@ -102,3 +102,28 @@ func TestDashboardRendersModels(t *testing.T) {
 		t.Error("empty model list should omit the row entirely")
 	}
 }
+
+// Copying must be confirmed in words. A colour change alone reads as a hover
+// effect, so the chip says "Kopiert!"/"Copied!" like the other copy buttons.
+func TestModelCopyConfirmsInWords(t *testing.T) {
+	for _, lang := range []i18n.Lang{i18n.DE, i18n.EN} {
+		var buf bytes.Buffer
+		if err := parseDashboardTemplate().Execute(&buf, dashboardData{
+			Lang:      lang,
+			User:      &database.User{Name: "T", Email: "t@example.com"},
+			APIKey:    &database.APIKey{KeyPrefix: "sk-a", ExpiresAt: time.Now().Add(24 * time.Hour)},
+			Models:    []string{"gpt-4o"},
+			CSRFToken: "TOK",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		out := buf.String()
+		want := i18n.T(lang, "dash.copied")
+		if !strings.Contains(out, want) {
+			t.Errorf("%s: copy confirmation %q not available to the script", lang, want)
+		}
+		if !strings.Contains(out, "code.textContent = COPIED") {
+			t.Errorf("%s: chip does not swap its label on copy", lang)
+		}
+	}
+}

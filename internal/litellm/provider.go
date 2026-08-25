@@ -30,6 +30,11 @@ func (p *Provider) Usage(ctx context.Context, ref string, days int) ([]keyprovid
 	return p.client.Usage(ctx, ref, days)
 }
 
+// UpdateLimits re-applies limits to an existing key.
+func (p *Provider) UpdateLimits(ctx context.Context, ref string, l keyprovider.Limits) error {
+	return p.client.UpdateKeyLimits(ctx, ref, l)
+}
+
 // Quota reports consumption against the key's enforced allowance.
 func (p *Provider) Quota(ctx context.Context, ref string) (keyprovider.Quota, error) {
 	return p.client.KeyQuota(ctx, ref)

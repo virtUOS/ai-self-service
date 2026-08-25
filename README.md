@@ -14,11 +14,14 @@ A self-service web portal that lets users generate, manage, and renew their own 
 
 - **Self-service key management** — generate, extend, regenerate, and delete LiteLLM API keys
 - **Profile system** — per-user key validity, fair-use token quotas, model restrictions and TPM/RPM limits
+- **Usage reporting** — users see what their key has consumed, per day and against their quota
+- **Model discovery** — the dashboard lists the models a key may use, click to copy the exact name
 - **Expiry notifications** — users are warned before their key expires, in the
-  dashboard and (when SMTP is configured) by email
+  dashboard and (when SMTP is configured) by email, in German and English
 - **OIDC authentication** — login, logout, and back-channel logout support
 - **SQLite storage** — single file, no separate database server
 - **Admin panel** — manage profiles and assign them to users
+- **Local development** — Keycloak or a faster OIDC mock, both in `dev/`
 
 ## Configuration
 
@@ -52,6 +55,24 @@ go run ./cmd/server
 ```
 
 The server runs database migrations and seeds a default profile on startup.
+
+### Local development
+
+The app needs an OIDC provider before it will serve traffic — it fetches the
+discovery document at startup. `dev/` provides two; see `dev/README.md` for
+which to use when.
+
+```bash
+docker compose -f dev/docker-compose.yml up -d                 # Keycloak, ~20s
+docker compose -f dev/docker-compose.yml --profile mock up -d  # OIDC mock, ~8s
+```
+
+Keycloak is the software production runs, so it is what to use when touching
+anything auth-shaped. The mock starts faster and needs no realm import, but
+serves no back-channel logout, so that path cannot be exercised against it.
+
+The auth-path tests need neither: `internal/oidc/mockprovider_test.go` runs an
+in-process issuer, so `go test ./...` requires nothing external.
 
 ## Admin panel
 
@@ -111,6 +132,49 @@ For fair use the shorter period is usually the binding one: 100k/day already
 caps a user near 3M/month. If stacked windows become necessary, re-test on a
 newer LiteLLM before building enforcement into this app.
 
+### How profile changes reach existing keys
+
+Limits are pushed to the gateway when a key is issued, and re-applied every
+time the owner loads the dashboard. Editing a profile's quota, or moving a user
+to a different profile, therefore takes effect on their next page load rather
+than requiring them to regenerate.
+
+This matters because the two can disagree: the portal reads limits from its own
+database to render the page, while the gateway enforces whatever was last
+pushed to the key. Without the re-apply, the dashboard would advertise a quota
+that nothing enforced.
+
+Clearing a quota sends an explicit `null`. LiteLLM leaves an omitted field
+untouched, so a profile that loses its allowance would otherwise keep enforcing
+the previous one.
+
+## Usage reporting
+
+The dashboard shows what a key has consumed, from two sources with different
+granularity:
+
+- **Per day, over 30 days** — read from LiteLLM's per-request spend log,
+  filtered by the key's SHA-256 and aggregated by the portal.
+- **Against the quota** — read from the key's own spend counter, which is what
+  the gateway enforces against. It resets on the budget period, so it need not
+  agree with the 30-day chart above it.
+
+Usage belongs to a key, not a person: regenerating a key starts the history
+over, and the card says so.
+
+Two gateway-side settings affect this:
+
+- `disable_spend_logs: true` switches off the per-request log. The portal then
+  falls back to the key's cumulative total and hides the chart, rather than
+  reporting no usage at all.
+- `maximum_spend_logs_retention_period` must be at least as long as the charted
+  window (30 days), or users silently see less history than the page offers.
+
+Passing `start_date`/`end_date` to `/spend/logs` returns a **different shape** —
+daily aggregates carrying spend but no token counts. Since local models are
+priced so that spend is near zero, that response looks valid and carries no
+usable signal. The portal reads the raw per-request rows instead.
+
 ## Expiry notifications
 
 Keys expire, so users are warned before they do — otherwise a key dies silently
@@ -121,6 +185,11 @@ in someone's pipeline.
 - With `SMTP_HOST` set, an email goes out at 14, 3 and 1 days before expiry.
   Each notice is sent at most once per key and threshold; a delivery failure
   leaves it pending so the next run retries.
+- The notice is bilingual, German first: nothing records a per-user language,
+  so it cannot pick one. Both halves carry the expiry date and the portal link.
+
+The thresholds are a code-level default (`notify.DefaultThresholds`), not an
+admin setting.
 
 Without `SMTP_HOST` the portal logs what it would have sent. It does not
 silently pretend mail was delivered.
@@ -162,7 +231,7 @@ restricts the endpoint to the monitoring host.
 | `POST` | `/backchannel-logout`         | OIDC back-channel logout endpoint                         |
 | `GET`  | `/session/status`             | Returns 200 / 401 (used by client-side polling)           |
 | `POST` | `/key/generate`               | Generate (or replace) the user's API key                  |
-| `POST` | `/key/extend`                 | Extend the key expiry by `KEY_DURATION_DAYS`              |
+| `POST` | `/key/extend`                 | Move the key expiry to a full period from now             |
 | `POST` | `/key/delete`                 | Delete the user's API key                                 |
 | `GET`  | `/admin`                      | Admin panel                                               |
 | `POST` | `/admin/profiles`             | Create a profile                                          |
@@ -170,6 +239,10 @@ restricts the endpoint to the monitoring host.
 | `POST` | `/admin/profiles/{id}/delete` | Delete a profile                                          |
 | `POST` | `/admin/users/{id}/profile`   | Assign a profile to a user                                |
 | `POST` | `/admin/users/{id}/key/revoke`| Revoke another user's API key                             |
+| `POST` | `/lang`                       | Record an explicit language choice                        |
+| `GET`  | `/healthz`                    | Liveness probe                                            |
+| `GET`  | `/readyz`                     | Readiness probe (checks the database)                     |
+| `GET`  | `/metrics`                    | Prometheus metrics                                        |
 
 ## OIDC client registration
 

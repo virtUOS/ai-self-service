@@ -223,8 +223,19 @@ function copyModel(btn) {
   navigator.clipboard.writeText(btn.dataset.model).then(() => {
     if (btn.dataset.busy) return;
     btn.dataset.busy = '1';
+
+    // Say so in words, the same as the other copy buttons: a colour change
+    // alone reads as a hover effect rather than confirmation. The width is
+    // pinned first so the row does not reflow while the label is swapped.
+    const code = btn.querySelector('code');
+    code.style.minWidth = code.offsetWidth + 'px';
+    const name = btn.dataset.model;
+    code.textContent = COPIED;
     btn.classList.add('copied');
+
     setTimeout(() => {
+      code.textContent = name;
+      code.style.minWidth = '';
       btn.classList.remove('copied');
       delete btn.dataset.busy;
     }, 1200);
