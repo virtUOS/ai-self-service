@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -30,11 +31,16 @@ type UI struct {
 	tmpl     *template.Template
 	flash    *keyFlash
 	csrf     *session.CSRF
+	models   *modelCache
 }
 
 func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager, oidc *oidcpkg.Provider, keys keyprovider.Provider, csrf *session.CSRF) *UI {
 	tmpl := parseDashboardTemplate()
-	return &UI{cfg: cfg, store: store, sessions: sessions, oidc: oidc, keys: keys, tmpl: tmpl, flash: newKeyFlash(), csrf: csrf}
+	// Only some gateways can enumerate models; the dashboard omits the list
+	// when the provider cannot.
+	lister, _ := keys.(keyprovider.ModelLister)
+	return &UI{cfg: cfg, store: store, sessions: sessions, oidc: oidc, keys: keys,
+		tmpl: tmpl, flash: newKeyFlash(), csrf: csrf, models: newModelCache(lister)}
 }
 
 func (u *UI) requireSession(r *http.Request) (*session.SessionUser, error) {
@@ -70,6 +76,7 @@ type dashboardData struct {
 	ProfileName   string
 	QuotaTokens   string
 	QuotaPeriod   string
+	Models        []string
 	CSRFToken     string
 }
 
@@ -125,6 +132,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		ProfileName:   profileName(profile),
 		QuotaTokens:   profileQuota(profile),
 		QuotaPeriod:   profilePeriod(profile),
+		Models:        u.userModels(r.Context(), profile),
 		CSRFToken:     u.csrf.Token(w, r),
 		Lang:          lang,
 		Langs:         i18n.Supported,
@@ -432,6 +440,20 @@ func (u *UI) keyDuration(p *database.Profile) int {
 		return p.KeyDurationDays
 	}
 	return u.cfg.KeyDurationDays
+}
+
+// userModels is the model list to show a user: the ones their key will
+// actually accept. A profile that restricts models is authoritative — listing
+// everything the gateway serves would advertise models whose requests the key
+// is rejected for. An unrestricted profile sees the whole gateway list.
+//
+// Returns nothing when the gateway cannot be reached or cannot enumerate, so
+// the dashboard omits the row rather than showing an empty one.
+func (u *UI) userModels(ctx context.Context, p *database.Profile) []string {
+	if p != nil && len(p.Models) > 0 {
+		return p.Models
+	}
+	return u.models.Models(ctx)
 }
 
 // extendUntil is the expiry date the Extend button will set, formatted for

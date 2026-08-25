@@ -134,6 +134,14 @@
           <button class="copy-btn" onclick="copyText('base-url-val', this)">{{T .Lang "dash.copy"}}</button>
         </div>
       </dd>
+      {{if .Models}}
+      <dt>{{T .Lang "dash.models"}} <button type="button" class="help" data-help="{{T .Lang "dash.models.help"}}">?</button></dt>
+      <dd>
+        <ul class="model-list">
+          {{range .Models}}<li><code>{{.}}</code></li>{{end}}
+        </ul>
+      </dd>
+      {{end}}
     </dl>
   </div>
   {{end}}

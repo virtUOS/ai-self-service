@@ -43,6 +43,8 @@ var messages = map[string]map[Lang]string{
 	"dash.usage":        {DE: "Schlüssel verwenden", EN: "Using your key"},
 	"dash.usage.note":   {DE: "Konfigurieren Sie Ihren KI-Client mit diesen Einstellungen:", EN: "Configure your AI client with these settings:"},
 	"dash.baseurl":      {DE: "Basis-URL", EN: "Base URL"},
+	"dash.models":       {DE: "Verfügbare Modelle", EN: "Available models"},
+	"dash.models.help":  {DE: "Die Modelle, die Ihr Schlüssel verwenden darf. Geben Sie den Namen genau so an, wie er hier steht.", EN: "The models your key may use. Pass the name exactly as shown here."},
 	"dash.baseurl.help": {DE: "Richten Sie Ihren KI-Client auf diese Adresse und hinterlegen Sie Ihren API-Schlüssel. Die Schnittstelle ist OpenAI-kompatibel, funktioniert also mit den üblichen Werkzeugen.", EN: "Point your AI client at this address and give it your API key. It speaks the OpenAI API, so any OpenAI-compatible tool works."},
 
 	"dash.confirm.regenerate": {DE: "Damit wird Ihr aktueller Schlüssel ungültig und ein neuer erzeugt. Fortfahren?", EN: "This will revoke your current key and generate a new one. Continue?"},
