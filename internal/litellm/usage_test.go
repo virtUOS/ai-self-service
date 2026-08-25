@@ -3,10 +3,13 @@ package litellm
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
 
 // LiteLLM identifies a key in its spend log by the SHA-256 of the key itself.
@@ -182,5 +185,59 @@ func TestKeyQuotaUnlimited(t *testing.T) {
 	}
 	if got.UsedTokens != 100 {
 		t.Errorf("UsedTokens = %d, want 100", got.UsedTokens)
+	}
+}
+
+// A profile's limits must be pushable onto a key that already exists.
+// Without this a profile change never reaches issued keys, and the portal
+// advertises a quota the gateway does not enforce.
+func TestUpdateKeyLimitsSendsBudget(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/key/update" {
+			t.Errorf("posted to %s, want /key/update", r.URL.Path)
+		}
+		json.NewDecoder(r.Body).Decode(&got)
+		w.Write([]byte("{}"))
+	}))
+	defer srv.Close()
+
+	err := NewClient(srv.URL, "mk").UpdateKeyLimits(context.Background(), "sk-x", keyprovider.Limits{
+		QuotaTokens: 10_000, QuotaPeriod: "1h",
+		Models: []string{"gpt-4o"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["key"] != "sk-x" {
+		t.Errorf("key = %v", got["key"])
+	}
+	// 10k tokens at the nominal price.
+	if got["max_budget"] != 10_000*NominalTokenPrice {
+		t.Errorf("max_budget = %v, want %v", got["max_budget"], 10_000*NominalTokenPrice)
+	}
+	if got["budget_duration"] != "1h" {
+		t.Errorf("budget_duration = %v", got["budget_duration"])
+	}
+}
+
+// Clearing a quota must send an explicit null, not omit the field: omitting it
+// leaves the old budget in place, so a profile losing its quota would keep
+// enforcing the previous one.
+func TestUpdateKeyLimitsClearsBudget(t *testing.T) {
+	var raw string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		w.Write([]byte("{}"))
+	}))
+	defer srv.Close()
+
+	if err := NewClient(srv.URL, "mk").UpdateKeyLimits(
+		context.Background(), "sk-x", keyprovider.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(raw, `"max_budget":null`) {
+		t.Errorf("payload %s does not clear max_budget", raw)
 	}
 }

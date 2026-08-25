@@ -105,4 +105,10 @@ type Provider interface {
 	DeleteKey(ctx context.Context, ref string) error
 	// UpdateExpiry moves a key's expiry.
 	UpdateExpiry(ctx context.Context, ref string, expiresAt time.Time) error
+
+	// UpdateLimits re-applies limits to an existing key. Issuing a key is not
+	// the only time its limits change: users move between profiles and
+	// profiles get edited, and without this the portal would advertise limits
+	// the gateway does not enforce.
+	UpdateLimits(ctx context.Context, ref string, limits Limits) error
 }

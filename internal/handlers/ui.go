@@ -120,6 +120,13 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		slog.Error("dashboard: resolve profile", "err", err)
 	}
 
+	// Limits are applied when a key is issued, but a user can be moved between
+	// profiles and a profile's quota can be edited afterwards. Re-apply them
+	// here so an existing key converges on its profile rather than keeping
+	// whatever it was created with — otherwise this page advertises a limit
+	// the gateway does not enforce.
+	u.syncKeyLimits(r.Context(), apiKey, profile)
+
 	// Redeem a one-time new key stashed by GenerateKey. The secret never
 	// appears in the URL; the query string carries only an opaque token.
 	newKey := u.flash.Take(su.User.ID, r.URL.Query().Get("k"))
@@ -560,5 +567,25 @@ func profileLimits(p *database.Profile) keyprovider.Limits {
 		RequestsPerMinute: p.RPMLimit,
 		QuotaTokens:       p.QuotaTokens,
 		QuotaPeriod:       p.QuotaPeriod,
+	}
+}
+
+// syncKeyLimits re-applies a profile's limits to an existing key.
+//
+// A failure is logged and swallowed: the dashboard is a read path, and a
+// gateway blip must not stop the user seeing their key. The next page load
+// retries, so the key converges rather than staying stale.
+func (u *UI) syncKeyLimits(ctx context.Context, k *database.APIKey, p *database.Profile) {
+	if k == nil {
+		return
+	}
+	limiter, ok := u.keys.(interface {
+		UpdateLimits(context.Context, string, keyprovider.Limits) error
+	})
+	if !ok {
+		return
+	}
+	if err := limiter.UpdateLimits(ctx, k.LiteLLMKey, profileLimits(p)); err != nil {
+		slog.Error("re-apply profile limits", "key_prefix", k.KeyPrefix, "err", err)
 	}
 }

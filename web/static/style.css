@@ -439,6 +439,9 @@ tr:hover td { background: var(--tr-hover); }
 .model-copy.copied code {
   background: var(--key-new-bg);
   border-color: var(--key-new-border);
+  /* The label is swapped for "Copied!", which is shorter than most model
+     names; the pinned width keeps the chip from shrinking mid-feedback. */
+  text-align: center;
 }
 
 /* Usage chart: one bar per day with traffic, scaled to the busiest day.

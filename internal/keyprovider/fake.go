@@ -17,10 +17,16 @@ type Fake struct {
 
 	// Keys holds every live key by ref.
 	Keys map[string]KeyRequest
-	// Created, Deleted and Extended record calls in order.
-	Created  []KeyRequest
-	Deleted  []string
-	Extended []string
+	// Created, Deleted, Extended and Relimited record calls in order.
+	Created   []KeyRequest
+	Deleted   []string
+	Extended  []string
+	Relimited []string
+
+	// LimitsByRef is the live limits per key, updated by UpdateLimits.
+	LimitsByRef map[string]Limits
+	// LimitsErr forces UpdateLimits to fail.
+	LimitsErr error
 
 	// AvailableModels is what ListModels returns; ModelsErr forces it to fail.
 	AvailableModels []string
@@ -63,6 +69,21 @@ func (f *Fake) Usage(_ context.Context, ref string, _ int) ([]DailyUsage, error)
 		return nil, f.UsageErr
 	}
 	return f.UsageByRef[ref], nil
+}
+
+// UpdateLimits records a re-application of limits to an existing key.
+func (f *Fake) UpdateLimits(_ context.Context, ref string, l Limits) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.LimitsErr != nil {
+		return f.LimitsErr
+	}
+	if f.LimitsByRef == nil {
+		f.LimitsByRef = make(map[string]Limits)
+	}
+	f.LimitsByRef[ref] = l
+	f.Relimited = append(f.Relimited, ref)
+	return nil
 }
 
 // Quota returns the canned allowance figures for a key.

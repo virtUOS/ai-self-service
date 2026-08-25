@@ -154,3 +154,52 @@ func (c *Client) KeySpendTokens(ctx context.Context, key string) (int64, error) 
 	}
 	return BudgetToTokens(info.Info.Spend), nil
 }
+
+// UpdateKeyLimits pushes a profile's limits onto a key that already exists.
+//
+// Creating a key is not the only time its limits change: a user can be moved
+// between profiles, and a profile's quota can be edited. Without this the
+// portal would advertise a limit the gateway does not enforce.
+//
+// Fields are sent explicitly rather than omitted when empty. LiteLLM leaves an
+// omitted field untouched, so clearing a quota has to send null — otherwise a
+// profile that loses its allowance keeps enforcing the previous one.
+func (c *Client) UpdateKeyLimits(ctx context.Context, key string, l keyprovider.Limits) error {
+	models := l.Models
+	if len(models) == 0 {
+		// LiteLLM reads an empty list as "no models"; null means "all".
+		models = nil
+	}
+
+	payload := map[string]any{
+		"key":       key,
+		"models":    models,
+		"tpm_limit": l.TokensPerMinute,
+		"rpm_limit": l.RequestsPerMinute,
+	}
+
+	if l.QuotaTokens > 0 && l.QuotaPeriod != "" {
+		payload["max_budget"] = TokensToBudget(l.QuotaTokens)
+		payload["budget_duration"] = l.QuotaPeriod
+	} else {
+		payload["max_budget"] = nil
+		payload["budget_duration"] = nil
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.do(ctx, http.MethodPost, "/key/update", body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("LiteLLM /key/update returned %d: %s", resp.StatusCode, b)
+	}
+	return nil
+}
