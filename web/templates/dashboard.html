@@ -122,6 +122,31 @@
 
   {{if .APIKey}}
   <div class="card">
+    <h2>{{T .Lang "dash.usagestats"}}</h2>
+    <p class="text-muted" style="margin-bottom:1rem;font-size:.85rem">
+      {{T .Lang "dash.usagestats.note"}}
+    </p>
+    {{if .Usage.Days}}
+      <p style="margin-bottom:1rem">
+        <strong>{{thousands .Usage.Total}}</strong> {{T .Lang "dash.tokens"}}
+        <span class="text-muted">({{T .Lang "dash.usagestats.total"}})</span>
+      </p>
+      <div class="usage-chart">
+        {{range .Usage.Days}}
+        <div class="usage-day" title="{{.Day}}: {{thousands .Tokens}}">
+          <div class="usage-bar" style="height:{{barPct .Tokens $.Usage.Peak}}%"></div>
+          <span class="usage-label">{{slice .Day 8 10}}</span>
+        </div>
+        {{end}}
+      </div>
+    {{else}}
+      <p class="text-muted">{{T .Lang "dash.usagestats.none"}}</p>
+    {{end}}
+  </div>
+  {{end}}
+
+  {{if .APIKey}}
+  <div class="card">
     <h2>{{T .Lang "dash.usage"}}</h2>
     <p class="text-muted" style="margin-bottom:.75rem;font-size:.9rem">
       {{T .Lang "dash.usage.note"}}

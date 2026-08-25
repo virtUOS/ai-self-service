@@ -26,6 +26,10 @@ type Fake struct {
 	AvailableModels []string
 	ModelsErr       error
 
+	// UsageByRef is what Usage returns per key ref; UsageErr forces it to fail.
+	UsageByRef map[string][]DailyUsage
+	UsageErr   error
+
 	// CreateErr, DeleteErr and ExpiryErr force the respective call to fail.
 	CreateErr error
 	DeleteErr error
@@ -37,9 +41,20 @@ func NewFake() *Fake {
 }
 
 var (
-	_ Provider    = (*Fake)(nil)
-	_ ModelLister = (*Fake)(nil)
+	_ Provider      = (*Fake)(nil)
+	_ ModelLister   = (*Fake)(nil)
+	_ UsageReporter = (*Fake)(nil)
 )
+
+// Usage returns the canned per-day totals for a key.
+func (f *Fake) Usage(_ context.Context, ref string, _ int) ([]DailyUsage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.UsageErr != nil {
+		return nil, f.UsageErr
+	}
+	return f.UsageByRef[ref], nil
+}
 
 // Models is what ListModels returns.
 func (f *Fake) ListModels(context.Context) ([]string, error) {

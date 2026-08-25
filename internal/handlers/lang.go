@@ -3,6 +3,8 @@ package handlers
 import (
 	"html/template"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/virtuos/ai-self-service/internal/i18n"
 )
@@ -14,6 +16,33 @@ import (
 func langFuncs() template.FuncMap {
 	return template.FuncMap{
 		"T": i18n.T,
+		// barPct scales a day's tokens against the busiest day, for the usage
+		// chart. A floor of 2% keeps a quiet day visible rather than invisible.
+		"barPct": func(tokens, peak int64) int {
+			if peak <= 0 {
+				return 0
+			}
+			pct := int(tokens * 100 / peak)
+			if pct < 2 {
+				pct = 2
+			}
+			return pct
+		},
+		// thousands renders a token count with separators (1234567 -> 1,234,567).
+		"thousands": func(n int64) string {
+			s := strconv.FormatInt(n, 10)
+			if len(s) <= 3 {
+				return s
+			}
+			var b strings.Builder
+			for i, c := range s {
+				if i > 0 && (len(s)-i)%3 == 0 {
+					b.WriteByte(',')
+				}
+				b.WriteRune(c)
+			}
+			return b.String()
+		},
 	}
 }
 

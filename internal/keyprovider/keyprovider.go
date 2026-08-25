@@ -53,6 +53,24 @@ type ModelLister interface {
 	ListModels(ctx context.Context) ([]string, error)
 }
 
+// DailyUsage is one day's token consumption for a key.
+type DailyUsage struct {
+	// Day is the UTC date the tokens were spent on, as YYYY-MM-DD.
+	Day string
+	// Tokens is the total consumed that day, prompt and completion together.
+	Tokens int64
+}
+
+// UsageReporter is implemented by providers that can report what a key has
+// consumed. Separate from Provider because not every gateway records usage,
+// and reporting is not needed to issue or revoke keys.
+type UsageReporter interface {
+	// Usage returns per-day token totals for the key, oldest first, covering
+	// the given number of days back from today. Days with no traffic are
+	// omitted rather than reported as zero.
+	Usage(ctx context.Context, ref string, days int) ([]DailyUsage, error)
+}
+
 // Provider issues and revokes keys on an upstream gateway.
 type Provider interface {
 	// CreateKey issues a new key.
