@@ -119,3 +119,41 @@ func TestDashboardRendersUsage(t *testing.T) {
 		t.Error("empty state message not rendered")
 	}
 }
+
+// Per-request spend logging can be off upstream — it is on this deployment,
+// to bound a LiteLLM memory leak. The key's own cumulative spend still works,
+// so the card must report a real total rather than claiming no usage.
+func TestUserUsageFallsBackToTotal(t *testing.T) {
+	fake := keyprovider.NewFake()
+	fake.UsageByRef = nil // logging disabled: no per-day rows
+	fake.TotalByRef = map[string]int64{"sk-live": 545}
+
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"})
+	if got.Total != 545 {
+		t.Errorf("Total = %d, want 545 from the key's own spend", got.Total)
+	}
+	if len(got.Days) != 0 {
+		t.Errorf("no per-day rows expected, got %d", len(got.Days))
+	}
+	if !got.TotalOnly {
+		t.Error("TotalOnly should mark that no per-day breakdown is available")
+	}
+}
+
+// When per-day rows exist they are authoritative; the coarse total is not
+// fetched or shown as a separate figure.
+func TestUserUsagePrefersPerDayRows(t *testing.T) {
+	fake := keyprovider.NewFake()
+	fake.UsageByRef = map[string][]keyprovider.DailyUsage{
+		"sk-live": {{Day: "2026-08-01", Tokens: 100}},
+	}
+	fake.TotalByRef = map[string]int64{"sk-live": 999999}
+
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"})
+	if got.Total != 100 {
+		t.Errorf("Total = %d, want 100 from the per-day rows", got.Total)
+	}
+	if got.TotalOnly {
+		t.Error("TotalOnly should be false when a breakdown exists")
+	}
+}

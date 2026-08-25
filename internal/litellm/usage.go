@@ -82,3 +82,39 @@ func (c *Client) Usage(ctx context.Context, key string, days int) ([]keyprovider
 	sort.Slice(out, func(i, j int) bool { return out[i].Day < out[j].Day })
 	return out, nil
 }
+
+type keyInfoResponse struct {
+	Info struct {
+		Spend float64 `json:"spend"`
+	} `json:"info"`
+}
+
+// KeySpendTokens is the cumulative token usage recorded on the key itself,
+// derived from the spend LiteLLM tracks per key.
+//
+// This is the fallback for when per-request spend logging is switched off.
+// It was disabled on this deployment to bound a LiteLLM memory leak
+// (BerriAI/litellm#12685), and the portal cannot assume it is ever on: the
+// key's own spend counter keeps working either way. The cost is granularity —
+// one cumulative figure for the key's lifetime, with no per-day breakdown.
+func (c *Client) KeySpendTokens(ctx context.Context, key string) (int64, error) {
+	q := url.Values{}
+	q.Set("key", key)
+
+	resp, err := c.do(ctx, http.MethodGet, "/key/info?"+q.Encode(), nil)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("LiteLLM /key/info returned %d: %s", resp.StatusCode, b)
+	}
+
+	var info keyInfoResponse
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return 0, fmt.Errorf("decode key info: %w", err)
+	}
+	return BudgetToTokens(info.Info.Spend), nil
+}

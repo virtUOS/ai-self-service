@@ -30,6 +30,11 @@ type Fake struct {
 	UsageByRef map[string][]DailyUsage
 	UsageErr   error
 
+	// TotalByRef is what TotalUsage returns per key ref, standing in for a
+	// gateway that records spend but keeps no per-request log.
+	TotalByRef map[string]int64
+	TotalErr   error
+
 	// CreateErr, DeleteErr and ExpiryErr force the respective call to fail.
 	CreateErr error
 	DeleteErr error
@@ -54,6 +59,16 @@ func (f *Fake) Usage(_ context.Context, ref string, _ int) ([]DailyUsage, error)
 		return nil, f.UsageErr
 	}
 	return f.UsageByRef[ref], nil
+}
+
+// TotalUsage returns the canned cumulative total for a key.
+func (f *Fake) TotalUsage(_ context.Context, ref string) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.TotalErr != nil {
+		return 0, f.TotalErr
+	}
+	return f.TotalByRef[ref], nil
 }
 
 // Models is what ListModels returns.

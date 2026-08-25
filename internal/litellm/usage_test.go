@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -91,5 +92,46 @@ func TestUsageSkipsRowsWithoutTokens(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Day != "2026-08-02" {
 		t.Errorf("got %+v, want only the day with tokens", got)
+	}
+}
+
+// Spend logs can be switched off upstream — they were here, to bound a
+// LiteLLM memory leak. The key itself still records cumulative spend, so fall
+// back to that rather than reporting no usage at all.
+func TestUsageFallsBackToKeySpend(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/spend/logs"):
+			w.Write([]byte("[]")) // logging disabled: no rows, no error
+		case strings.HasPrefix(r.URL.Path, "/key/info"):
+			json.NewEncoder(w).Encode(map[string]any{
+				"info": map[string]any{"spend": 5.45e-05},
+			})
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	total, err := NewClient(srv.URL, "mk").KeySpendTokens(context.Background(), "sk-x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 5.45e-05 at the nominal price is 545 tokens.
+	if total != 545 {
+		t.Errorf("KeySpendTokens = %d, want 545", total)
+	}
+}
+
+// A key that has never been used reports zero, not an error.
+func TestKeySpendZeroForUnusedKey(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"info": map[string]any{"spend": 0.0}})
+	}))
+	defer srv.Close()
+
+	total, err := NewClient(srv.URL, "mk").KeySpendTokens(context.Background(), "sk-x")
+	if err != nil || total != 0 {
+		t.Errorf("got %d, %v; want 0, nil", total, err)
 	}
 }

@@ -27,6 +27,12 @@ type usageCache struct {
 
 	mu      sync.Mutex
 	entries map[string]usageEntry
+	totals  map[string]totalEntry
+}
+
+type totalEntry struct {
+	tokens    int64
+	fetchedAt time.Time
 }
 
 type usageEntry struct {
@@ -35,7 +41,11 @@ type usageEntry struct {
 }
 
 func newUsageCache(r keyprovider.UsageReporter) *usageCache {
-	return &usageCache{reporter: r, entries: make(map[string]usageEntry)}
+	return &usageCache{
+		reporter: r,
+		entries:  make(map[string]usageEntry),
+		totals:   make(map[string]totalEntry),
+	}
 }
 
 // Days returns the cached per-day usage for a key, refreshing when stale.
@@ -60,4 +70,28 @@ func (c *usageCache) Days(ctx context.Context, ref string) []keyprovider.DailyUs
 	}
 	c.entries[ref] = usageEntry{days: days, fetchedAt: time.Now()}
 	return days
+}
+
+// Total returns the key's cumulative token count, the coarse figure that
+// survives when per-request logging is unavailable. Cached alongside the
+// per-day rows and on the same terms: a failed read reports nothing.
+func (c *usageCache) Total(ctx context.Context, ref string) int64 {
+	if c.reporter == nil || ref == "" {
+		return 0
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if e, ok := c.totals[ref]; ok && time.Since(e.fetchedAt) < usageCacheTTL {
+		return e.tokens
+	}
+
+	total, err := c.reporter.TotalUsage(ctx, ref)
+	if err != nil {
+		slog.Error("read key total usage", "err", err)
+		return 0
+	}
+	c.totals[ref] = totalEntry{tokens: total, fetchedAt: time.Now()}
+	return total
 }
