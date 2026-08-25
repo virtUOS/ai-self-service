@@ -49,14 +49,12 @@
       {{if .ProfileName}}<dt>{{T .Lang "dash.profile"}} <button type="button" class="help" data-help="{{T .Lang "dash.profile.help"}}">?</button></dt> <dd>{{.ProfileName}}</dd>{{end}}
       {{if .QuotaTokens}}
       <dt>{{T .Lang "dash.usagelimit"}} <button type="button" class="help" data-help="{{T .Lang "dash.usagelimit.help"}}">?</button></dt>
-      <dd>{{.QuotaTokens}} tokens {{.QuotaPeriod}}</dd>
+      <dd>{{.QuotaTokens}} {{T .Lang "dash.tokens"}} {{.QuotaPeriod}}</dd>
       {{end}}
     </dl>
     {{if .QuotaTokens}}
     <p class="text-muted" style="margin-top:.75rem;font-size:.85rem">
-      Requests fail once the limit is reached and resume automatically at the
-      next reset (UTC boundaries: daily at midnight UTC, weekly on Monday,
-      monthly on the 1st).
+      {{T .Lang "dash.usagelimit.note"}}
     </p>
     {{end}}
   </div>
