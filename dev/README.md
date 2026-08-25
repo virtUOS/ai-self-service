@@ -1,10 +1,26 @@
 # Local development environment
 
 The app requires an OIDC provider at startup — it fetches the discovery
-document before it will serve traffic. Production uses the university
-Keycloak (`https://login.uni-osnabrueck.de/realms/virtuos`), so local dev runs
-the same software rather than a different IdP, to avoid bugs that only appear
-against the real provider.
+document before it will serve traffic. There are two to choose from.
+
+| | Keycloak | Mock |
+| --- | --- | --- |
+| Start | `docker compose -f dev/docker-compose.yml up -d` | `docker compose -f dev/docker-compose.yml --profile mock up -d` |
+| Ready in | ~20s (realm import) | ~8s |
+| Fidelity | same software as production | different implementation |
+| Back-channel logout | yes | **no** |
+
+Use **Keycloak** when touching anything auth-shaped, and to reproduce
+production behaviour: it is the same software the university runs
+(`https://login.uni-osnabrueck.de/realms/virtuos`), so it catches bugs that
+only appear against the real provider.
+
+Use the **mock** for everyday iteration where login is just a step on the way
+to something else. It is quicker and needs no realm import, but it serves no
+back-channel logout endpoint, so the `/logout/backchannel` path cannot be
+exercised against it.
+
+Both listen on port 8081, so run one at a time.
 
 ## Start Keycloak
 
@@ -36,6 +52,23 @@ ADMIN_EMAILS=admin@example.com
 ```
 
 Then `go run ./cmd/server` and open <http://localhost:8080>.
+
+## Start the mock instead
+
+```bash
+docker compose -f dev/docker-compose.yml --profile mock up -d
+```
+
+It accepts any client id and secret without registration, so the `.env` above
+works unchanged except for the issuer:
+
+```
+OIDC_ISSUER_URL=http://localhost:8081
+```
+
+At the login prompt, enter the subject of the user you want to be — `student`
+or `admin`, matching `dev/mock-users.json`. They carry the same emails as the
+Keycloak users, so `ADMIN_EMAILS` behaves identically.
 
 ## Automated tests
 

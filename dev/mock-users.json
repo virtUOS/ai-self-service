@@ -1,0 +1,12 @@
+[
+  {
+    "sub": "student",
+    "email": "student@uni-osnabrueck.de",
+    "name": "Test Student"
+  },
+  {
+    "sub": "admin",
+    "email": "admin@example.com",
+    "name": "Test Admin"
+  }
+]
