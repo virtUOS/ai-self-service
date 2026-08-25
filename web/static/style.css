@@ -393,3 +393,24 @@ tr:hover td { background: var(--tr-hover); }
 .lang-switch button:hover {
   background: rgba(255, 255, 255, .22);
 }
+
+/* Model list on the dashboard: names must be copyable verbatim, so they are
+   set in the same monospace as the key and base URL. */
+.model-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.model-list code {
+  font-family: 'Courier New', monospace;
+  font-size: .85rem;
+  background: var(--key-bg);
+  border: 1px solid var(--key-border);
+  border-radius: 4px;
+  padding: .2rem .5rem;
+  word-break: break-all;
+}
