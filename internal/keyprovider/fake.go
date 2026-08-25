@@ -57,6 +57,15 @@ func (f *Fake) CreateKey(_ context.Context, req KeyRequest) (KeyResult, error) {
 	if f.CreateErr != nil {
 		return KeyResult{}, f.CreateErr
 	}
+	// LiteLLM requires aliases to be unique across all live keys and rejects a
+	// collision with a 400. Rotation creates the replacement before revoking the
+	// old key, so the two briefly coexist and a per-user constant alias would
+	// collide. Enforce it here so that stays caught by tests.
+	for _, live := range f.Keys {
+		if live.Alias == req.Alias {
+			return KeyResult{}, fmt.Errorf("key with alias %q already exists", req.Alias)
+		}
+	}
 	f.counter++
 	secret := fmt.Sprintf("sk-fake-%03d", f.counter)
 	f.Keys[secret] = req
