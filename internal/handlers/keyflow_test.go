@@ -147,6 +147,36 @@ func TestGenerateKeyRevokesOldKeyAfterSuccess(t *testing.T) {
 	}
 }
 
+// Rotation must not collide with the key it is replacing. LiteLLM requires
+// aliases to be unique across live keys, and the replacement is created while
+// the old key is still live, so a per-user constant alias fails with a 400.
+// See issue #4.
+func TestGenerateKeyUsesDistinctAliasPerRotation(t *testing.T) {
+	ui, fake, _, _ := newTestUI(t, "kf3b")
+
+	post(t, ui, ui.GenerateKey, "/key/generate")
+	rec := post(t, ui, ui.GenerateKey, "/key/generate")
+	if rec.Code != http.StatusFound {
+		t.Fatalf("regenerating a key failed with %d, want a redirect", rec.Code)
+	}
+
+	if len(fake.Created) != 2 {
+		t.Fatalf("expected 2 create calls, got %d", len(fake.Created))
+	}
+	if fake.Created[0].Alias == fake.Created[1].Alias {
+		t.Errorf("both rotations used alias %q; aliases must differ", fake.Created[0].Alias)
+	}
+	// The alias still has to identify the person in LiteLLM's UI.
+	for i, c := range fake.Created {
+		if !strings.Contains(c.Alias, "s@uni-osnabrueck.de") {
+			t.Errorf("create %d: alias %q does not identify the user", i, c.Alias)
+		}
+		if c.Owner != "s@uni-osnabrueck.de" {
+			t.Errorf("create %d: owner = %q, want the user's email", i, c.Owner)
+		}
+	}
+}
+
 // A creation failure must leave the existing key untouched, not strand the user.
 func TestGenerateKeyKeepsOldKeyWhenCreateFails(t *testing.T) {
 	ui, fake, store, user := newTestUI(t, "kf4")

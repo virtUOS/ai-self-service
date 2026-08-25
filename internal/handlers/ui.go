@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -207,6 +210,24 @@ func (u *UI) SessionStatus(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// keyAlias builds the label a key carries in the provider's UI. LiteLLM requires
+// aliases to be unique across all live keys, and rotation deliberately creates
+// the replacement while the old key is still live, so the address alone would
+// collide on every regeneration.
+//
+// The suffix is random rather than a timestamp: two rotations can land in the
+// same millisecond, so a clock-derived suffix is not actually unique. The
+// address keeps the alias readable; ownership is tracked by KeyRequest.Owner.
+func keyAlias(email string) (string, error) {
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		// Falling back to a bare address would 400 on the next rotation, so
+		// fail here rather than issue a key that cannot be replaced.
+		return "", fmt.Errorf("generate key alias: %w", err)
+	}
+	return email + "-" + hex.EncodeToString(b), nil
+}
+
 // GenerateKey creates a new LiteLLM key for the user, replacing any existing one.
 func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	su, err := u.requireSession(r)
@@ -228,11 +249,19 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	alias, err := keyAlias(su.User.Email)
+	if err != nil {
+		slog.Error("build key alias", "err", err)
+		metrics.KeyOperations.WithLabelValues("generate", "alias_error").Inc()
+		http.Error(w, "Failed to create key", http.StatusInternalServerError)
+		return
+	}
+
 	// Create the replacement BEFORE revoking the old one. The reverse order
 	// leaves the user with no working key whenever creation fails.
 	expiresAt := time.Now().AddDate(0, 0, u.keyDuration(profile))
 	result, err := u.keys.CreateKey(r.Context(), keyprovider.KeyRequest{
-		Alias:     su.User.Email,
+		Alias:     alias,
 		Owner:     su.User.Email,
 		ExpiresAt: expiresAt,
 		Limits:    profileLimits(profile),
