@@ -1,6 +1,6 @@
 # Status and next steps
 
-Last updated 2026-08-24. Written as a handover: what is done, what is not, and
+Last updated 2026-08-25. Written as a handover: what is done, what is not, and
 the things that are surprising enough to waste an afternoon rediscovering.
 
 ## Where it runs
@@ -32,21 +32,21 @@ Phases 1–6 of the original assessment all shipped:
   adapter and a fake for tests.
 - **Operations** — graceful shutdown, timeouts, health checks, Dockerfile, CI,
   Prometheus metrics, structured logging, expiry warnings.
-- **Bilingual UI** — German by default, English when the browser asks.
+- **Bilingual UI** — German by default, English when the browser asks. Expiry
+  notices are bilingual too, since nothing records a per-user language.
+- **Expiry email** — delivered through `relay.rz.uni-osnabrueck.de:25`, which
+  accepts mail from known hosts without credentials. Verified end to end.
 
-91 tests, no skips. `go test ./...` needs nothing external.
+96 tests, no skips. `go test ./...` needs nothing external.
 
 ## Not done
 
-1. **SMTP is unconfigured.** The expiry-notification code is complete and
-   tested; `asvc_smtp_host` is empty, so nothing is delivered and the portal
-   logs what it would have sent. Needs the university relay address.
-2. **Production does not exist.** No VM, no DNS, no Keycloak client
+1. **Production does not exist.** No VM, no DNS, no Keycloak client
    (`ai-self-service` is unregistered — only `ai-self-service-testing` exists),
    and `group_vars/production/vault.yml` still holds `CHANGEME`.
-3. **Production model pricing.** Chat models are priced at `1e-07`; the
+2. **Production model pricing.** Chat models are priced at `1e-07`; the
    embedding and OCR models are deliberately left at `None`.
-4. **Profile assignment from an OIDC claim.** Still manual, which will not
+3. **Profile assignment from an OIDC claim.** Still manual, which will not
    scale to a student cohort. Needs someone to check what the realm emits.
 
 ## Things that will waste your time if you do not know them
@@ -57,6 +57,10 @@ Phases 1–6 of the original assessment all shipped:
   5,000,000× past the cap. Only `max_budget` + `budget_duration` is enforced,
   so a profile gets **one** period. Re-test on a newer LiteLLM before
   promising otherwise.
+- **`asvc_smtp_host` must carry the port.** The app calls `net.SplitHostPort`,
+  so a bare `relay.rz.uni-osnabrueck.de` fails at runtime with “missing port in
+  address”. The HIT site splits host and port into separate variables; this one
+  does not.
 - **A model priced `0` or `null` accrues no spend**, so any quota over it can
   never trigger. All chat models must carry the nominal price.
 - **`LITELLM_MASTER_KEY` is not a master key.** It is `lkmanager`, scoped to
@@ -91,8 +95,6 @@ Phases 1–6 of the original assessment all shipped:
 
 ## Suggested next steps
 
-1. Get the SMTP relay address and set `asvc_smtp_host` — the biggest
-   functional gap, and it is a config change rather than code.
-2. Provision production: VM, DNS, Keycloak client, vault secrets, pricing.
-3. Ask the IdP team what group or affiliation claim the realm emits, then map
+1. Provision production: VM, DNS, Keycloak client, vault secrets, pricing.
+2. Ask the IdP team what group or affiliation claim the realm emits, then map
    profiles onto it.
