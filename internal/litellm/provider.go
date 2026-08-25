@@ -30,6 +30,11 @@ func (p *Provider) Usage(ctx context.Context, ref string, days int) ([]keyprovid
 	return p.client.Usage(ctx, ref, days)
 }
 
+// TotalUsage reports the key's cumulative token count.
+func (p *Provider) TotalUsage(ctx context.Context, ref string) (int64, error) {
+	return p.client.KeySpendTokens(ctx, ref)
+}
+
 // ListModels reports the models the gateway serves.
 func (p *Provider) ListModels(ctx context.Context) ([]string, error) {
 	return p.client.ListModels(ctx)

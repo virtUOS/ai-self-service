@@ -454,6 +454,11 @@ type usageReport struct {
 	// Peak is the busiest day's total, used to scale the bars. Zero when there
 	// is no traffic, and callers must not divide by it unchecked.
 	Peak int64
+	// TotalOnly marks a report with a real total but no per-day breakdown,
+	// which is what a gateway with per-request logging switched off can give.
+	// The card then shows the figure without a chart, rather than implying the
+	// key was never used.
+	TotalOnly bool
 }
 
 // userUsage summarises what the user's current key has consumed. Usage belongs
@@ -475,6 +480,16 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey) usageReport {
 		if d.Tokens > rep.Peak {
 			rep.Peak = d.Tokens
 		}
+	}
+	if len(days) > 0 {
+		return rep
+	}
+
+	// No per-day rows. That may mean an unused key, or a gateway that records
+	// spend without keeping a per-request log — the two are indistinguishable
+	// here, so ask for the cumulative figure before reporting nothing.
+	if total := u.usage.Total(ctx, k.LiteLLMKey); total > 0 {
+		rep.Total, rep.TotalOnly = total, true
 	}
 	return rep
 }

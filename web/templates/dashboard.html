@@ -124,7 +124,15 @@
     <p class="text-muted" style="margin-bottom:1rem;font-size:.85rem">
       {{T .Lang "dash.usagestats.note"}}
     </p>
-    {{if .Usage.Days}}
+    {{if .Usage.TotalOnly}}
+      <p style="margin-bottom:.5rem">
+        <strong>{{thousands .Usage.Total}}</strong> {{T .Lang "dash.tokens"}}
+        <span class="text-muted">({{T .Lang "dash.usagestats.total"}})</span>
+      </p>
+      <p class="text-muted" style="font-size:.85rem">
+        {{T .Lang "dash.usagestats.nobreakdown"}}
+      </p>
+    {{else if .Usage.Days}}
       <p style="margin-bottom:1rem">
         <strong>{{thousands .Usage.Total}}</strong> {{T .Lang "dash.tokens"}}
         <span class="text-muted">({{T .Lang "dash.usagestats.total"}})</span>
@@ -161,7 +169,10 @@
       <dt>{{T .Lang "dash.models"}} <button type="button" class="help" data-help="{{T .Lang "dash.models.help"}}">?</button></dt>
       <dd>
         <ul class="model-list">
-          {{range .Models}}<li><code>{{.}}</code></li>{{end}}
+          {{range .Models}}
+          <li><button type="button" class="model-copy" data-model="{{.}}"
+                      onclick="copyModel(this)"><code>{{.}}</code></button></li>
+          {{end}}
         </ul>
       </dd>
       {{end}}
@@ -172,12 +183,29 @@
 </main>
 
 <script>
+const COPIED = {{T .Lang "dash.copied"}};
+
 function copyText(id, btn) {
   const text = document.getElementById(id).textContent.trim();
   navigator.clipboard.writeText(text).then(() => {
     const orig = btn.textContent;
-    btn.textContent = 'Copied!';
+    btn.textContent = COPIED;
     setTimeout(() => btn.textContent = orig, 2000);
+  });
+}
+
+// Model names are long and easy to mistype, so the whole chip copies the exact
+// name. The label is swapped rather than the code element replaced, so the
+// button keeps its width and the row does not jump.
+function copyModel(btn) {
+  navigator.clipboard.writeText(btn.dataset.model).then(() => {
+    if (btn.dataset.busy) return;
+    btn.dataset.busy = '1';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      delete btn.dataset.busy;
+    }, 1200);
   });
 }
 

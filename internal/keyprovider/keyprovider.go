@@ -68,7 +68,16 @@ type UsageReporter interface {
 	// Usage returns per-day token totals for the key, oldest first, covering
 	// the given number of days back from today. Days with no traffic are
 	// omitted rather than reported as zero.
+	//
+	// An empty result does not mean no usage: a gateway may record spend
+	// without keeping a per-request log. Callers should fall back to
+	// TotalUsage before concluding a key is unused.
 	Usage(ctx context.Context, ref string, days int) ([]DailyUsage, error)
+
+	// TotalUsage is the key's cumulative token count. It is the coarse figure
+	// that survives when per-request logging is unavailable, so it is reported
+	// separately rather than derived from Usage.
+	TotalUsage(ctx context.Context, ref string) (int64, error)
 }
 
 // Provider issues and revokes keys on an upstream gateway.

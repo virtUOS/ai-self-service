@@ -84,6 +84,15 @@ func TestDashboardRendersModels(t *testing.T) {
 	if !strings.Contains(out, "Verfügbare Modelle") {
 		t.Error("models label not rendered in German")
 	}
+	// Each name must be copyable verbatim: they are long and easy to mistype.
+	for _, m := range withModels.Models {
+		if !strings.Contains(out, `data-model="`+m+`"`) {
+			t.Errorf("model %q is not click-to-copy", m)
+		}
+	}
+	if n := strings.Count(out, "copyModel(this)"); n != len(withModels.Models) {
+		t.Errorf("%d copy handlers for %d models", n, len(withModels.Models))
+	}
 
 	buf.Reset()
 	if err := parseDashboardTemplate().Execute(&buf, base); err != nil {
