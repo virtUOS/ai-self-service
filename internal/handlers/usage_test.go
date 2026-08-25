@@ -198,3 +198,34 @@ func TestUserUsageUnlimitedHasNoRemaining(t *testing.T) {
 		t.Errorf("unlimited key reported remaining=%d pct=%d", got.Remaining, got.QuotaPct)
 	}
 }
+
+// The reset time is rendered relative in the browser, so the page must carry
+// the raw timestamp plus translated units. A UTC wall-clock alone forces the
+// user to do timezone arithmetic to answer "when can I work again".
+func TestQuotaResetIsRenderedRelative(t *testing.T) {
+	reset := time.Date(2026, 8, 25, 10, 0, 0, 0, time.UTC)
+	for _, lang := range []i18n.Lang{i18n.DE, i18n.EN} {
+		var buf bytes.Buffer
+		if err := parseDashboardTemplate().Execute(&buf, dashboardData{
+			Lang:      lang,
+			User:      &database.User{Name: "T", Email: "t@example.com"},
+			APIKey:    &database.APIKey{KeyPrefix: "sk-a", ExpiresAt: time.Now().Add(24 * time.Hour)},
+			CSRFToken: "TOK",
+			Usage: usageReport{
+				HasQuota: true, Used: 8_622, Remaining: 1_378, QuotaPct: 86,
+				ResetsAt: reset,
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		out := buf.String()
+		// The element carries the instant; the browser formats it.
+		if !strings.Contains(out, `data-reset="2026-08-25T10:00:00Z"`) {
+			t.Errorf("%s: reset timestamp not exposed for client-side rendering", lang)
+		}
+		// A bare UTC wall clock must not be the only thing shown.
+		if strings.Contains(out, "10:00 UTC") {
+			t.Errorf("%s: still renders a raw UTC time", lang)
+		}
+	}
+}

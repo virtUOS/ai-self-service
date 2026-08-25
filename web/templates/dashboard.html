@@ -138,7 +138,8 @@
         {{thousands .Usage.Used}} {{T .Lang "dash.quota.of"}}
         {{thousands (add .Usage.Used .Usage.Remaining)}} {{T .Lang "dash.tokens"}}
         {{T .Lang "dash.quota.used"}}{{if not .Usage.ResetsAt.IsZero}} ·
-        {{T .Lang "dash.quota.resets"}} {{.Usage.ResetsAt.Format "2006-01-02 15:04"}} UTC{{end}}
+        {{T .Lang "dash.quota.resets"}}
+        <span class="reset-at" data-reset="{{.Usage.ResetsAt.Format "2006-01-02T15:04:05Z"}}"></span>{{end}}
       </p>
     {{else}}
       <p class="text-muted" style="font-size:.85rem;margin-bottom:1rem">
@@ -207,6 +208,22 @@
 <script>
 const COPIED = {{T .Lang "dash.copied"}};
 
+// Time words, translated server-side: the browser does the arithmetic, but
+// the wording has to match the page.
+const T_TIME = {
+  in:      {{T .Lang "dash.time.in"}},
+  now:     {{T .Lang "dash.time.now"}},
+  minute:  {{T .Lang "dash.time.minute"}},
+  minutes: {{T .Lang "dash.time.minutes"}},
+  hour:    {{T .Lang "dash.time.hour"}},
+  hours:   {{T .Lang "dash.time.hours"}},
+  day:     {{T .Lang "dash.time.day"}},
+  days:    {{T .Lang "dash.time.days"}},
+  expired: {{T .Lang "badge.expired"}},
+  today:   {{T .Lang "badge.today"}},
+  left:    {{T .Lang "badge.daysleft"}},
+};
+
 function copyText(id, btn) {
   const text = document.getElementById(id).textContent.trim();
   navigator.clipboard.writeText(text).then(() => {
@@ -248,7 +265,32 @@ document.querySelectorAll('.expiry').forEach(el => {
   const days = Math.round((d - Date.now()) / 86400000);
   const cls = days < 0 ? 'badge-expired' : days < 14 ? 'badge-warn' : 'badge-ok';
   el.classList.add('badge', cls);
-  el.textContent = days < 0 ? 'Expired' : days === 0 ? 'Today' : days + 'd left';
+  el.textContent = days < 0 ? T_TIME.expired : days === 0 ? T_TIME.today : days + T_TIME.left;
+});
+
+// Quota reset, rendered relative to the reader's clock. A UTC wall time makes
+// someone two timezones away do arithmetic to answer "when can I use this
+// again". The title carries the exact local moment for anyone who wants it.
+document.querySelectorAll('.reset-at').forEach(el => {
+  const at = new Date(el.dataset.reset);
+  if (isNaN(at)) return;
+
+  const render = () => {
+    const mins = Math.round((at - Date.now()) / 60000);
+    // LiteLLM resets lazily, on the first request after the window passes, so
+    // a past timestamp means "about to", not "already did".
+    // Singular forms matter in German: "in 1 Tagen" is wrong.
+    const unit = (n, one, many) => `${T_TIME.in} ${n} ${n === 1 ? one : many}`;
+    if (mins <= 0) { el.textContent = T_TIME.now; return; }
+    if (mins < 60) { el.textContent = unit(mins, T_TIME.minute, T_TIME.minutes); return; }
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) { el.textContent = unit(hrs, T_TIME.hour, T_TIME.hours); return; }
+    el.textContent = unit(Math.round(hrs / 24), T_TIME.day, T_TIME.days);
+  };
+
+  render();
+  el.title = at.toLocaleString();
+  setInterval(render, 30000);
 });
 
 // Session polling — redirect to /login when session expires
