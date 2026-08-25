@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.2.0` |
+| Latest release | `v0.3.0` |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -40,7 +40,7 @@ Phases 1–6 of the original assessment all shipped:
   per day over the last 30 days.
 - **Local dev** — Keycloak, or a faster OIDC mock under `--profile mock`.
 
-108 tests, no skips. `go test ./...` needs nothing external.
+109 tests, no skips. `go test ./...` needs nothing external.
 
 ## Not done
 
