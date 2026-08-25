@@ -36,8 +36,11 @@ Phases 1–6 of the original assessment all shipped:
   notices are bilingual too, since nothing records a per-user language.
 - **Expiry email** — delivered through `relay.rz.uni-osnabrueck.de:25`, which
   accepts mail from known hosts without credentials. Verified end to end.
+- **Dashboard usage** — the models a key may use, and what it has consumed
+  per day over the last 30 days.
+- **Local dev** — Keycloak, or a faster OIDC mock under `--profile mock`.
 
-96 tests, no skips. `go test ./...` needs nothing external.
+108 tests, no skips. `go test ./...` needs nothing external.
 
 ## Not done
 
@@ -61,6 +64,11 @@ Phases 1–6 of the original assessment all shipped:
   so a bare `relay.rz.uni-osnabrueck.de` fails at runtime with “missing port in
   address”. The HIT site splits host and port into separate variables; this one
   does not.
+- **`/spend/logs` changes shape when given dates.** With `start_date` and
+  `end_date` it returns pre-aggregated daily rows carrying `spend` only — no
+  token counts — and local models are priced so that spend is always zero, so
+  the result looks correct and means nothing. Use `?api_key=<sha256(key)>` for
+  raw per-request rows with `total_tokens`, and aggregate them yourself.
 - **A model priced `0` or `null` accrues no spend**, so any quota over it can
   never trigger. All chat models must carry the nominal price.
 - **`LITELLM_MASTER_KEY` is not a master key.** It is `lkmanager`, scoped to
