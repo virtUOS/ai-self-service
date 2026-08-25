@@ -28,6 +28,9 @@ func langFuncs() template.FuncMap {
 			}
 			return pct
 		},
+		// add sums two token counts, for showing the allowance as used+remaining
+		// rather than passing the same figure through the template twice.
+		"add": func(a, b int64) int64 { return a + b },
 		// thousands renders a token count with separators (1234567 -> 1,234,567).
 		"thousands": func(n int64) string {
 			s := strconv.FormatInt(n, 10)

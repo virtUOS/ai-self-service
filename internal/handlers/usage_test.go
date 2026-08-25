@@ -157,3 +157,44 @@ func TestUserUsagePrefersPerDayRows(t *testing.T) {
 		t.Error("TotalOnly should be false when a breakdown exists")
 	}
 }
+
+// Users need to know what is left, not only what they have spent. The figures
+// come from the key's enforced budget so they match the limit users actually
+// hit, rather than a 30-day sum that need not align with the quota period.
+func TestUserUsageReportsRemaining(t *testing.T) {
+	fake := keyprovider.NewFake()
+	fake.UsageByRef = map[string][]keyprovider.DailyUsage{
+		"k": {{Day: "2026-08-25", Tokens: 420_000}},
+	}
+	fake.QuotaByRef = map[string]keyprovider.Quota{
+		"k": {UsedTokens: 420_000, LimitTokens: 1_500_000,
+			ResetsAt: time.Now().Add(6 * time.Hour)},
+	}
+
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"})
+	if !got.HasQuota {
+		t.Fatal("HasQuota should be set when the key has a budget")
+	}
+	if got.Remaining != 1_080_000 {
+		t.Errorf("Remaining = %d, want 1080000", got.Remaining)
+	}
+	if got.QuotaPct != 28 {
+		t.Errorf("QuotaPct = %d, want 28 (420k of 1.5M)", got.QuotaPct)
+	}
+}
+
+// An unlimited profile has nothing remaining to report, and must not be shown
+// as though its quota were exhausted.
+func TestUserUsageUnlimitedHasNoRemaining(t *testing.T) {
+	fake := keyprovider.NewFake()
+	fake.QuotaByRef = map[string]keyprovider.Quota{
+		"k": {UsedTokens: 545, LimitTokens: 0},
+	}
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"})
+	if got.HasQuota {
+		t.Error("HasQuota should be false for an unlimited key")
+	}
+	if got.Remaining != 0 || got.QuotaPct != 0 {
+		t.Errorf("unlimited key reported remaining=%d pct=%d", got.Remaining, got.QuotaPct)
+	}
+}

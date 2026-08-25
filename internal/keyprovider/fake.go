@@ -35,6 +35,10 @@ type Fake struct {
 	TotalByRef map[string]int64
 	TotalErr   error
 
+	// QuotaByRef is what Quota returns per key ref; QuotaErr forces failure.
+	QuotaByRef map[string]Quota
+	QuotaErr   error
+
 	// CreateErr, DeleteErr and ExpiryErr force the respective call to fail.
 	CreateErr error
 	DeleteErr error
@@ -59,6 +63,16 @@ func (f *Fake) Usage(_ context.Context, ref string, _ int) ([]DailyUsage, error)
 		return nil, f.UsageErr
 	}
 	return f.UsageByRef[ref], nil
+}
+
+// Quota returns the canned allowance figures for a key.
+func (f *Fake) Quota(_ context.Context, ref string) (Quota, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.QuotaErr != nil {
+		return Quota{}, f.QuotaErr
+	}
+	return f.QuotaByRef[ref], nil
 }
 
 // TotalUsage returns the canned cumulative total for a key.

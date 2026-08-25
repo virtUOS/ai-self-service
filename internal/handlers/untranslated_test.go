@@ -62,3 +62,41 @@ func TestDashboardHasNoUntranslatedProse(t *testing.T) {
 		}
 	}
 }
+
+// A template can reference a catalogue key that does not exist; T then renders
+// the key itself, so the page shows "dash.quota.remaining" as literal text.
+// This happened while adding the quota display, so check for the pattern
+// rather than relying on someone noticing it in a screenshot.
+func TestDashboardRendersNoRawCatalogueKeys(t *testing.T) {
+	data := dashboardData{
+		Lang:   i18n.EN,
+		User:   &database.User{Name: "T", Email: "t@example.com"},
+		APIKey: &database.APIKey{KeyPrefix: "sk-abc", ExpiresAt: time.Now().Add(24 * time.Hour)},
+		// Every conditional block on, so no branch escapes the check.
+		APIBaseURL: "https://gw/v1", QuotaTokens: "1.5M", QuotaPeriod: "24h",
+		ProfileName: "students", ExtendUntil: "2026-11-23",
+		Models: []string{"gpt-4o"}, NewKey: "sk-new",
+		ExpiresInDays: 2, ExpiryUrgent: true, CSRFToken: "TOK",
+		Usage: usageReport{
+			Days:  []keyprovider.DailyUsage{{Day: "2026-08-25", Tokens: 204}},
+			Total: 204, Peak: 204,
+			HasQuota: true, Used: 420_000, Remaining: 1_080_000, QuotaPct: 28,
+			ResetsAt: time.Now().Add(6 * time.Hour),
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := parseDashboardTemplate().Execute(&buf, data); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	// Strip tags first: a src="/static/help.js" is not a rendered key. What
+	// remains is the text a user actually sees.
+	text := regexp.MustCompile(`(?s)<script.*?</script>`).ReplaceAllString(buf.String(), " ")
+	text = regexp.MustCompile(`<[^>]*>`).ReplaceAllString(text, " ")
+
+	// Catalogue keys are dotted lowercase identifiers like "dash.quota.used".
+	raw := regexp.MustCompile(`\b(dash|help|badge|admin)\.[a-z][a-z.]*[a-z]\b`)
+	if m := raw.FindAllString(text, -1); len(m) > 0 {
+		t.Errorf("template rendered raw catalogue keys (missing from messages.go): %v", m)
+	}
+}

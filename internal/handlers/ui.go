@@ -459,6 +459,18 @@ type usageReport struct {
 	// The card then shows the figure without a chart, rather than implying the
 	// key was never used.
 	TotalOnly bool
+
+	// HasQuota is set when the key has an enforced allowance. Profiles may
+	// leave it unset, and an unlimited key must not read as an exhausted one.
+	HasQuota bool
+	// Used, Remaining and QuotaPct describe the current quota window. They
+	// come from the key's own counter, which is what the gateway enforces
+	// against, so they can disagree with the 30-day chart above — the window
+	// resets on the budget period, not on a rolling month.
+	Used      int64
+	Remaining int64
+	QuotaPct  int
+	ResetsAt  time.Time
 }
 
 // userUsage summarises what the user's current key has consumed. Usage belongs
@@ -481,6 +493,18 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey) usageReport {
 			rep.Peak = d.Tokens
 		}
 	}
+	if q, err := u.usage.Quota(ctx, k.LiteLLMKey); err == nil && q.LimitTokens > 0 {
+		rep.HasQuota = true
+		rep.Used, rep.ResetsAt = q.UsedTokens, q.ResetsAt
+		if rep.Remaining = q.LimitTokens - q.UsedTokens; rep.Remaining < 0 {
+			rep.Remaining = 0
+		}
+		rep.QuotaPct = int(q.UsedTokens * 100 / q.LimitTokens)
+		if rep.QuotaPct > 100 {
+			rep.QuotaPct = 100
+		}
+	}
+
 	if len(days) > 0 {
 		return rep
 	}

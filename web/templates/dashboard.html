@@ -124,6 +124,28 @@
     <p class="text-muted" style="margin-bottom:1rem;font-size:.85rem">
       {{T .Lang "dash.usagestats.note"}}
     </p>
+    {{if .Usage.HasQuota}}
+      <p style="margin-bottom:.5rem">
+        <strong>{{thousands .Usage.Remaining}}</strong> {{T .Lang "dash.tokens"}}
+        <span class="text-muted">{{T .Lang "dash.quota.remaining"}}</span>
+      </p>
+      <div class="quota-bar" role="img"
+           aria-label="{{thousands .Usage.Used}} {{T .Lang "dash.quota.used"}}">
+        <div class="quota-fill{{if ge .Usage.QuotaPct 90}} quota-full{{end}}"
+             style="width:{{.Usage.QuotaPct}}%"></div>
+      </div>
+      <p class="text-muted" style="font-size:.85rem;margin-bottom:1rem">
+        {{thousands .Usage.Used}} {{T .Lang "dash.quota.of"}}
+        {{thousands (add .Usage.Used .Usage.Remaining)}} {{T .Lang "dash.tokens"}}
+        {{T .Lang "dash.quota.used"}}{{if not .Usage.ResetsAt.IsZero}} ·
+        {{T .Lang "dash.quota.resets"}} {{.Usage.ResetsAt.Format "2006-01-02 15:04"}} UTC{{end}}
+      </p>
+    {{else}}
+      <p class="text-muted" style="font-size:.85rem;margin-bottom:1rem">
+        {{T .Lang "dash.quota.unlimited"}}
+      </p>
+    {{end}}
+
     {{if .Usage.TotalOnly}}
       <p style="margin-bottom:.5rem">
         <strong>{{thousands .Usage.Total}}</strong> {{T .Lang "dash.tokens"}}
