@@ -185,3 +185,35 @@ func TestDiscardNotifier(t *testing.T) {
 		t.Fatalf("Discard returned %v", err)
 	}
 }
+
+// The portal is German by default, so notices must not arrive English-only.
+// There is no per-user language on record, so the mail carries both, German
+// first to match the UI default. See issue #6.
+func TestReminderMessageIsBilingual(t *testing.T) {
+	s := setup(t, "rem6")
+	addKey(t, s, "u1", "u1@uni.de", 1)
+
+	rec := &recorder{}
+	if err := NewReminder(s, rec, "https://portal", []int{1}).Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	m := rec.sent[0]
+
+	for _, want := range []string{"Ihr KI-API-Schlüssel", "läuft", "verlängern"} {
+		if !strings.Contains(m.Body, want) {
+			t.Errorf("body missing German text %q", want)
+		}
+	}
+	for _, want := range []string{"AI API key", "expires", "extend"} {
+		if !strings.Contains(m.Body, want) {
+			t.Errorf("body missing English text %q", want)
+		}
+	}
+	if !strings.Contains(m.Subject, "läuft") || !strings.Contains(m.Subject, "expires") {
+		t.Errorf("subject = %q, want both languages", m.Subject)
+	}
+	// Both halves must still carry the facts the user needs to act.
+	if strings.Count(m.Body, "https://portal") < 2 {
+		t.Error("portal link should appear in both halves")
+	}
+}

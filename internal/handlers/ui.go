@@ -56,22 +56,21 @@ func parseDashboardTemplate() *template.Template {
 // dashboardData is what dashboard.html renders. Named rather than anonymous so
 // tests cannot drift from the handler's shape.
 type dashboardData struct {
-	Lang            i18n.Lang
-	Langs           []i18n.Lang
-	Path            string
-	User            *database.User
-	APIKey          *database.APIKey
-	NewKey          string
-	IsAdmin         bool
-	APIBaseURL      string
-	KeyDurationDays int
-	ExtendUntil     string
-	ExpiresInDays   int
-	ExpiryUrgent    bool
-	ProfileName     string
-	QuotaTokens     string
-	QuotaPeriod     string
-	CSRFToken       string
+	Lang          i18n.Lang
+	Langs         []i18n.Lang
+	Path          string
+	User          *database.User
+	APIKey        *database.APIKey
+	NewKey        string
+	IsAdmin       bool
+	APIBaseURL    string
+	ExtendUntil   string
+	ExpiresInDays int
+	ExpiryUrgent  bool
+	ProfileName   string
+	QuotaTokens   string
+	QuotaPeriod   string
+	CSRFToken     string
 }
 
 // audit records a self-service action, attributing it to the user themselves.
@@ -115,22 +114,21 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 	newKey := u.flash.Take(su.User.ID, r.URL.Query().Get("k"))
 
 	if err := u.tmpl.Execute(w, dashboardData{
-		User:            su.User,
-		APIKey:          apiKey,
-		NewKey:          newKey,
-		IsAdmin:         u.cfg.IsAdmin(su.User.Email),
-		APIBaseURL:      strings.TrimRight(u.cfg.LiteLLMBaseURL, "/") + "/v1",
-		KeyDurationDays: u.keyDuration(profile),
-		ExtendUntil:     u.extendUntil(profile),
-		ExpiresInDays:   daysUntilExpiry(apiKey),
-		ExpiryUrgent:    isExpiryUrgent(apiKey),
-		ProfileName:     profileName(profile),
-		QuotaTokens:     profileQuota(profile),
-		QuotaPeriod:     profilePeriod(profile),
-		CSRFToken:       u.csrf.Token(w, r),
-		Lang:            lang,
-		Langs:           i18n.Supported,
-		Path:            r.URL.Path,
+		User:          su.User,
+		APIKey:        apiKey,
+		NewKey:        newKey,
+		IsAdmin:       u.cfg.IsAdmin(su.User.Email),
+		APIBaseURL:    strings.TrimRight(u.cfg.LiteLLMBaseURL, "/") + "/v1",
+		ExtendUntil:   u.extendUntil(profile),
+		ExpiresInDays: daysUntilExpiry(apiKey),
+		ExpiryUrgent:  isExpiryUrgent(apiKey),
+		ProfileName:   profileName(profile),
+		QuotaTokens:   profileQuota(profile),
+		QuotaPeriod:   profilePeriod(profile),
+		CSRFToken:     u.csrf.Token(w, r),
+		Lang:          lang,
+		Langs:         i18n.Supported,
+		Path:          r.URL.Path,
 	}); err != nil {
 		slog.Error("dashboard template", "err", err)
 	}

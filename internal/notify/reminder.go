@@ -41,7 +41,8 @@ func (r *Reminder) Run(ctx context.Context) error {
 			msg := r.message(k, days)
 			if err := r.notifier.Notify(ctx, msg); err != nil {
 				// Leave the notice unrecorded so the next run retries.
-				slog.Error("notify %s about key %s", "err", k.Email, k.KeyPrefix, err)
+				slog.Error("send expiry notice",
+					"email", k.Email, "key_prefix", k.KeyPrefix, "days", days, "err", err)
 				continue
 			}
 			if err := r.store.MarkExpiryNoticeSent(ctx, k.ID, days); err != nil {
@@ -73,18 +74,38 @@ func (r *Reminder) Start(ctx context.Context, every time.Duration) {
 	}
 }
 
+// message builds the expiry notice. It is bilingual, German first: the portal
+// is German by default, but nothing records a user's language, so the mail
+// cannot pick one. Both halves carry the date and the link, so either is
+// enough on its own.
 func (r *Reminder) message(k database.ExpiringKey, days int) Message {
-	when := "in " + pluralDays(days)
+	whenDE := "in " + pluralDaysDE(days)
+	whenEN := "in " + pluralDaysEN(days)
 	if days == 1 {
-		when = "tomorrow"
+		whenDE, whenEN = "morgen", "tomorrow"
 	}
 
 	name := k.Name
 	if name == "" {
 		name = k.Email
 	}
+	date := k.ExpiresAt.Format("2006-01-02")
 
-	body := fmt.Sprintf(`Hello %s,
+	body := fmt.Sprintf(`Hallo %s,
+
+Ihr KI-API-Schlüssel (%s…) läuft %s ab, am %s.
+
+Sie können ihn mit einem Klick um einen vollen Zeitraum verlängern oder
+einen neuen erzeugen:
+
+  %s
+
+Wenn Sie den Schlüssel nicht mehr benötigen, können Sie diese Nachricht
+ignorieren; er wird von selbst ungültig.
+
+---
+
+Hello %s,
 
 your AI API key (%s…) expires %s, on %s.
 
@@ -95,16 +116,24 @@ replacement, at:
 
 If you no longer need the key you can ignore this message; it will stop
 working on its own.
-`, name, k.KeyPrefix, when, k.ExpiresAt.Format("2006-01-02"), r.frontend)
+`, name, k.KeyPrefix, whenDE, date, r.frontend,
+		name, k.KeyPrefix, whenEN, date, r.frontend)
 
 	return Message{
 		To:      k.Email,
-		Subject: fmt.Sprintf("Your AI API key expires %s", when),
+		Subject: fmt.Sprintf("Ihr KI-API-Schlüssel läuft %s ab / Your AI API key expires %s", whenDE, whenEN),
 		Body:    body,
 	}
 }
 
-func pluralDays(d int) string {
+func pluralDaysDE(d int) string {
+	if d == 1 {
+		return "1 Tag"
+	}
+	return fmt.Sprintf("%d Tagen", d)
+}
+
+func pluralDaysEN(d int) string {
 	if d == 1 {
 		return "1 day"
 	}

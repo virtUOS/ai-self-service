@@ -16,13 +16,12 @@ func TestDashboardTemplateRenders(t *testing.T) {
 	tmpl := parseDashboardTemplate()
 	var buf bytes.Buffer
 	err := tmpl.Execute(&buf, dashboardData{
-		Lang:            i18n.DE,
-		User:            &database.User{Name: "Test", Email: "t@example.com"},
-		APIKey:          &database.APIKey{KeyPrefix: "sk-abc123", ExpiresAt: time.Now().Add(24 * time.Hour)},
-		NewKey:          "sk-brand-new",
-		APIBaseURL:      "https://litellm.example.com/v1",
-		KeyDurationDays: 90,
-		CSRFToken:       "TOK123",
+		Lang:       i18n.DE,
+		User:       &database.User{Name: "Test", Email: "t@example.com"},
+		APIKey:     &database.APIKey{KeyPrefix: "sk-abc123", ExpiresAt: time.Now().Add(24 * time.Hour)},
+		NewKey:     "sk-brand-new",
+		APIBaseURL: "https://litellm.example.com/v1",
+		CSRFToken:  "TOK123",
 	})
 	if err != nil {
 		t.Fatalf("execute: %v", err)
