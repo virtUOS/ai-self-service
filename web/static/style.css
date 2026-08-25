@@ -409,6 +409,10 @@ tr:hover td { background: var(--tr-hover); }
    clicking one copies it verbatim. */
 .model-copy {
   font: inherit;
+  /* A button does not inherit text colour: without this it falls back to the
+     browser default, which is near-black and unreadable on the dark theme's
+     key background (1.36:1). */
+  color: var(--text);
   background: none;
   border: 0;
   padding: 0;
@@ -470,4 +474,26 @@ tr:hover td { background: var(--tr-hover); }
   font-size: .7rem;
   color: var(--text-muted);
   margin-top: .3rem;
+}
+
+/* Quota bar: how much of the enforced allowance is gone. Distinct from the
+   usage chart above it, which counts a rolling 30 days rather than the
+   window the gateway resets on. */
+.quota-bar {
+  height: 8px;
+  background: var(--key-bg);
+  border: 1px solid var(--key-border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: .4rem;
+}
+
+.quota-fill {
+  height: 100%;
+  background: var(--primary);
+  transition: width .2s;
+}
+
+.quota-fill.quota-full {
+  background: var(--alert-danger-border);
 }

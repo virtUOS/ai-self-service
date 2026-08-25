@@ -53,6 +53,19 @@ type ModelLister interface {
 	ListModels(ctx context.Context) ([]string, error)
 }
 
+// Quota is a key's consumption against the allowance the gateway enforces.
+// It is reported separately from usage because it resets on the budget period,
+// which need not match the window usage is reported over.
+type Quota struct {
+	// UsedTokens is consumption in the current window.
+	UsedTokens int64
+	// LimitTokens is the allowance. Zero means the key is unlimited, which is
+	// different from an allowance that has been fully consumed.
+	LimitTokens int64
+	// ResetsAt is when the window rolls over. Zero when unknown or unlimited.
+	ResetsAt time.Time
+}
+
 // DailyUsage is one day's token consumption for a key.
 type DailyUsage struct {
 	// Day is the UTC date the tokens were spent on, as YYYY-MM-DD.
@@ -78,6 +91,10 @@ type UsageReporter interface {
 	// that survives when per-request logging is unavailable, so it is reported
 	// separately rather than derived from Usage.
 	TotalUsage(ctx context.Context, ref string) (int64, error)
+
+	// Quota reports consumption against the enforced allowance, in the window
+	// the gateway resets on.
+	Quota(ctx context.Context, ref string) (Quota, error)
 }
 
 // Provider issues and revokes keys on an upstream gateway.

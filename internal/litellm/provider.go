@@ -30,6 +30,11 @@ func (p *Provider) Usage(ctx context.Context, ref string, days int) ([]keyprovid
 	return p.client.Usage(ctx, ref, days)
 }
 
+// Quota reports consumption against the key's enforced allowance.
+func (p *Provider) Quota(ctx context.Context, ref string) (keyprovider.Quota, error) {
+	return p.client.KeyQuota(ctx, ref)
+}
+
 // TotalUsage reports the key's cumulative token count.
 func (p *Provider) TotalUsage(ctx context.Context, ref string) (int64, error) {
 	return p.client.KeySpendTokens(ctx, ref)

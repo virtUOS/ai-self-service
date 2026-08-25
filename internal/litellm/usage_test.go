@@ -135,3 +135,52 @@ func TestKeySpendZeroForUnusedKey(t *testing.T) {
 		t.Errorf("got %d, %v; want 0, nil", total, err)
 	}
 }
+
+// The quota figure must come from the counter LiteLLM actually enforces
+// against — the key's own spend against its budget — not from summing the
+// per-day log, whose 30-day window rarely matches the quota period.
+func TestKeyQuotaReportsWindow(t *testing.T) {
+	reset := "2026-08-26T00:00:00Z"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"info": map[string]any{
+			"spend": 4.2e-02, "max_budget": 1.5e-01, "budget_reset_at": reset,
+		}})
+	}))
+	defer srv.Close()
+
+	got, err := NewClient(srv.URL, "mk").KeyQuota(context.Background(), "sk-x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LimitTokens != 1_500_000 {
+		t.Errorf("LimitTokens = %d, want 1500000", got.LimitTokens)
+	}
+	if got.UsedTokens != 420_000 {
+		t.Errorf("UsedTokens = %d, want 420000", got.UsedTokens)
+	}
+	if got.ResetsAt.IsZero() {
+		t.Error("ResetsAt not parsed")
+	}
+}
+
+// A key with no budget has nothing remaining to report; the caller must be
+// able to tell that apart from a fully-consumed quota.
+func TestKeyQuotaUnlimited(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"info": map[string]any{
+			"spend": 1e-05, "max_budget": nil,
+		}})
+	}))
+	defer srv.Close()
+
+	got, err := NewClient(srv.URL, "mk").KeyQuota(context.Background(), "sk-x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LimitTokens != 0 {
+		t.Errorf("LimitTokens = %d, want 0 for an unlimited key", got.LimitTokens)
+	}
+	if got.UsedTokens != 100 {
+		t.Errorf("UsedTokens = %d, want 100", got.UsedTokens)
+	}
+}

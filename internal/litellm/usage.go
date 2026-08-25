@@ -85,8 +85,58 @@ func (c *Client) Usage(ctx context.Context, key string, days int) ([]keyprovider
 
 type keyInfoResponse struct {
 	Info struct {
-		Spend float64 `json:"spend"`
+		Spend         float64  `json:"spend"`
+		MaxBudget     *float64 `json:"max_budget"`
+		BudgetResetAt *string  `json:"budget_reset_at"`
 	} `json:"info"`
+}
+
+// keyInfo fetches the gateway's own record of a key.
+func (c *Client) keyInfo(ctx context.Context, key string) (keyInfoResponse, error) {
+	var info keyInfoResponse
+
+	q := url.Values{}
+	q.Set("key", key)
+
+	resp, err := c.do(ctx, http.MethodGet, "/key/info?"+q.Encode(), nil)
+	if err != nil {
+		return info, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return info, fmt.Errorf("LiteLLM /key/info returned %d: %s", resp.StatusCode, b)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return info, fmt.Errorf("decode key info: %w", err)
+	}
+	return info, nil
+}
+
+// KeyQuota reports consumption against the key's enforced budget.
+//
+// Both figures come from the key itself rather than the per-request log: this
+// is the counter LiteLLM actually enforces against, and it resets on the
+// budget period, which rarely matches the 30-day window the log is charted
+// over. Summing the log would give a number that disagrees with the limit
+// users actually hit.
+func (c *Client) KeyQuota(ctx context.Context, key string) (keyprovider.Quota, error) {
+	info, err := c.keyInfo(ctx, key)
+	if err != nil {
+		return keyprovider.Quota{}, err
+	}
+
+	q := keyprovider.Quota{UsedTokens: BudgetToTokens(info.Info.Spend)}
+	if info.Info.MaxBudget != nil {
+		q.LimitTokens = BudgetToTokens(*info.Info.MaxBudget)
+	}
+	if info.Info.BudgetResetAt != nil {
+		if t, err := time.Parse(time.RFC3339, *info.Info.BudgetResetAt); err == nil {
+			q.ResetsAt = t
+		}
+	}
+	return q, nil
 }
 
 // KeySpendTokens is the cumulative token usage recorded on the key itself,
@@ -98,23 +148,9 @@ type keyInfoResponse struct {
 // key's own spend counter keeps working either way. The cost is granularity —
 // one cumulative figure for the key's lifetime, with no per-day breakdown.
 func (c *Client) KeySpendTokens(ctx context.Context, key string) (int64, error) {
-	q := url.Values{}
-	q.Set("key", key)
-
-	resp, err := c.do(ctx, http.MethodGet, "/key/info?"+q.Encode(), nil)
+	info, err := c.keyInfo(ctx, key)
 	if err != nil {
 		return 0, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return 0, fmt.Errorf("LiteLLM /key/info returned %d: %s", resp.StatusCode, b)
-	}
-
-	var info keyInfoResponse
-	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		return 0, fmt.Errorf("decode key info: %w", err)
 	}
 	return BudgetToTokens(info.Info.Spend), nil
 }

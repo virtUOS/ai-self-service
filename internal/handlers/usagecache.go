@@ -95,3 +95,13 @@ func (c *usageCache) Total(ctx context.Context, ref string) int64 {
 	c.totals[ref] = totalEntry{tokens: total, fetchedAt: time.Now()}
 	return total
 }
+
+// Quota returns the key's consumption against its enforced allowance.
+// Uncached: it is the figure users act on when they are close to the limit,
+// and a minute-stale number there is worse than a fresh call.
+func (c *usageCache) Quota(ctx context.Context, ref string) (keyprovider.Quota, error) {
+	if c.reporter == nil || ref == "" {
+		return keyprovider.Quota{}, nil
+	}
+	return c.reporter.Quota(ctx, ref)
+}
