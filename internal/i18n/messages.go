@@ -30,6 +30,7 @@ var messages = map[string]map[Lang]string{
 	"dash.nokey":        {DE: "Sie haben noch keinen API-Schlüssel.", EN: "You don't have an API key yet."},
 	"dash.generate":     {DE: "API-Schlüssel erzeugen", EN: "Generate API key"},
 	"dash.extend":       {DE: "Verlängern", EN: "Extend"},
+	"dash.extend.until": {DE: "gültig bis", EN: "until"},
 	"dash.regenerate":   {DE: "Neu erzeugen", EN: "Regenerate"},
 	"dash.delete":       {DE: "Löschen", EN: "Delete"},
 	"dash.days":         {DE: "Tage", EN: "days"},

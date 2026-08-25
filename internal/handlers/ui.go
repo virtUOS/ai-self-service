@@ -65,6 +65,7 @@ type dashboardData struct {
 	IsAdmin         bool
 	APIBaseURL      string
 	KeyDurationDays int
+	ExtendUntil     string
 	ExpiresInDays   int
 	ExpiryUrgent    bool
 	ProfileName     string
@@ -120,6 +121,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		IsAdmin:         u.cfg.IsAdmin(su.User.Email),
 		APIBaseURL:      strings.TrimRight(u.cfg.LiteLLMBaseURL, "/") + "/v1",
 		KeyDurationDays: u.keyDuration(profile),
+		ExtendUntil:     u.extendUntil(profile),
 		ExpiresInDays:   daysUntilExpiry(apiKey),
 		ExpiryUrgent:    isExpiryUrgent(apiKey),
 		ProfileName:     profileName(profile),
@@ -432,6 +434,15 @@ func (u *UI) keyDuration(p *database.Profile) int {
 		return p.KeyDurationDays
 	}
 	return u.cfg.KeyDurationDays
+}
+
+// extendUntil is the expiry date the Extend button will set, formatted for
+// display. Extend moves expiry to a full period from now rather than adding to
+// whatever remains, so the button names the resulting date instead of promising
+// "+N days" — an addition it does not perform. Same source as ExtendKey, so the
+// two cannot drift.
+func (u *UI) extendUntil(p *database.Profile) string {
+	return time.Now().AddDate(0, 0, u.keyDuration(p)).Format("2006-01-02")
 }
 
 func (u *UI) resolveProfile(r *http.Request, user *database.User) (*database.Profile, error) {

@@ -95,7 +95,7 @@
       <div class="btn-row">
         <form method="POST" action="/key/extend">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-          <button type="submit" class="btn btn-secondary">{{T .Lang "dash.extend"}} (+{{.KeyDurationDays}} {{T .Lang "dash.days"}})</button>
+          <button type="submit" class="btn btn-secondary">{{T .Lang "dash.extend"}} ({{T .Lang "dash.extend.until"}} {{.ExtendUntil}})</button>
         </form>
         <form method="POST" action="/key/generate"
               onsubmit="return confirm({{T .Lang "dash.confirm.regenerate"}})">
