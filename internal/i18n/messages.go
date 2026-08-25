@@ -68,9 +68,18 @@ var messages = map[string]map[Lang]string{
 	"dash.expiry.today.note":   {DE: "Verlängern Sie ihn, um den Zugriff zu behalten.", EN: "Extend it to keep your access."},
 	"dash.expiry.soon.note":    {DE: "Verlängern Sie ihn jetzt, um Unterbrechungen zu vermeiden.", EN: "Extend it now to avoid interruption."},
 
-	"badge.expired": {DE: "abgelaufen", EN: "expired"},
-	"badge.today":   {DE: "heute", EN: "Today"},
-	"badge.left":    {DE: "T übrig", EN: "d left"},
+	"dash.time.in":      {DE: "in", EN: "in"},
+	"dash.time.now":     {DE: "jeden Moment", EN: "any moment now"},
+	"dash.time.minute":  {DE: "Minute", EN: "minute"},
+	"dash.time.minutes": {DE: "Minuten", EN: "minutes"},
+	"dash.time.hour":    {DE: "Stunde", EN: "hour"},
+	"dash.time.hours":   {DE: "Stunden", EN: "hours"},
+	"dash.time.day":     {DE: "Tag", EN: "day"},
+	"dash.time.days":    {DE: "Tagen", EN: "days"},
+	"badge.daysleft":    {DE: "T übrig", EN: "d left"},
+	"badge.expired":     {DE: "abgelaufen", EN: "expired"},
+	"badge.today":       {DE: "heute", EN: "Today"},
+	"badge.left":        {DE: "T übrig", EN: "d left"},
 
 	// ── Admin ───────────────────────────────────────────────────────────
 	"admin.title":    {DE: "KI-API-Schlüssel-Portal — Administration", EN: "AI API Key Portal — Admin"},
