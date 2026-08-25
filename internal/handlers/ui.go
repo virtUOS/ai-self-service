@@ -32,6 +32,7 @@ type UI struct {
 	flash    *keyFlash
 	csrf     *session.CSRF
 	models   *modelCache
+	usage    *usageCache
 }
 
 func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager, oidc *oidcpkg.Provider, keys keyprovider.Provider, csrf *session.CSRF) *UI {
@@ -39,8 +40,10 @@ func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager,
 	// Only some gateways can enumerate models; the dashboard omits the list
 	// when the provider cannot.
 	lister, _ := keys.(keyprovider.ModelLister)
+	reporter, _ := keys.(keyprovider.UsageReporter)
 	return &UI{cfg: cfg, store: store, sessions: sessions, oidc: oidc, keys: keys,
-		tmpl: tmpl, flash: newKeyFlash(), csrf: csrf, models: newModelCache(lister)}
+		tmpl: tmpl, flash: newKeyFlash(), csrf: csrf,
+		models: newModelCache(lister), usage: newUsageCache(reporter)}
 }
 
 func (u *UI) requireSession(r *http.Request) (*session.SessionUser, error) {
@@ -77,6 +80,7 @@ type dashboardData struct {
 	QuotaTokens   string
 	QuotaPeriod   string
 	Models        []string
+	Usage         usageReport
 	CSRFToken     string
 }
 
@@ -133,6 +137,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		QuotaTokens:   profileQuota(profile),
 		QuotaPeriod:   profilePeriod(profile),
 		Models:        u.userModels(r.Context(), profile),
+		Usage:         u.userUsage(r.Context(), apiKey),
 		CSRFToken:     u.csrf.Token(w, r),
 		Lang:          lang,
 		Langs:         i18n.Supported,
@@ -440,6 +445,38 @@ func (u *UI) keyDuration(p *database.Profile) int {
 		return p.KeyDurationDays
 	}
 	return u.cfg.KeyDurationDays
+}
+
+// usageReport is what the dashboard shows about consumption.
+type usageReport struct {
+	Days  []keyprovider.DailyUsage
+	Total int64
+	// Peak is the busiest day's total, used to scale the bars. Zero when there
+	// is no traffic, and callers must not divide by it unchecked.
+	Peak int64
+}
+
+// userUsage summarises what the user's current key has consumed. Usage belongs
+// to a key rather than a person upstream, so regenerating starts the history
+// over — the new key is a different key.
+//
+// An empty report means "show nothing": no key, a gateway that cannot be
+// reached, or a provider that does not report usage at all.
+func (u *UI) userUsage(ctx context.Context, k *database.APIKey) usageReport {
+	if k == nil {
+		return usageReport{}
+	}
+	days := u.usage.Days(ctx, k.LiteLLMKey)
+
+	var rep usageReport
+	rep.Days = days
+	for _, d := range days {
+		rep.Total += d.Tokens
+		if d.Tokens > rep.Peak {
+			rep.Peak = d.Tokens
+		}
+	}
+	return rep
 }
 
 // userModels is the model list to show a user: the ones their key will

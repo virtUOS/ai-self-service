@@ -20,9 +20,15 @@ type Provider struct {
 func NewProvider(c *Client) *Provider { return &Provider{client: c} }
 
 var (
-	_ keyprovider.Provider    = (*Provider)(nil)
-	_ keyprovider.ModelLister = (*Provider)(nil)
+	_ keyprovider.Provider      = (*Provider)(nil)
+	_ keyprovider.ModelLister   = (*Provider)(nil)
+	_ keyprovider.UsageReporter = (*Provider)(nil)
 )
+
+// Usage reports what a key has consumed, per day.
+func (p *Provider) Usage(ctx context.Context, ref string, days int) ([]keyprovider.DailyUsage, error) {
+	return p.client.Usage(ctx, ref, days)
+}
 
 // ListModels reports the models the gateway serves.
 func (p *Provider) ListModels(ctx context.Context) ([]string, error) {
