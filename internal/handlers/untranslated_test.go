@@ -89,10 +89,13 @@ func TestDashboardRendersNoRawCatalogueKeys(t *testing.T) {
 	if err := parseDashboardTemplate().Execute(&buf, data); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	// Strip tags first: a src="/static/help.js" is not a rendered key. What
-	// remains is the text a user actually sees.
-	text := regexp.MustCompile(`(?s)<script.*?</script>`).ReplaceAllString(buf.String(), " ")
-	text = regexp.MustCompile(`<[^>]*>`).ReplaceAllString(text, " ")
+	// Script bodies are checked too, not stripped: the quota reset and expiry
+	// badge are built in JS from catalogue strings, so a missing key surfaces
+	// there rather than in the markup. Stripping scripts hid exactly that,
+	// and nine keys shipped missing before this was caught by hand.
+	//
+	// Tags are dropped so a src="/static/help.js" is not read as a key.
+	text := regexp.MustCompile(`<[^>]*>`).ReplaceAllString(buf.String(), " ")
 
 	// Catalogue keys are dotted lowercase identifiers like "dash.quota.used".
 	raw := regexp.MustCompile(`\b(dash|help|badge|admin)\.[a-z][a-z.]*[a-z]\b`)
