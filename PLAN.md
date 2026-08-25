@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.3.0` |
+| Latest release | `v0.3.2` |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -36,11 +36,13 @@ Phases 1–6 of the original assessment all shipped:
   notices are bilingual too, since nothing records a per-user language.
 - **Expiry email** — delivered through `relay.rz.uni-osnabrueck.de:25`, which
   accepts mail from known hosts without credentials. Verified end to end.
-- **Dashboard usage** — the models a key may use, and what it has consumed
-  per day over the last 30 days.
+- **Dashboard usage** — the models a key may use (click to copy), what it has
+  consumed per day over 30 days, and what is left of the enforced quota.
+- **Profile sync** — a profile's limits are re-applied to existing keys on
+  every dashboard load, so an edit takes effect without regenerating.
 - **Local dev** — Keycloak, or a faster OIDC mock under `--profile mock`.
 
-109 tests, no skips. `go test ./...` needs nothing external.
+126 tests, no skips. `go test ./...` needs nothing external.
 
 ## Not done
 
@@ -64,6 +66,16 @@ Phases 1–6 of the original assessment all shipped:
   so a bare `relay.rz.uni-osnabrueck.de` fails at runtime with “missing port in
   address”. The HIT site splits host and port into separate variables; this one
   does not.
+- **Budgets reset lazily.** LiteLLM clears a key's spend on the first request
+  after the window passes, not on a timer. A key can sit past its
+  `budget_reset_at` still reporting the old spend and still rejecting requests,
+  until something asks it to serve. The dashboard renders a past reset as “any
+  moment now” rather than counting into the negative.
+- **Spend logs were re-enabled** (2026-08-25) after being off since v1.90.0 to
+  bound a proxy memory leak (BerriAI/litellm#12685, now closed). The nightly
+  restart that capped that growth is removed on testing. RSS held flat over 105
+  requests, but the original leak was measured over days — watch it before
+  production follows.
 - **`/spend/logs` changes shape when given dates.** With `start_date` and
   `end_date` it returns pre-aggregated daily rows carrying `spend` only — no
   token counts — and local models are priced so that spend is always zero, so
