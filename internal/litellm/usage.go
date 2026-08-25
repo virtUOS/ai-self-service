@@ -165,18 +165,24 @@ func (c *Client) KeySpendTokens(ctx context.Context, key string) (int64, error) 
 // omitted field untouched, so clearing a quota has to send null — otherwise a
 // profile that loses its allowance keeps enforcing the previous one.
 func (c *Client) UpdateKeyLimits(ctx context.Context, key string, l keyprovider.Limits) error {
-	models := l.Models
-	if len(models) == 0 {
-		// LiteLLM reads an empty list as "no models"; null means "all".
-		models = nil
-	}
-
 	payload := map[string]any{
 		"key":       key,
-		"models":    models,
 		"tpm_limit": l.TokensPerMinute,
 		"rpm_limit": l.RequestsPerMinute,
 	}
+
+	// An unrestricted profile sends an empty list, not null. /key/update
+	// rejects null with "A value is required but not set" — unlike
+	// /key/generate, where omitempty drops the field before it reaches the API.
+	//
+	// Empty must be sent rather than omitted, or a profile that drops its
+	// restriction would never clear the old list. Verified against the live
+	// gateway: [] clears a restriction, and a key with [] serves every model.
+	models := l.Models
+	if models == nil {
+		models = []string{}
+	}
+	payload["models"] = models
 
 	if l.QuotaTokens > 0 && l.QuotaPeriod != "" {
 		payload["max_budget"] = TokensToBudget(l.QuotaTokens)

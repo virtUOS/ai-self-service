@@ -241,3 +241,48 @@ func TestUpdateKeyLimitsClearsBudget(t *testing.T) {
 		t.Errorf("payload %s does not clear max_budget", raw)
 	}
 }
+
+// LiteLLM's /key/update rejects an explicit null for models with a 400
+// ("A value is required but not set"), unlike /key/generate where the field is
+// simply omitted. An unrestricted profile must therefore omit it rather than
+// send null, or every sync fails and no limits are ever applied.
+func TestUpdateKeyLimitsOmitsNullModels(t *testing.T) {
+	var raw string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		w.Write([]byte("{}"))
+	}))
+	defer srv.Close()
+
+	if err := NewClient(srv.URL, "mk").UpdateKeyLimits(
+		context.Background(), "sk-x", keyprovider.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(raw, `"models":null`) {
+		t.Errorf("payload sends null models, which LiteLLM rejects: %s", raw)
+	}
+	// Empty must still be sent, or dropping a restriction never clears it.
+	if !strings.Contains(raw, `"models":[]`) {
+		t.Errorf("payload does not clear the model list: %s", raw)
+	}
+}
+
+// A restricting profile must still send its list.
+func TestUpdateKeyLimitsSendsModelList(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&got)
+		w.Write([]byte("{}"))
+	}))
+	defer srv.Close()
+
+	if err := NewClient(srv.URL, "mk").UpdateKeyLimits(
+		context.Background(), "sk-x", keyprovider.Limits{Models: []string{"gpt-4o"}}); err != nil {
+		t.Fatal(err)
+	}
+	m, ok := got["models"].([]any)
+	if !ok || len(m) != 1 || m[0] != "gpt-4o" {
+		t.Errorf("models = %v, want [gpt-4o]", got["models"])
+	}
+}
