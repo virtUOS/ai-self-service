@@ -21,10 +21,10 @@ type Limits struct {
 	TokensPerMinute   *int64
 	RequestsPerMinute *int64
 
-	// QuotaTokens is a fair-use allowance consumed over QuotaPeriod, after
-	// which requests fail until the period resets. Zero means unlimited.
-	QuotaTokens int64
-	QuotaPeriod string // "1h" | "24h" | "7d" | "30d"
+	// Quotas are fair-use allowances applied together, each resetting on its
+	// own period, after which requests fail until that period rolls over. The
+	// tightest window binds. Empty means unlimited.
+	Quotas []QuotaWindow
 }
 
 // KeyRequest describes a key to be created.
@@ -51,6 +51,12 @@ type KeyResult struct {
 // It is separate from Provider because not every gateway can do this.
 type ModelLister interface {
 	ListModels(ctx context.Context) ([]string, error)
+}
+
+// QuotaWindow is one allowance and the period it resets on.
+type QuotaWindow struct {
+	Tokens int64
+	Period string // "1h" | "24h" | "7d" | "30d"
 }
 
 // Quota is a key's consumption against the allowance the gateway enforces.

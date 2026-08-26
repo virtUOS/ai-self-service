@@ -77,8 +77,7 @@ type dashboardData struct {
 	ExpiresInDays int
 	ExpiryUrgent  bool
 	ProfileName   string
-	QuotaTokens   string
-	QuotaPeriod   string
+	Quotas        []quotaLine
 	Models        []string
 	Usage         usageReport
 	CSRFToken     string
@@ -141,8 +140,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		ExpiresInDays: daysUntilExpiry(apiKey),
 		ExpiryUrgent:  isExpiryUrgent(apiKey),
 		ProfileName:   profileName(profile),
-		QuotaTokens:   profileQuota(profile),
-		QuotaPeriod:   profilePeriod(profile),
+		Quotas:        profileQuotaLines(profile, lang),
 		Models:        u.userModels(r.Context(), profile),
 		Usage:         u.userUsage(r.Context(), apiKey),
 		CSRFToken:     u.csrf.Token(w, r),
@@ -419,27 +417,45 @@ func profileName(p *database.Profile) string {
 	return p.Name
 }
 
-// profileQuota renders the fair-use allowance, or "" when there is none.
-func profileQuota(p *database.Profile) string {
-	if p == nil || p.QuotaTokens <= 0 || p.QuotaPeriod == "" {
-		return ""
-	}
-	return litellm.FormatTokens(p.QuotaTokens)
+// quotaLine is one allowance window as the dashboard shows it.
+type quotaLine struct {
+	Tokens string
+	Period string
 }
 
-func profilePeriod(p *database.Profile) string {
-	if p == nil || p.QuotaTokens <= 0 {
-		return ""
+// profileQuotaLines renders a profile's allowance windows. Empty when the
+// profile is unlimited.
+//
+// The period is translated rather than shown as the raw "24h": the account
+// card is prose, and an untranslated unit reads badly beside German text.
+func profileQuotaLines(p *database.Profile, lang i18n.Lang) []quotaLine {
+	if p == nil {
+		return nil
 	}
-	switch p.QuotaPeriod {
+	out := make([]quotaLine, 0, len(p.Quotas))
+	for _, q := range p.Quotas {
+		if q.Tokens <= 0 || q.Period == "" {
+			continue
+		}
+		out = append(out, quotaLine{
+			Tokens: litellm.FormatTokens(q.Tokens),
+			Period: periodLabel(q.Period, lang),
+		})
+	}
+	return out
+}
+
+// periodLabel turns a gateway period into words the reader's language uses.
+func periodLabel(period string, lang i18n.Lang) string {
+	switch period {
 	case "1h":
-		return "per hour"
+		return i18n.T(lang, "period.hour")
 	case "24h":
-		return "per day"
+		return i18n.T(lang, "period.day")
 	case "7d":
-		return "per week"
+		return i18n.T(lang, "period.week")
 	case "30d":
-		return "per month"
+		return i18n.T(lang, "period.month")
 	default:
 		return ""
 	}
@@ -561,12 +577,15 @@ func profileLimits(p *database.Profile) keyprovider.Limits {
 	if p == nil {
 		return keyprovider.Limits{}
 	}
+	windows := make([]keyprovider.QuotaWindow, 0, len(p.Quotas))
+	for _, q := range p.Quotas {
+		windows = append(windows, keyprovider.QuotaWindow{Tokens: q.Tokens, Period: q.Period})
+	}
 	return keyprovider.Limits{
 		Models:            p.Models,
 		TokensPerMinute:   p.TPMLimit,
 		RequestsPerMinute: p.RPMLimit,
-		QuotaTokens:       p.QuotaTokens,
-		QuotaPeriod:       p.QuotaPeriod,
+		Quotas:            windows,
 	}
 }
 

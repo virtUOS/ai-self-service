@@ -48,6 +48,12 @@ var messages = map[string]map[Lang]string{
 	"dash.usagestats":             {DE: "Ihr Verbrauch", EN: "Your usage"},
 	"dash.usagestats.note":        {DE: "Tokenverbrauch dieses Schlüssels in den letzten 30 Tagen. Ein neu erzeugter Schlüssel beginnt wieder bei null.", EN: "Tokens used by this key over the last 30 days. A newly generated key starts again at zero."},
 	"dash.usagestats.total":       {DE: "Gesamt", EN: "Total"},
+	"admin.form.quota.add":        {DE: "Fenster hinzufügen", EN: "Add window"},
+	"admin.form.quota.tokens":     {DE: "Tokens", EN: "Tokens"},
+	"period.hour":                 {DE: "pro Stunde", EN: "per hour"},
+	"period.day":                  {DE: "pro Tag", EN: "per day"},
+	"period.week":                 {DE: "pro Woche", EN: "per week"},
+	"period.month":                {DE: "pro Monat", EN: "per month"},
 	"dash.quota.remaining":        {DE: "verbleibend", EN: "remaining"},
 	"dash.quota.of":               {DE: "von", EN: "of"},
 	"dash.quota.used":             {DE: "verbraucht", EN: "used"},
@@ -152,8 +158,7 @@ var messages = map[string]map[Lang]string{
 	"help.quota":          {DE: "Token-Kontingent und wie oft es zurückgesetzt wird. Anfragen schlagen fehl, sobald es aufgebraucht ist, und funktionieren nach dem Zurücksetzen wieder.", EN: "Fair-use token allowance and how often it resets. Requests fail once it is used up, then resume at the next reset."},
 	"help.models":         {DE: "Beschränkt dieses Profil auf bestimmte Modelle. Leer lassen, um alle Modelle des Gateways zu erlauben.", EN: "Restrict this profile to specific models. Leave blank to allow every model the gateway offers."},
 	"help.validity":       {DE: "Wie viele Tage ein erzeugter Schlüssel gilt. Studierende z. B. 30, Beschäftigte 365. Nutzende können jederzeit um einen vollen Zeitraum verlängern. Leer = Server-Standard.", EN: "How many days a generated key lasts. Students might get 30, staff 365. Users can click Extend for another full period at any time. Blank uses the server default."},
-	"help.usagelimit":     {DE: "Gesamtzahl der Token pro Zeitraum, z. B. 1000000 für eine Million. Ist das Kontingent verbraucht, schlagen Anfragen fehl, bis der Zeitraum zurückgesetzt wird. Leer = kein Limit. Wirkt nur mit einem Zeitraum.", EN: "Total tokens allowed per reset period, e.g. 1000000 for a million tokens. Once spent, requests fail until the period resets. Blank means no limit. Needs a reset period to take effect."},
-	"help.period":         {DE: "Wie oft das Nutzungslimit auf null zurückgesetzt wird. Die Zurücksetzung erfolgt zu festen UTC-Zeitpunkten — täglich um Mitternacht UTC, wöchentlich montags, monatlich am 1. — nicht rollierend ab Erstellung des Schlüssels. Nur ein Zeitraum pro Profil: Das Gateway kann kein Tages- und Monatslimit gleichzeitig durchsetzen.", EN: "How often the usage limit goes back to zero. Resets happen on fixed UTC boundaries — daily at midnight UTC, weekly on Monday, monthly on the 1st — not a rolling window from when the key was made. Only one period per profile: the gateway cannot enforce a daily and a monthly cap at the same time."},
+	"help.usagelimit":     {DE: "Wie viele Token pro Zeitraum erlaubt sind, z. B. 1000000 für eine Million. Ist das Kontingent verbraucht, schlagen Anfragen fehl, bis der Zeitraum zurückgesetzt wird. Mehrere Fenster gelten gleichzeitig — etwa 100k pro Tag und 1M pro Monat —, das jeweils engste greift. Ohne Fenster gilt kein Limit. Die Zurücksetzung erfolgt zu festen UTC-Zeitpunkten: täglich um Mitternacht UTC, wöchentlich montags, monatlich am 1.", EN: "How many tokens are allowed per period, e.g. 1000000 for a million. Once spent, requests fail until the period resets. Several windows apply at once — say 100k per day and 1M per month — and the tightest one binds. No windows means no limit. Resets happen on fixed UTC boundaries: daily at midnight UTC, weekly on Monday, monthly on the 1st."},
 	"help.defaultprofile": {DE: "Gilt für alle Nutzenden ohne ausdrücklich zugewiesenes Profil. Genau ein Profil ist Standard; ein neues zu markieren verschiebt ihn.", EN: "Applied to every user who has not been assigned a profile explicitly. Exactly one profile is the default; marking a new one moves it."},
 
 	// ── Flash messages ──────────────────────────────────────────────────

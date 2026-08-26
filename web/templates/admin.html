@@ -71,7 +71,7 @@
               <td>{{if .RPMLimit}}{{.RPMLimit}}{{else}}<em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>{{end}}</td>
               <td>{{if .KeyDurationDays}}{{.KeyDurationDays}} days{{else}}<em class="text-faint">{{$.DefaultKeyDays}} days (server default)</em>{{end}}</td>
               <td>
-                {{if .QuotaTokens}}{{fmtTokens .QuotaTokens}} {{fmtPeriod .QuotaPeriod}}{{else}}<em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>{{end}}
+                {{if .Quotas}}{{range $i, $q := .Quotas}}{{if $i}}<br>{{end}}{{fmtTokens $q.Tokens}} {{fmtPeriod $q.Period}}{{end}}{{else}}<em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>{{end}}
               </td>
               <td>{{if .IsDefault}}✓{{end}}</td>
               <td>
@@ -82,8 +82,7 @@
                             '{{if .TPMLimit}}{{.TPMLimit}}{{end}}',
                             '{{if .RPMLimit}}{{.RPMLimit}}{{end}}',
                             '{{if .KeyDurationDays}}{{.KeyDurationDays}}{{end}}',
-                            '{{if .QuotaTokens}}{{.QuotaTokens}}{{end}}',
-                            '{{.QuotaPeriod}}',
+                            {{quotaJSON .Quotas}},
                             {{.IsDefault}})">{{T $.Lang "admin.edit"}}</button>
                   {{if not .IsDefault}}
                   <form method="POST" action="/admin/profiles/{{.ID}}/delete"
@@ -153,21 +152,13 @@
             <input type="number" id="pf-expiry" name="key_duration_days" min="0" placeholder="server default">
             <div class="form-hint">{{T .Lang "admin.form.validity.hint"}}</div>
           </div>
-          <div class="form-group">
-            <label for="pf-quota">{{T .Lang "admin.form.quota"}} <button type="button" class="help" data-help="{{T $.Lang "help.usagelimit"}}">?</button></label>
-            <input type="number" id="pf-quota" name="quota_tokens" min="0" placeholder="unlimited">
+          <div class="form-group" style="grid-column:1/-1">
+            <label>{{T .Lang "admin.form.quota"}} <button type="button" class="help" data-help="{{T $.Lang "help.usagelimit"}}">?</button></label>
+            <div id="pf-quotas"></div>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="addQuotaRow()">
+              + {{T .Lang "admin.form.quota.add"}}
+            </button>
             <div class="form-hint">{{T .Lang "admin.form.quota.hint"}}</div>
-          </div>
-          <div class="form-group">
-            <label for="pf-period">{{T .Lang "admin.form.period"}} <button type="button" class="help" data-help="{{T $.Lang "help.period"}}">?</button></label>
-            <select id="pf-period" name="quota_period">
-              <option value="">{{T .Lang "period.none"}}</option>
-              <option value="1h">{{T .Lang "period.hourly"}}</option>
-              <option value="24h">{{T .Lang "period.daily"}}</option>
-              <option value="7d">{{T .Lang "period.weekly"}}</option>
-              <option value="30d">{{T .Lang "period.monthly"}}</option>
-            </select>
-            <div class="form-hint">{{T .Lang "admin.form.period.hint"}}</div>
           </div>
         </div>
         <div class="form-group">
@@ -291,7 +282,7 @@ function showTab(name, btn) {
   btn.classList.add('active');
 }
 
-function openEditProfile(id, name, desc, models, tpm, rpm, expiry, quota, period, isDefault) {
+function openEditProfile(id, name, desc, models, tpm, rpm, expiry, quotas, isDefault) {
   document.getElementById('pf-id').value = id;
   document.getElementById('pf-name').value = name;
   document.getElementById('pf-desc').value = desc;
@@ -299,14 +290,65 @@ function openEditProfile(id, name, desc, models, tpm, rpm, expiry, quota, period
   document.getElementById('pf-tpm').value = tpm;
   document.getElementById('pf-rpm').value = rpm;
   document.getElementById('pf-expiry').value = expiry;
-  document.getElementById('pf-quota').value = quota;
-  document.getElementById('pf-period').value = period;
+  setQuotaRows(quotas);
   document.getElementById('pf-default').checked = isDefault;
   document.getElementById('profile-form-title').textContent = 'Edit profile: ' + name;
   document.getElementById('profile-submit-btn').textContent = 'Update profile';
   document.getElementById('profile-form').action = '/admin/profiles/' + id;
   document.getElementById('pf-name').focus();
   document.getElementById('pf-name').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// Quota windows are a repeating group: a profile can hold several allowances
+// at once ("100k/day AND 1M/month"), which the gateway enforces
+// independently. Rows post as parallel quota_tokens/quota_period arrays and
+// are paired by position on the server.
+const QUOTA_PERIODS = [
+  ['1h', {{T .Lang "period.hourly"}}],
+  ['24h', {{T .Lang "period.daily"}}],
+  ['7d', {{T .Lang "period.weekly"}}],
+  ['30d', {{T .Lang "period.monthly"}}],
+];
+
+function quotaRow(tokens, period) {
+  const row = document.createElement('div');
+  row.className = 'quota-row';
+
+  const n = document.createElement('input');
+  n.type = 'number';
+  n.name = 'quota_tokens';
+  n.min = '1';
+  n.placeholder = {{T .Lang "admin.form.quota.tokens"}};
+  n.value = tokens || '';
+
+  const sel = document.createElement('select');
+  sel.name = 'quota_period';
+  for (const [value, label] of QUOTA_PERIODS) {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = label;
+    if (value === period) o.selected = true;
+    sel.appendChild(o);
+  }
+
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'btn btn-sm btn-danger';
+  del.textContent = '×';
+  del.onclick = () => row.remove();
+
+  row.append(n, sel, del);
+  return row;
+}
+
+function addQuotaRow(tokens, period) {
+  document.getElementById('pf-quotas').appendChild(quotaRow(tokens, period));
+}
+
+function setQuotaRows(quotas) {
+  const box = document.getElementById('pf-quotas');
+  box.textContent = '';
+  for (const q of (quotas || [])) addQuotaRow(q.Tokens, q.Period);
 }
 
 // Models arrive as a comma-separated string; tick the matching boxes, or fall
@@ -328,6 +370,7 @@ function resetProfileForm() {
   document.getElementById('pf-id').value = '';
   document.getElementById('profile-form').reset();
   setSelectedModels('');
+  setQuotaRows([]);
   document.getElementById('profile-form').action = '/admin/profiles';
   document.getElementById('profile-form-title').textContent = 'New profile';
   document.getElementById('profile-submit-btn').textContent = 'Create profile';

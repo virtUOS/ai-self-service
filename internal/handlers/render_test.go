@@ -73,7 +73,10 @@ func TestAdminTemplateRenders(t *testing.T) {
 	err := tmpl.Execute(&buf, adminData{
 		Profiles: []database.Profile{
 			{ID: 1, Name: "default", IsDefault: true},
-			{ID: 2, Name: "students", KeyDurationDays: 30, QuotaTokens: 1_500_000, QuotaPeriod: "24h"},
+			{ID: 2, Name: "students", KeyDurationDays: 30, Quotas: []database.ProfileQuota{
+				{Tokens: 100_000, Period: "24h"},
+				{Tokens: 1_500_000, Period: "30d"},
+			}},
 		},
 		Users:     []userRow{{User: database.User{ID: 2, Name: "U", Email: "u@x.de"}}},
 		CSRFToken: "TOK456",
@@ -88,8 +91,9 @@ func TestAdminTemplateRenders(t *testing.T) {
 		t.Errorf("csrf fields rendered = %d, want 4", n)
 	}
 	// Quotas must render in tokens, formatted, not as raw spend.
-	if !strings.Contains(out, "1.5M per day") {
-		t.Error("token quota not rendered in admin table")
+	// Several windows must all appear, not just the first.
+	if !strings.Contains(out, "100k per day") || !strings.Contains(out, "1.5M per month") {
+		t.Error("stacked quota windows not rendered in admin table")
 	}
 	if !strings.Contains(out, "30 days") {
 		t.Error("per-profile expiry not rendered in admin table")
@@ -132,11 +136,11 @@ func TestDashboardTooltipsRender(t *testing.T) {
 	tmpl := parseDashboardTemplate()
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, dashboardData{
-		Lang:        i18n.DE,
-		User:        &database.User{Name: "T", Email: "t@x.de"},
-		APIKey:      &database.APIKey{KeyPrefix: "sk-a", ExpiresAt: time.Now().Add(48 * time.Hour)},
-		APIBaseURL:  "https://litellm.example.com/v1",
-		QuotaTokens: "1M", QuotaPeriod: "per day", ProfileName: "students",
+		Lang:       i18n.DE,
+		User:       &database.User{Name: "T", Email: "t@x.de"},
+		APIKey:     &database.APIKey{KeyPrefix: "sk-a", ExpiresAt: time.Now().Add(48 * time.Hour)},
+		APIBaseURL: "https://litellm.example.com/v1",
+		Quotas:     []quotaLine{{Tokens: "1.5M", Period: "per day"}}, ProfileName: "students",
 		CSRFToken: "T",
 	}); err != nil {
 		t.Fatal(err)

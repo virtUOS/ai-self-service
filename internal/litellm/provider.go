@@ -85,11 +85,25 @@ func toKeyParams(req keyprovider.KeyRequest) KeyParams {
 	// A token allowance is expressed upstream as a spend cap that resets each
 	// period. Priced identically for input and output, so the conversion is
 	// exact regardless of how the tokens are actually used.
-	if req.Limits.QuotaTokens > 0 && req.Limits.QuotaPeriod != "" {
-		budget := TokensToBudget(req.Limits.QuotaTokens)
-		period := req.Limits.QuotaPeriod
+	//
+	// Several windows go as budget_limits, which the gateway enforces
+	// independently; a single one keeps the flat pair it has always used.
+	switch windows := effectiveWindows(req.Limits); len(windows) {
+	case 0:
+	case 1:
+		budget := TokensToBudget(windows[0].Tokens)
+		period := windows[0].Period
 		params.MaxBudget = &budget
 		params.BudgetDuration = &period
+	default:
+		limits := make([]BudgetWindow, 0, len(windows))
+		for _, w := range windows {
+			limits = append(limits, BudgetWindow{
+				BudgetDuration: w.Period,
+				MaxBudget:      TokensToBudget(w.Tokens),
+			})
+		}
+		params.BudgetLimits = limits
 	}
 	return params
 }

@@ -26,6 +26,12 @@ func NewClient(baseURL, masterKey string) *Client {
 	}
 }
 
+// BudgetWindow is one allowance window as LiteLLM's API expects it.
+type BudgetWindow struct {
+	BudgetDuration string  `json:"budget_duration"`
+	MaxBudget      float64 `json:"max_budget"`
+}
+
 type KeyParams struct {
 	KeyAlias       string         `json:"key_alias,omitempty"`
 	Models         []string       `json:"models,omitempty"`
@@ -33,6 +39,7 @@ type KeyParams struct {
 	RPMLimit       *int64         `json:"rpm_limit,omitempty"`
 	MaxBudget      *float64       `json:"max_budget,omitempty"`
 	BudgetDuration *string        `json:"budget_duration,omitempty"`
+	BudgetLimits   []BudgetWindow `json:"budget_limits,omitempty"`
 	Duration       string         `json:"duration,omitempty"`
 	Metadata       map[string]any `json:"metadata,omitempty"`
 }

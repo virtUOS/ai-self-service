@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"encoding/json"
 	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/virtuos/ai-self-service/internal/database"
 	"github.com/virtuos/ai-self-service/internal/i18n"
 )
 
@@ -27,6 +29,19 @@ func langFuncs() template.FuncMap {
 				pct = 2
 			}
 			return pct
+		},
+		// quotaJSON renders a profile's quota windows for the admin form's
+		// JavaScript. A variable-length list cannot be passed as positional
+		// arguments the way the other profile fields are.
+		"quotaJSON": func(qs []database.ProfileQuota) template.JS {
+			if len(qs) == 0 {
+				return template.JS("[]")
+			}
+			b, err := json.Marshal(qs)
+			if err != nil {
+				return template.JS("[]")
+			}
+			return template.JS(b)
 		},
 		// add sums two token counts, for showing the allowance as used+remaining
 		// rather than passing the same figure through the template twice.

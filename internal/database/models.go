@@ -22,15 +22,24 @@ type Profile struct {
 	// back to the server-wide KEY_DURATION_DAYS.
 	KeyDurationDays int `bun:"key_duration_days,notnull"`
 
-	// QuotaTokens is a fair-use allowance in tokens, reset every QuotaPeriod.
-	// Zero means unlimited. The provider adapter converts it to whatever unit
-	// the upstream enforces in.
-	QuotaTokens int64  `bun:"quota_tokens,notnull"`
-	QuotaPeriod string `bun:"quota_period,notnull"` // "1h" | "24h" | "7d" | "30d"
+	// Quotas are the fair-use allowances, each reset on its own period. Empty
+	// means unlimited. Several windows apply at once, so the tightest one
+	// binds — LiteLLM enforces each independently.
+	Quotas []ProfileQuota `bun:"rel:has-many,join:id=profile_id"`
 
 	IsDefault bool      `bun:"is_default,notnull"`
 	CreatedAt time.Time `bun:"created_at,notnull"`
 	UpdatedAt time.Time `bun:"updated_at,notnull"`
+}
+
+// ProfileQuota is one allowance window on a profile.
+type ProfileQuota struct {
+	bun.BaseModel `bun:"table:profile_quotas"`
+
+	ID        int64  `bun:"id,pk,autoincrement"`
+	ProfileID int64  `bun:"profile_id,notnull"`
+	Tokens    int64  `bun:"tokens,notnull"`
+	Period    string `bun:"period,notnull"` // "1h" | "24h" | "7d" | "30d"
 }
 
 type User struct {

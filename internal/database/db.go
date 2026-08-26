@@ -31,6 +31,12 @@ func (s *Store) ExecRaw(ctx context.Context, query string, args ...any) error {
 	return err
 }
 
+// QueryRowRaw runs a query returning a single row. Intended for tests that
+// need to inspect rows the typed methods do not expose.
+func (s *Store) QueryRowRaw(ctx context.Context, query string, args ...any) *sql.Row {
+	return s.db.QueryRowContext(ctx, query, args...)
+}
+
 func (s *Store) RunMigrations(ctx context.Context) error {
 	migrator := migrate.NewMigrator(s.db, migrations.Migrations)
 	if err := migrator.Init(ctx); err != nil {
@@ -91,11 +97,44 @@ func (s *Store) ListProfiles(ctx context.Context) ([]Profile, error) {
 
 func (s *Store) GetProfile(ctx context.Context, id int64) (*Profile, error) {
 	p := &Profile{}
-	err := s.db.NewSelect().Model(p).Where("id = ?", id).Scan(ctx)
+	err := s.db.NewSelect().Model(p).Relation("Quotas").Where("profile.id = ?", id).Scan(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return p, nil
+}
+
+// SetProfileQuotas replaces a profile's allowance windows.
+//
+// Replace rather than merge: a window an admin removed must stop being
+// enforced, and the upstream key is rebuilt from this set on the next
+// dashboard load. Done in one transaction so a profile is never briefly
+// unlimited.
+func (s *Store) SetProfileQuotas(ctx context.Context, profileID int64, quotas []ProfileQuota) error {
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewDelete().Model((*ProfileQuota)(nil)).
+			Where("profile_id = ?", profileID).Exec(ctx); err != nil {
+			return fmt.Errorf("clear profile quotas: %w", err)
+		}
+		if len(quotas) == 0 {
+			return nil
+		}
+		rows := make([]ProfileQuota, 0, len(quotas))
+		for _, q := range quotas {
+			if q.Tokens <= 0 || q.Period == "" {
+				continue
+			}
+			q.ID, q.ProfileID = 0, profileID
+			rows = append(rows, q)
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		if _, err := tx.NewInsert().Model(&rows).Exec(ctx); err != nil {
+			return fmt.Errorf("insert profile quotas: %w", err)
+		}
+		return nil
+	})
 }
 
 func (s *Store) GetDefaultProfile(ctx context.Context) (*Profile, error) {
@@ -170,8 +209,6 @@ func (s *Store) updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile, mode
 		Set("max_budget = ?", p.MaxBudget).
 		Set("budget_duration = ?", p.BudgetDuration).
 		Set("key_duration_days = ?", p.KeyDurationDays).
-		Set("quota_tokens = ?", p.QuotaTokens).
-		Set("quota_period = ?", p.QuotaPeriod).
 		Set("is_default = ?", p.IsDefault).
 		Set("updated_at = ?", p.UpdatedAt).
 		Where("id = ?", p.ID).
@@ -179,9 +216,21 @@ func (s *Store) updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile, mode
 	return err
 }
 
+// DeleteProfile removes a profile and the quota windows belonging to it.
+//
+// The windows are deleted explicitly rather than left to ON DELETE CASCADE:
+// SQLite ignores foreign keys unless PRAGMA foreign_keys is set on every
+// connection, so the constraint alone leaves orphaned rows behind — and a
+// reused profile id would inherit them.
 func (s *Store) DeleteProfile(ctx context.Context, id int64) error {
-	_, err := s.db.NewDelete().Model((*Profile)(nil)).Where("id = ?", id).Exec(ctx)
-	return err
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewDelete().Model((*ProfileQuota)(nil)).
+			Where("profile_id = ?", id).Exec(ctx); err != nil {
+			return fmt.Errorf("delete profile quotas: %w", err)
+		}
+		_, err := tx.NewDelete().Model((*Profile)(nil)).Where("id = ?", id).Exec(ctx)
+		return err
+	})
 }
 
 // --- Users ---

@@ -6,6 +6,7 @@ import (
 
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/ai-self-service/internal/i18n"
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
 
@@ -34,23 +35,37 @@ func TestKeyDurationPrefersProfile(t *testing.T) {
 func TestDashboardQuotaRendering(t *testing.T) {
 	cases := []struct {
 		profile *database.Profile
-		tokens  string
-		period  string
+		want    []quotaLine
 	}{
-		{nil, "", ""},
-		{&database.Profile{}, "", ""},
-		{&database.Profile{QuotaTokens: 1_500_000, QuotaPeriod: "24h"}, "1.5M", "per day"},
-		{&database.Profile{QuotaTokens: 500_000, QuotaPeriod: "7d"}, "500k", "per week"},
-		{&database.Profile{QuotaTokens: 5_000_000, QuotaPeriod: "30d"}, "5M", "per month"},
-		// tokens without a period is not an enforceable quota
-		{&database.Profile{QuotaTokens: 1000}, "", ""},
+		{nil, nil},
+		{&database.Profile{}, []quotaLine{}},
+		{
+			&database.Profile{Quotas: []database.ProfileQuota{{Tokens: 1_500_000, Period: "24h"}}},
+			[]quotaLine{{Tokens: "1.5M", Period: "per day"}},
+		},
+		{
+			&database.Profile{Quotas: []database.ProfileQuota{
+				{Tokens: 100_000, Period: "24h"},
+				{Tokens: 1_000_000, Period: "30d"},
+			}},
+			[]quotaLine{
+				{Tokens: "100k", Period: "per day"},
+				{Tokens: "1M", Period: "per month"},
+			},
+		},
+		// Tokens without a period is not an enforceable window.
+		{&database.Profile{Quotas: []database.ProfileQuota{{Tokens: 1000}}}, []quotaLine{}},
 	}
 	for _, c := range cases {
-		if got := profileQuota(c.profile); got != c.tokens {
-			t.Errorf("profileQuota(%v) = %q, want %q", c.profile, got, c.tokens)
+		got := profileQuotaLines(c.profile, i18n.EN)
+		if len(got) != len(c.want) {
+			t.Errorf("profileQuotaLines(%v) = %+v, want %+v", c.profile, got, c.want)
+			continue
 		}
-		if got := profilePeriod(c.profile); got != c.period {
-			t.Errorf("profilePeriod(%v) = %q, want %q", c.profile, got, c.period)
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("window %d = %+v, want %+v", i, got[i], c.want[i])
+			}
 		}
 	}
 }
@@ -59,10 +74,11 @@ func TestDashboardQuotaRendering(t *testing.T) {
 func TestProfileLimits(t *testing.T) {
 	tpm := int64(1000)
 	p := &database.Profile{
-		Models:      []string{"Qwen/Qwen3.8-27B-FP8"},
-		TPMLimit:    &tpm,
-		QuotaTokens: 1_000_000,
-		QuotaPeriod: "24h",
+		Models:   []string{"Qwen/Qwen3.8-27B-FP8"},
+		TPMLimit: &tpm,
+		Quotas: []database.ProfileQuota{
+			{Tokens: 1_000_000, Period: "24h"},
+		},
 	}
 	got := profileLimits(p)
 	if len(got.Models) != 1 || got.Models[0] != "Qwen/Qwen3.8-27B-FP8" {
@@ -71,15 +87,15 @@ func TestProfileLimits(t *testing.T) {
 	if got.TokensPerMinute == nil || *got.TokensPerMinute != 1000 {
 		t.Errorf("TokensPerMinute = %v", got.TokensPerMinute)
 	}
-	if got.QuotaTokens != 1_000_000 || got.QuotaPeriod != "24h" {
-		t.Errorf("quota = %d/%s", got.QuotaTokens, got.QuotaPeriod)
+	if len(got.Quotas) != 1 || got.Quotas[0].Tokens != 1_000_000 || got.Quotas[0].Period != "24h" {
+		t.Errorf("quotas = %+v, want one window of 1M/24h", got.Quotas)
 	}
 }
 
 // A nil profile must produce empty limits rather than panic.
 func TestProfileLimitsNil(t *testing.T) {
 	got := profileLimits(nil)
-	if got.QuotaTokens != 0 || got.Models != nil {
+	if len(got.Quotas) != 0 || got.Models != nil {
 		t.Errorf("nil profile gave %#v", got)
 	}
 	_ = keyprovider.Limits{}
