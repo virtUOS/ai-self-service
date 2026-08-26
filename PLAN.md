@@ -105,6 +105,13 @@ Phases 1–6 of the original assessment all shipped:
   GOOS, so the file is silently excluded everywhere else. A migration appeared
   not to run and its tests reported “no tests to run”, with no error anywhere.
   The same applies to `_linux`, `_darwin`, `_amd64` and friends.
+- **`/user/new` echoes `budget_limits` back but does not store them.** Posting
+  stacked windows to an internal user returns 200 with the array reflected in
+  the response body, so the create call looks like it worked. Reading the user
+  back with `/user/info` shows the field absent: only the single `max_budget` /
+  `budget_duration` pair persists. Verified against the testing gateway on
+  2026-08-26. Trusting the create response would ship quotas that enforce one
+  window while the UI promises several. Stacking works on *keys*, not users.
 - **SQLite ignores `ON DELETE CASCADE`** unless `PRAGMA foreign_keys` is set on
   every connection, which the driver does not do here. Rows referencing a
   deleted parent are simply orphaned — delete children explicitly, in the same
@@ -158,6 +165,10 @@ Fixing it means the quota has to follow the *user*, not the key. Three routes:
   quota read on the dashboard. Caveat: internal-user budgets are **not**
   enforced for keys that belong to a team; this portal does not use teams, and
   it must not start without revisiting this.
+
+  An internal user holds **one** window, not stacked ones — see the trap below,
+  which is what makes stacked quotas the open design question here rather than
+  a detail.
 - Carry spend forward on rotation — read the old key's spend and pre-load the
   new key with it. LiteLLM has no "set spend" call, so it needs a compensating
   budget adjustment and drifts. Superseded by the route above.
