@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"html"
 	"strings"
 	"testing"
 	"time"
@@ -294,5 +295,34 @@ func TestDashboardPageFullyGerman(t *testing.T) {
 	}
 	if !strings.Contains(out, "Ihr Konto") {
 		t.Error("German dashboard did not render")
+	}
+}
+
+// The edit button seeds the form with the profile's current values. Passing
+// them through printf %q put literal quote characters inside the value, so
+// saving wrote them back: "test quota" became "\"test quota\"" and grew a
+// pair of quotes on every edit.
+//
+// html/template quotes the JS string itself, so the value must arrive bare.
+func TestAdminEditButtonPassesBareValues(t *testing.T) {
+	var buf bytes.Buffer
+	err := parseAdminTemplate().Execute(&buf, adminData{
+		Profiles:  []database.Profile{{ID: 2, Name: "test quota", Description: "a desc"}},
+		Users:     []userRow{},
+		CSRFToken: "TOK",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Decode the attribute the way a browser would, then check the argument
+	// list holds the bare name rather than one wrapped in quote characters.
+	out := html.UnescapeString(buf.String())
+	if strings.Contains(out, `openEditProfile(2, "\"test quota\""`) ||
+		strings.Contains(out, `, "\"test quota\""`) {
+		t.Error("profile name carries literal quote characters")
+	}
+	if !strings.Contains(out, `"test quota"`) {
+		t.Error("profile name not passed to the edit button")
 	}
 }
