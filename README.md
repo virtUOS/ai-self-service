@@ -121,16 +121,19 @@ period resets.
 This requires every model in LiteLLM to carry that same nominal price. A model
 priced at `0` or `null` accrues no spend, so a quota over it never triggers.
 
-**One period per profile.** A profile cannot combine caps the way Anthropic's
-plans do (e.g. 100k/day *and* 1M/month). LiteLLM v1.97.0 accepts stacked
-windows via `budget_limits`, and even computes their reset times, but does not
-enforce them — verified by driving spend far past a stacked cap and watching
-requests succeed. The same is true of budget objects attached with `budget_id`.
-Only the classic `max_budget` + `budget_duration` pair is enforced.
+**One period per profile — a portal limit, not a gateway one.** A profile
+exposes a single allowance and period, so it cannot combine caps the way
+Anthropic's plans do (e.g. 100k/day *and* 1M/month).
 
-For fair use the shorter period is usually the binding one: 100k/day already
-caps a user near 3M/month. If stacked windows become necessary, re-test on a
-newer LiteLLM before building enforcement into this app.
+LiteLLM itself *can*: a key accepts `budget_limits` as a list of
+`{budget_duration, max_budget}` objects and enforces each window
+independently, rejecting with `ExceededBudget: Key over 1h budget`. This was
+not true of v1.90.0, where the field took a dict and was stored without being
+enforced; the shape and the behaviour both changed by v1.97.0.
+
+Supporting stacked windows in profiles is [issue #1]. For fair use the shorter
+period is usually the binding one anyway: 100k/day already caps a user near
+3M/month.
 
 ### How profile changes reach existing keys
 
