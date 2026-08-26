@@ -450,3 +450,24 @@ func TestDashboardFallsBackToOneBar(t *testing.T) {
 		t.Errorf("drew %d bars, want exactly one in the fallback", got)
 	}
 }
+
+// The admin panel shows each user's OIDC subject, because that is the value
+// ADMIN_IDS should list: an email address can be reassigned by the IdP, so an
+// allowlist keyed on it grants rights to whoever holds the address today.
+// Without this an operator would have to query the database to find it.
+func TestAdminShowsOIDCSubject(t *testing.T) {
+	var buf bytes.Buffer
+	err := parseAdminTemplate().Execute(&buf, adminData{
+		Profiles: []database.Profile{},
+		Users: []userRow{{
+			User: database.User{ID: 1, Name: "R", Email: "r@uni-osnabrueck.de", OIDCSub: "7ca16f0b-d201"},
+		}},
+		CSRFToken: "TOK",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "7ca16f0b-d201") {
+		t.Error("admin panel does not show the OIDC subject")
+	}
+}

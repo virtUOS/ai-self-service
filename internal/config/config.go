@@ -18,7 +18,17 @@ type Config struct {
 	OIDCRedirectURL  string
 
 	FrontendURL string
-	AdminEmails []string
+
+	// AdminIDs are the entries that grant admin rights. Each is either an OIDC
+	// subject or an email address; both forms live in one list because an
+	// operator setting up a deployment has the address to hand and has to look
+	// the subject up.
+	//
+	// A subject is the durable form: it never changes, so admin rights cannot
+	// be silently granted or revoked by the IdP reassigning an address. Email
+	// entries are kept working so no deployment breaks on upgrade, but they
+	// carry that risk — see IsAdmin.
+	AdminIDs []string
 
 	DBPath string
 
@@ -57,12 +67,13 @@ func Load() (*Config, error) {
 		ListenAddr: envOr("LISTEN_ADDR", ":8080"),
 	}
 
-	adminRaw := os.Getenv("ADMIN_EMAILS")
-	if adminRaw != "" {
-		for _, e := range strings.Split(adminRaw, ",") {
-			e = strings.TrimSpace(e)
-			if e != "" {
-				cfg.AdminEmails = append(cfg.AdminEmails, e)
+	// ADMIN_IDS supersedes ADMIN_EMAILS but does not replace it: an existing
+	// deployment keeps working untouched, and both are read so an operator can
+	// migrate one admin at a time.
+	for _, raw := range []string{os.Getenv("ADMIN_EMAILS"), os.Getenv("ADMIN_IDS")} {
+		for _, e := range strings.Split(raw, ",") {
+			if e = strings.TrimSpace(e); e != "" {
+				cfg.AdminIDs = append(cfg.AdminIDs, e)
 			}
 		}
 	}
@@ -88,13 +99,28 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-func (c *Config) IsAdmin(email string) bool {
-	for _, a := range c.AdminEmails {
-		if strings.EqualFold(a, email) {
-			return true
+// IsAdmin reports whether a user holds admin rights, and whether that was
+// decided by their subject or by their email address.
+//
+// The subject is checked first and is the form to prefer: an email address is
+// assigned by the IdP and can be reassigned, so an allowlist keyed on it grants
+// rights to whoever holds the address today rather than to a person. Matching
+// on it is kept for compatibility, and reported so the caller can say so.
+//
+// An empty subject never matches, so a user whose IdP omits the claim cannot
+// take an admin entry by accident.
+func (c *Config) IsAdmin(sub, email string) (admin bool, bySubject bool) {
+	for _, a := range c.AdminIDs {
+		if sub != "" && a == sub {
+			return true, true
 		}
 	}
-	return false
+	for _, a := range c.AdminIDs {
+		if email != "" && strings.EqualFold(a, email) {
+			return true, false
+		}
+	}
+	return false, false
 }
 
 func requireEnv(key string) string {

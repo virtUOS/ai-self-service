@@ -166,13 +166,18 @@ func TestGenerateKeyUsesDistinctAliasPerRotation(t *testing.T) {
 	if fake.Created[0].Alias == fake.Created[1].Alias {
 		t.Errorf("both rotations used alias %q; aliases must differ", fake.Created[0].Alias)
 	}
-	// The alias still has to identify the person in LiteLLM's UI.
+	// The alias still has to identify the person in LiteLLM's UI, but by the
+	// subject rather than the email: an address can be reassigned, which would
+	// leave a key labelled with someone else's. See issue #31.
 	for i, c := range fake.Created {
-		if !strings.Contains(c.Alias, "s@uni-osnabrueck.de") {
-			t.Errorf("create %d: alias %q does not identify the user", i, c.Alias)
+		if !strings.HasPrefix(c.Alias, "sub-1-") {
+			t.Errorf("create %d: alias %q does not lead with the subject", i, c.Alias)
 		}
-		if c.Owner != "s@uni-osnabrueck.de" {
-			t.Errorf("create %d: owner = %q, want the user's email", i, c.Owner)
+		if strings.Contains(c.Alias, "@") {
+			t.Errorf("create %d: alias %q carries an email address", i, c.Alias)
+		}
+		if c.OwnerID != "sub-1" {
+			t.Errorf("create %d: owner id = %q, want the subject", i, c.OwnerID)
 		}
 	}
 }

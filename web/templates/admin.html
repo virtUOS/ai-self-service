@@ -185,6 +185,7 @@
             <tr>
               <th>{{T .Lang "admin.col.name"}}</th>
               <th>{{T .Lang "admin.col.email"}}</th>
+              <th>{{T .Lang "admin.col.oidcsub"}}</th>
               <th>{{T .Lang "admin.col.profile"}}</th>
               <th>{{T .Lang "admin.col.apikey"}}</th>
               <th>{{T .Lang "admin.col.changeprofile"}}</th>
@@ -196,6 +197,11 @@
             <tr>
               <td>{{.Name}}</td>
               <td>{{.Email}}</td>
+              {{/* The subject is what ADMIN_IDS should list: it identifies the
+                   person durably, where an address can be reassigned. Shown so
+                   an operator can copy it without querying the database. */}}
+              <td><button type="button" class="model-copy" data-model="{{.OIDCSub}}"
+                          onclick="copyModel(this)" title="{{T $.Lang "admin.col.oidcsub.help"}}"><code>{{.OIDCSub}}</code></button></td>
               <td>
                 {{if .Profile}}{{.Profile.Name}}{{else}}<em class="text-faint">{{T $.Lang "admin.default"}}</em>{{end}}
               </td>
