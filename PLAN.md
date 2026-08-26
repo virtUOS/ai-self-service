@@ -146,12 +146,21 @@ it comes from a decision recorded in this file: usage was scoped to the current
 key because usage lives on the key upstream, and carrying it across rotations
 was judged not obviously wanted. #26 is that judgement being wrong.
 
-Fixing it means the quota has to follow the *user*, not the key. Two routes,
-neither trivial:
+Fixing it means the quota has to follow the *user*, not the key. Three routes:
 
+- **LiteLLM internal users (recommended).** The gateway already has the exact
+  primitive: `/user/new` takes `max_budget` and `budget_duration`, and an
+  internal user's budget applies across *every* key that user owns. Generating
+  a key with `user_id` set attaches it to that budget, so rotation no longer
+  resets anything — the spend lives on the user, which is what #26 asks for.
+  `/user/update` re-applies limits when a profile is edited, and `/user/info`
+  reports the user's spend plus a per-key breakdown, replacing the per-key
+  quota read on the dashboard. Caveat: internal-user budgets are **not**
+  enforced for keys that belong to a team; this portal does not use teams, and
+  it must not start without revisiting this.
 - Carry spend forward on rotation — read the old key's spend and pre-load the
-  new key with it. Simple, but LiteLLM has no "set spend" call, so it would
-  need a compensating budget adjustment and would drift.
+  new key with it. LiteLLM has no "set spend" call, so it needs a compensating
+  budget adjustment and drifts. Superseded by the route above.
 - Track usage per user in the portal and enforce there, using the gateway only
   for a coarse backstop. Correct, but duplicates what the gateway does.
 
