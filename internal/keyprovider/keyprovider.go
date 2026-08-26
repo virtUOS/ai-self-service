@@ -21,16 +21,9 @@ type Limits struct {
 	TokensPerMinute   *int64
 	RequestsPerMinute *int64
 
-	// QuotaTokens is a fair-use allowance consumed over QuotaPeriod, after
-	// which requests fail until the period resets. Zero means unlimited.
-	//
-	// Deprecated in favour of Quotas, which can express several windows at
-	// once. Still honoured when Quotas is empty so callers can migrate.
-	QuotaTokens int64
-	QuotaPeriod string // "1h" | "24h" | "7d" | "30d"
-
-	// Quotas are allowance windows applied together, each resetting on its own
-	// period. The tightest binds. Empty means unlimited.
+	// Quotas are fair-use allowances applied together, each resetting on its
+	// own period, after which requests fail until that period rolls over. The
+	// tightest window binds. Empty means unlimited.
 	Quotas []QuotaWindow
 }
 

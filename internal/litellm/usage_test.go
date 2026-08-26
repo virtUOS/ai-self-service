@@ -203,7 +203,7 @@ func TestUpdateKeyLimitsSendsBudget(t *testing.T) {
 	defer srv.Close()
 
 	err := NewClient(srv.URL, "mk").UpdateKeyLimits(context.Background(), "sk-x", keyprovider.Limits{
-		QuotaTokens: 10_000, QuotaPeriod: "1h",
+		Quotas: []keyprovider.QuotaWindow{{Tokens: 10_000, Period: "1h"}},
 		Models: []string{"gpt-4o"},
 	})
 	if err != nil {

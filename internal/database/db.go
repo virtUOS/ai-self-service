@@ -31,6 +31,12 @@ func (s *Store) ExecRaw(ctx context.Context, query string, args ...any) error {
 	return err
 }
 
+// QueryRowRaw runs a query returning a single row. Intended for tests that
+// need to inspect rows the typed methods do not expose.
+func (s *Store) QueryRowRaw(ctx context.Context, query string, args ...any) *sql.Row {
+	return s.db.QueryRowContext(ctx, query, args...)
+}
+
 func (s *Store) RunMigrations(ctx context.Context) error {
 	migrator := migrate.NewMigrator(s.db, migrations.Migrations)
 	if err := migrator.Init(ctx); err != nil {
@@ -203,8 +209,6 @@ func (s *Store) updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile, mode
 		Set("max_budget = ?", p.MaxBudget).
 		Set("budget_duration = ?", p.BudgetDuration).
 		Set("key_duration_days = ?", p.KeyDurationDays).
-		Set("quota_tokens = ?", p.QuotaTokens).
-		Set("quota_period = ?", p.QuotaPeriod).
 		Set("is_default = ?", p.IsDefault).
 		Set("updated_at = ?", p.UpdatedAt).
 		Where("id = ?", p.ID).
@@ -212,9 +216,21 @@ func (s *Store) updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile, mode
 	return err
 }
 
+// DeleteProfile removes a profile and the quota windows belonging to it.
+//
+// The windows are deleted explicitly rather than left to ON DELETE CASCADE:
+// SQLite ignores foreign keys unless PRAGMA foreign_keys is set on every
+// connection, so the constraint alone leaves orphaned rows behind — and a
+// reused profile id would inherit them.
 func (s *Store) DeleteProfile(ctx context.Context, id int64) error {
-	_, err := s.db.NewDelete().Model((*Profile)(nil)).Where("id = ?", id).Exec(ctx)
-	return err
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewDelete().Model((*ProfileQuota)(nil)).
+			Where("profile_id = ?", id).Exec(ctx); err != nil {
+			return fmt.Errorf("delete profile quotas: %w", err)
+		}
+		_, err := tx.NewDelete().Model((*Profile)(nil)).Where("id = ?", id).Exec(ctx)
+		return err
+	})
 }
 
 // --- Users ---

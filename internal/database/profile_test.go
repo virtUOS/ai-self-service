@@ -123,32 +123,42 @@ func TestProfileQuotaFieldsPersist(t *testing.T) {
 	s := migratedStore(t, "pq1")
 	ctx := context.Background()
 
-	p := &Profile{
-		Name: "students", KeyDurationDays: 30,
-		QuotaTokens: 1_000_000, QuotaPeriod: "24h",
-	}
+	p := &Profile{Name: "students", KeyDurationDays: 30}
 	if err := s.CreateProfile(ctx, p); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{
+		{Tokens: 1_000_000, Period: "24h"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
 	got, err := s.GetProfile(ctx, p.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.KeyDurationDays != 30 || got.QuotaTokens != 1_000_000 || got.QuotaPeriod != "24h" {
-		t.Fatalf("after create: days=%d tokens=%d period=%q",
-			got.KeyDurationDays, got.QuotaTokens, got.QuotaPeriod)
+	if got.KeyDurationDays != 30 {
+		t.Fatalf("after create: days=%d", got.KeyDurationDays)
+	}
+	if len(got.Quotas) != 1 || got.Quotas[0].Tokens != 1_000_000 || got.Quotas[0].Period != "24h" {
+		t.Fatalf("after create: quotas=%+v", got.Quotas)
 	}
 
 	p.KeyDurationDays = 365
-	p.QuotaTokens = 5_000_000
-	p.QuotaPeriod = "30d"
 	if err := s.UpdateProfile(ctx, p); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{
+		{Tokens: 5_000_000, Period: "30d"},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	got, _ = s.GetProfile(ctx, p.ID)
-	if got.KeyDurationDays != 365 || got.QuotaTokens != 5_000_000 || got.QuotaPeriod != "30d" {
-		t.Fatalf("after update: days=%d tokens=%d period=%q",
-			got.KeyDurationDays, got.QuotaTokens, got.QuotaPeriod)
+	if got.KeyDurationDays != 365 {
+		t.Fatalf("after update: days=%d", got.KeyDurationDays)
+	}
+	if len(got.Quotas) != 1 || got.Quotas[0].Tokens != 5_000_000 || got.Quotas[0].Period != "30d" {
+		t.Fatalf("after update: quotas=%+v", got.Quotas)
 	}
 }
 
@@ -168,7 +178,7 @@ func TestExistingProfilesGetSafeDefaults(t *testing.T) {
 	if d.KeyDurationDays != 0 {
 		t.Errorf("KeyDurationDays = %d, want 0 (fall back to server default)", d.KeyDurationDays)
 	}
-	if d.QuotaTokens != 0 || d.QuotaPeriod != "" {
-		t.Errorf("seeded profile has a quota: tokens=%d period=%q", d.QuotaTokens, d.QuotaPeriod)
+	if len(d.Quotas) != 0 {
+		t.Errorf("seeded profile has quotas: %+v", d.Quotas)
 	}
 }

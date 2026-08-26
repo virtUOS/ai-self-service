@@ -22,11 +22,6 @@ type Profile struct {
 	// back to the server-wide KEY_DURATION_DAYS.
 	KeyDurationDays int `bun:"key_duration_days,notnull"`
 
-	// QuotaTokens and QuotaPeriod are superseded by Quotas and no longer read.
-	// Kept so a rollback to the previous release finds its quotas intact.
-	QuotaTokens int64  `bun:"quota_tokens,notnull"`
-	QuotaPeriod string `bun:"quota_period,notnull"`
-
 	// Quotas are the fair-use allowances, each reset on its own period. Empty
 	// means unlimited. Several windows apply at once, so the tightest one
 	// binds — LiteLLM enforces each independently.

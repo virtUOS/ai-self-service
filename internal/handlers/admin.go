@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -251,21 +253,25 @@ func (a *Admin) CreateProfile(w http.ResponseWriter, r *http.Request) {
 	p.TPMLimit = parseOptionalInt64(r.FormValue("tpm_limit"))
 	p.RPMLimit = parseOptionalInt64(r.FormValue("rpm_limit"))
 	p.KeyDurationDays = parseNonNegativeInt(r.FormValue("key_duration_days"))
-	p.QuotaTokens = parseNonNegativeInt64(r.FormValue("quota_tokens"))
-	p.QuotaPeriod = strings.TrimSpace(r.FormValue("quota_period"))
 
 	if p.Name == "" {
 		http.Redirect(w, r, "/admin?flash=Name+is+required", http.StatusFound)
 		return
 	}
-	if !litellm.IsValidQuotaPeriod(p.QuotaPeriod) {
-		http.Redirect(w, r, "/admin?flash=Invalid+quota+period", http.StatusFound)
+	quotas, err := parseQuotaWindows(r.Form)
+	if err != nil {
+		http.Redirect(w, r, "/admin?flash=Invalid+quota+window", http.StatusFound)
 		return
 	}
 
 	if err := a.store.CreateProfile(r.Context(), p); err != nil {
 		slog.Error("create profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+create+profile", http.StatusFound)
+		return
+	}
+	if err := a.store.SetProfileQuotas(r.Context(), p.ID, quotas); err != nil {
+		slog.Error("set profile quotas", "err", err)
+		http.Redirect(w, r, "/admin?flash=Profile+created+but+quotas+failed", http.StatusFound)
 		return
 	}
 	http.Redirect(w, r, "/admin?flash=Profile+created", http.StatusFound)
@@ -294,17 +300,21 @@ func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	p.TPMLimit = parseOptionalInt64(r.FormValue("tpm_limit"))
 	p.RPMLimit = parseOptionalInt64(r.FormValue("rpm_limit"))
 	p.KeyDurationDays = parseNonNegativeInt(r.FormValue("key_duration_days"))
-	p.QuotaTokens = parseNonNegativeInt64(r.FormValue("quota_tokens"))
-	p.QuotaPeriod = strings.TrimSpace(r.FormValue("quota_period"))
 
-	if !litellm.IsValidQuotaPeriod(p.QuotaPeriod) {
-		http.Redirect(w, r, "/admin?flash=Invalid+quota+period", http.StatusFound)
+	quotas, err := parseQuotaWindows(r.Form)
+	if err != nil {
+		http.Redirect(w, r, "/admin?flash=Invalid+quota+window", http.StatusFound)
 		return
 	}
 
 	if err := a.store.UpdateProfile(r.Context(), p); err != nil {
 		slog.Error("update profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+update+profile", http.StatusFound)
+		return
+	}
+	if err := a.store.SetProfileQuotas(r.Context(), p.ID, quotas); err != nil {
+		slog.Error("set profile quotas", "err", err)
+		http.Redirect(w, r, "/admin?flash=Profile+updated+but+quotas+failed", http.StatusFound)
 		return
 	}
 	http.Redirect(w, r, "/admin?flash=Profile+updated", http.StatusFound)
@@ -424,4 +434,38 @@ func parseNonNegativeInt64(s string) int64 {
 		return 0
 	}
 	return v
+}
+
+// parseQuotaWindows reads the repeating quota rows the profile form posts.
+//
+// Rows are paired by position: quota_tokens[i] with quota_period[i]. A row
+// with no token count is how an admin removes a window, so it is dropped
+// rather than stored — a zero-token quota would read upstream as an allowance
+// of nothing, blocking every request.
+func parseQuotaWindows(form url.Values) ([]database.ProfileQuota, error) {
+	tokens := form["quota_tokens"]
+	periods := form["quota_period"]
+
+	out := make([]database.ProfileQuota, 0, len(tokens))
+	seen := make(map[string]bool, len(tokens))
+
+	for i, raw := range tokens {
+		n := parseNonNegativeInt64(strings.TrimSpace(raw))
+		if n <= 0 {
+			continue
+		}
+		period := ""
+		if i < len(periods) {
+			period = strings.TrimSpace(periods[i])
+		}
+		if !litellm.IsValidQuotaPeriod(period) || period == "" {
+			return nil, fmt.Errorf("invalid quota period %q", period)
+		}
+		if seen[period] {
+			return nil, fmt.Errorf("duplicate quota period %q", period)
+		}
+		seen[period] = true
+		out = append(out, database.ProfileQuota{Tokens: n, Period: period})
+	}
+	return out, nil
 }

@@ -14,8 +14,7 @@ func TestToKeyParamsConvertsQuota(t *testing.T) {
 		Owner:     "s@uni-osnabrueck.de",
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 		Limits: keyprovider.Limits{
-			QuotaTokens: 1_000_000,
-			QuotaPeriod: "24h",
+			Quotas: []keyprovider.QuotaWindow{{Tokens: 1_000_000, Period: "24h"}},
 		},
 	})
 	if params.MaxBudget == nil {
@@ -42,7 +41,9 @@ func TestToKeyParamsNoQuota(t *testing.T) {
 // Tokens without a period is not an enforceable window.
 func TestToKeyParamsIgnoresIncompleteQuota(t *testing.T) {
 	params := toKeyParams(keyprovider.KeyRequest{
-		Limits: keyprovider.Limits{QuotaTokens: 500_000},
+		Limits: keyprovider.Limits{
+			Quotas: []keyprovider.QuotaWindow{{Tokens: 500_000}},
+		},
 	})
 	if params.MaxBudget != nil {
 		t.Error("quota without a period produced a budget")

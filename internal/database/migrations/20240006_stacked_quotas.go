@@ -14,9 +14,9 @@ import (
 // list and applies each independently. An earlier version accepted the field
 // and ignored it, which is why the portal only ever offered one period.
 //
-// profiles.quota_tokens / quota_period are left in place rather than dropped.
-// They are no longer read, but keeping them means a rollback to the previous
-// release finds its quotas intact rather than silently unlimited.
+// The single-quota columns are dropped once their values have been carried
+// across: nothing is in production yet, so there is no deployment to roll back
+// to that would still need them.
 func init() {
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
 		if _, err := db.ExecContext(ctx, `
@@ -42,9 +42,26 @@ func init() {
 			return fmt.Errorf("carry quotas into profile_quotas: %w", err)
 		}
 
+		for _, stmt := range []string{
+			`ALTER TABLE profiles DROP COLUMN quota_tokens`,
+			`ALTER TABLE profiles DROP COLUMN quota_period`,
+		} {
+			if _, err := db.ExecContext(ctx, stmt); err != nil {
+				return fmt.Errorf("drop single-quota columns: %w", err)
+			}
+		}
+
 		return nil
 	}, func(ctx context.Context, db *bun.DB) error {
-		_, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS profile_quotas`)
-		return err
+		for _, stmt := range []string{
+			`ALTER TABLE profiles ADD COLUMN quota_tokens INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE profiles ADD COLUMN quota_period TEXT NOT NULL DEFAULT ''`,
+			`DROP TABLE IF EXISTS profile_quotas`,
+		} {
+			if _, err := db.ExecContext(ctx, stmt); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/ai-self-service/internal/i18n"
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
 
@@ -34,23 +35,37 @@ func TestKeyDurationPrefersProfile(t *testing.T) {
 func TestDashboardQuotaRendering(t *testing.T) {
 	cases := []struct {
 		profile *database.Profile
-		tokens  string
-		period  string
+		want    []quotaLine
 	}{
-		{nil, "", ""},
-		{&database.Profile{}, "", ""},
-		{&database.Profile{QuotaTokens: 1_500_000, QuotaPeriod: "24h"}, "1.5M", "per day"},
-		{&database.Profile{QuotaTokens: 500_000, QuotaPeriod: "7d"}, "500k", "per week"},
-		{&database.Profile{QuotaTokens: 5_000_000, QuotaPeriod: "30d"}, "5M", "per month"},
-		// tokens without a period is not an enforceable quota
-		{&database.Profile{QuotaTokens: 1000}, "", ""},
+		{nil, nil},
+		{&database.Profile{}, []quotaLine{}},
+		{
+			&database.Profile{Quotas: []database.ProfileQuota{{Tokens: 1_500_000, Period: "24h"}}},
+			[]quotaLine{{Tokens: "1.5M", Period: "per day"}},
+		},
+		{
+			&database.Profile{Quotas: []database.ProfileQuota{
+				{Tokens: 100_000, Period: "24h"},
+				{Tokens: 1_000_000, Period: "30d"},
+			}},
+			[]quotaLine{
+				{Tokens: "100k", Period: "per day"},
+				{Tokens: "1M", Period: "per month"},
+			},
+		},
+		// Tokens without a period is not an enforceable window.
+		{&database.Profile{Quotas: []database.ProfileQuota{{Tokens: 1000}}}, []quotaLine{}},
 	}
 	for _, c := range cases {
-		if got := profileQuota(c.profile); got != c.tokens {
-			t.Errorf("profileQuota(%v) = %q, want %q", c.profile, got, c.tokens)
+		got := profileQuotaLines(c.profile, i18n.EN)
+		if len(got) != len(c.want) {
+			t.Errorf("profileQuotaLines(%v) = %+v, want %+v", c.profile, got, c.want)
+			continue
 		}
-		if got := profilePeriod(c.profile); got != c.period {
-			t.Errorf("profilePeriod(%v) = %q, want %q", c.profile, got, c.period)
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("window %d = %+v, want %+v", i, got[i], c.want[i])
+			}
 		}
 	}
 }

@@ -15,7 +15,7 @@ func TestMigrationCarriesExistingQuota(t *testing.T) {
 	}
 
 	// A profile written the old way, as the previous release would have.
-	p := &Profile{Name: "students", QuotaTokens: 1_500_000, QuotaPeriod: "24h"}
+	p := &Profile{Name: "students"}
 	if err := s.CreateProfile(ctx, p); err != nil {
 		t.Fatal(err)
 	}

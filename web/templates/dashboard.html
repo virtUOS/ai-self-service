@@ -47,12 +47,14 @@
       <dt>{{T .Lang "dash.name"}}</dt>  <dd>{{.User.Name}}</dd>
       <dt>{{T .Lang "dash.email"}}</dt> <dd>{{.User.Email}}</dd>
       {{if .ProfileName}}<dt>{{T .Lang "dash.profile"}} <button type="button" class="help" data-help="{{T .Lang "dash.profile.help"}}">?</button></dt> <dd>{{.ProfileName}}</dd>{{end}}
-      {{if .QuotaTokens}}
+      {{if .Quotas}}
       <dt>{{T .Lang "dash.usagelimit"}} <button type="button" class="help" data-help="{{T .Lang "dash.usagelimit.help"}}">?</button></dt>
-      <dd>{{.QuotaTokens}} {{T .Lang "dash.tokens"}} {{.QuotaPeriod}}</dd>
+      <dd>
+        {{range $i, $q := .Quotas}}{{if $i}}<br>{{end}}{{$q.Tokens}} {{T $.Lang "dash.tokens"}} {{$q.Period}}{{end}}
+      </dd>
       {{end}}
     </dl>
-    {{if .QuotaTokens}}
+    {{if .Quotas}}
     <p class="text-muted" style="margin-top:.75rem;font-size:.85rem">
       {{T .Lang "dash.usagelimit.note"}}
     </p>

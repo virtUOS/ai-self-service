@@ -230,20 +230,14 @@ func (c *Client) UpdateKeyLimits(ctx context.Context, key string, l keyprovider.
 	return nil
 }
 
-// effectiveWindows is the set of allowance windows a Limits describes,
-// accepting the older single-quota fields when Quotas is empty.
+// effectiveWindows drops windows that are not actually limits, so a blank row
+// left in the admin form does not become a zero-token quota upstream.
 func effectiveWindows(l keyprovider.Limits) []keyprovider.QuotaWindow {
-	if len(l.Quotas) > 0 {
-		out := make([]keyprovider.QuotaWindow, 0, len(l.Quotas))
-		for _, q := range l.Quotas {
-			if q.Tokens > 0 && q.Period != "" {
-				out = append(out, q)
-			}
+	out := make([]keyprovider.QuotaWindow, 0, len(l.Quotas))
+	for _, q := range l.Quotas {
+		if q.Tokens > 0 && q.Period != "" {
+			out = append(out, q)
 		}
-		return out
 	}
-	if l.QuotaTokens > 0 && l.QuotaPeriod != "" {
-		return []keyprovider.QuotaWindow{{Tokens: l.QuotaTokens, Period: l.QuotaPeriod}}
-	}
-	return nil
+	return out
 }
