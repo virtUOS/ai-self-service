@@ -1,6 +1,6 @@
 # Status and next steps
 
-Last updated 2026-08-25. Written as a handover: what is done, what is not, and
+Last updated 2026-08-26. Written as a handover: what is done, what is not, and
 the things that are surprising enough to waste an afternoon rediscovering.
 
 ## Where it runs
@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.3.2` |
+| Latest release | `v0.3.2` (main is ahead: stacked quotas, unreleased) |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -41,8 +41,10 @@ Phases 1–6 of the original assessment all shipped:
 - **Profile sync** — a profile's limits are re-applied to existing keys on
   every dashboard load, so an edit takes effect without regenerating.
 - **Local dev** — Keycloak, or a faster OIDC mock under `--profile mock`.
+- **Stacked quota windows** — a profile holds several allowances at once
+  (100k/day AND 1M/month); the gateway enforces each independently.
 
-126 tests, no skips. `go test ./...` needs nothing external.
+146 tests, no skips. `go test ./...` needs nothing external.
 
 ## Not done
 
@@ -98,6 +100,15 @@ Phases 1–6 of the original assessment all shipped:
   a manual redeploy of `:main` without a pull silently keeps the old build.
 - **Grafana panels need unique `refId`s.** Duplicates error the panel rather
   than rendering.
+- **Never name a Go file `*_windows.go` or `*_test_windows.go`.** Go reads the
+  text after the last underscore as a build constraint, and `windows` is a
+  GOOS, so the file is silently excluded everywhere else. A migration appeared
+  not to run and its tests reported “no tests to run”, with no error anywhere.
+  The same applies to `_linux`, `_darwin`, `_amd64` and friends.
+- **SQLite ignores `ON DELETE CASCADE`** unless `PRAGMA foreign_keys` is set on
+  every connection, which the driver does not do here. Rows referencing a
+  deleted parent are simply orphaned — delete children explicitly, in the same
+  transaction.
 - **Templates: `{{T .Lang}}` breaks inside `range`** — the dot is the loop
   element there, so use `$.Lang`.
 - **The Grafana dashboard stays English.** Only the app is translated.
@@ -115,8 +126,55 @@ Phases 1–6 of the original assessment all shipped:
   Testing tracks `:main`, production pins a tag.
 - MIT licence, matching the virtUOS norm (38 of the org's licensed repos).
 
+## Where this was left (2026-08-26)
+
+Open PRs, both green and unmerged:
+
+- **#28** — the profiles table clips its right-hand columns; adds `min-width`
+  so it scrolls. Small, safe to merge.
+
+Merged today but **not yet released**: stacked quota windows (#25), the
+documentation correction that unblocked them (#24), quota validation and a
+profile-name quoting fix (#27). Testing runs all of it; `v0.4.0` is warranted
+when someone wants a tagged build, since the schema changed.
+
+### The thing to look at first: issue #26
+
+A user pointed out that **regenerating a key resets the quota**, so anyone at
+their limit can simply issue a new key and carry on. That is a real hole, and
+it comes from a decision recorded in this file: usage was scoped to the current
+key because usage lives on the key upstream, and carrying it across rotations
+was judged not obviously wanted. #26 is that judgement being wrong.
+
+Fixing it means the quota has to follow the *user*, not the key. Two routes,
+neither trivial:
+
+- Carry spend forward on rotation — read the old key's spend and pre-load the
+  new key with it. Simple, but LiteLLM has no "set spend" call, so it would
+  need a compensating budget adjustment and would drift.
+- Track usage per user in the portal and enforce there, using the gateway only
+  for a coarse backstop. Correct, but duplicates what the gateway does.
+
+Worth deciding before building. The dashboard text ("a newly generated key
+starts again at zero") documents the current behaviour honestly, so nothing is
+lying to users in the meantime.
+
+### Also outstanding
+
+- `test quota` profile on testing has a mangled name (`"test quota"` with
+  literal quotes) from the quoting bug #27 fixed. Editing and saving it in the
+  admin panel rewrites it correctly; the fix stops it worsening but does not
+  clean up what is already stored.
+- **LiteLLM production** has neither the re-enabled spend logs nor the removal
+  of the nightly restart. Both are merged in `litellm-setup` and deployed to
+  testing only, deliberately — the restart bounded a memory leak, and it was
+  measured over days while the check that replaced it ran for minutes. Watch
+  RSS on the testing gateway before production follows.
+
 ## Suggested next steps
 
-1. Provision production: VM, DNS, Keycloak client, vault secrets, pricing.
-2. Ask the IdP team what group or affiliation claim the realm emits, then map
+1. Decide how issue #26 should work — quota per user rather than per key — and
+   implement it. It is the only open item that lets someone bypass a limit.
+2. Provision production: VM, DNS, Keycloak client, vault secrets, pricing.
+3. Ask the IdP team what group or affiliation claim the realm emits, then map
    profiles onto it.
