@@ -62,7 +62,9 @@ var messages = map[string]map[Lang]string{
 	"dash.usagestats.none":        {DE: "Für diesen Schlüssel wurde noch kein Verbrauch verzeichnet.", EN: "No usage recorded for this key yet."},
 	"dash.usagestats.nobreakdown": {DE: "Gesamtverbrauch dieses Schlüssels. Eine Aufschlüsselung nach Tagen ist derzeit nicht verfügbar.", EN: "Total used by this key. A per-day breakdown is not available at the moment."},
 	"dash.tokens":                 {DE: "Tokens", EN: "tokens"},
-	"dash.models.help":            {DE: "Die Modelle, die Ihr Schlüssel verwenden darf. Geben Sie den Namen genau so an, wie er hier steht.", EN: "The models your key may use. Pass the name exactly as shown here."},
+	"dash.models.help":            {DE: "Die Modelle, die Ihr Schlüssel verwenden darf. Klicken Sie auf ein Modell, um ein fertiges curl-Beispiel zu kopieren.", EN: "The models your key may use. Click one to copy a ready-to-run curl example."},
+	"dash.models.copied":          {DE: "curl-Beispiel kopiert!", EN: "curl example copied!"},
+	"dash.models.curlnote":        {DE: "Der Schlüssel wird aus $OPENAI_API_KEY gelesen — setzen Sie ihn zuerst, damit er nicht in der Shell-History landet.", EN: "The key is read from $OPENAI_API_KEY — set it first so it stays out of your shell history."},
 	"dash.baseurl.help":           {DE: "Richten Sie Ihren KI-Client auf diese Adresse und hinterlegen Sie Ihren API-Schlüssel. Die Schnittstelle ist OpenAI-kompatibel, funktioniert also mit den üblichen Werkzeugen.", EN: "Point your AI client at this address and give it your API key. It speaks the OpenAI API, so any OpenAI-compatible tool works."},
 
 	"dash.confirm.regenerate": {DE: "Damit wird Ihr aktueller Schlüssel ungültig und ein neuer erzeugt. Fortfahren?", EN: "This will revoke your current key and generate a new one. Continue?"},
