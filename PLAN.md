@@ -166,9 +166,21 @@ Fixing it means the quota has to follow the *user*, not the key. Three routes:
   enforced for keys that belong to a team; this portal does not use teams, and
   it must not start without revisiting this.
 
-  An internal user holds **one** window, not stacked ones — see the trap below,
-  which is what makes stacked quotas the open design question here rather than
-  a detail.
+  An internal user holds **one** window, not stacked ones — see the trap below.
+  The decision (2026-08-26): put the **widest** window on the internal user, so
+  the allowance worth rotating to dodge follows the person, and leave the
+  shorter burst windows on the key. A rotation then resets only a window that
+  resets on its own within hours, which is not worth gaming.
+
+  Testing bears this out: of 22 keys on the gateway, 4 stack windows and two of
+  those are portal-issued keys with three each (1h + 7d + 30d). Dropping to one
+  window per profile would have broken live configuration.
+
+  Migration is clean — every portal-issued key currently has `user_id` unset.
+  **Do not reuse `default_user_id`**: the non-portal keys on the gateway
+  (RAGFLOW, campus-management, and others) all share that one internal user, so
+  a budget set on it would apply to them too. The portal must mint a `user_id`
+  per person.
 - Carry spend forward on rotation — read the old key's spend and pre-load the
   new key with it. LiteLLM has no "set spend" call, so it needs a compensating
   budget adjustment and drifts. Superseded by the route above.
