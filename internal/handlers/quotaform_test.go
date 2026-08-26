@@ -76,3 +76,43 @@ func TestParseQuotaWindowsEmptyIsUnlimited(t *testing.T) {
 		t.Errorf("got %+v, %v; want no windows and no error", got, err)
 	}
 }
+
+// A shorter window with a larger allowance than a longer one can never bind:
+// spending the hourly cap would already exceed the weekly. Refuse it rather
+// than store a limit that does nothing.
+func TestParseQuotaWindowsRejectsUnreachableWindow(t *testing.T) {
+	form := url.Values{
+		"quota_tokens": {"1000000", "10000"},
+		"quota_period": {"1h", "7d"},
+	}
+	if _, err := parseQuotaWindows(form); err == nil {
+		t.Error("expected an error: an hourly cap above the weekly one can never bind")
+	}
+}
+
+// Equal allowances on different periods are pointless but not contradictory —
+// the shorter one simply binds first. Allowed.
+func TestParseQuotaWindowsAllowsEqualAllowances(t *testing.T) {
+	form := url.Values{
+		"quota_tokens": {"10000", "10000"},
+		"quota_period": {"1h", "24h"},
+	}
+	if _, err := parseQuotaWindows(form); err != nil {
+		t.Errorf("equal allowances rejected: %v", err)
+	}
+}
+
+// The ordinary case must still pass: tighter caps on shorter periods.
+func TestParseQuotaWindowsAllowsSensibleLadder(t *testing.T) {
+	form := url.Values{
+		"quota_tokens": {"1000", "10000", "1000000"},
+		"quota_period": {"1h", "7d", "30d"},
+	}
+	got, err := parseQuotaWindows(form)
+	if err != nil {
+		t.Fatalf("sensible ladder rejected: %v", err)
+	}
+	if len(got) != 3 {
+		t.Errorf("got %d windows, want 3", len(got))
+	}
+}

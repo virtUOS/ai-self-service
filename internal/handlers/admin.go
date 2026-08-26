@@ -467,5 +467,34 @@ func parseQuotaWindows(form url.Values) ([]database.ProfileQuota, error) {
 		seen[period] = true
 		out = append(out, database.ProfileQuota{Tokens: n, Period: period})
 	}
+
+	if err := checkWindowsBind(out); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+// periodHours orders the windows by length so they can be compared.
+var periodHours = map[string]int{"1h": 1, "24h": 24, "7d": 168, "30d": 720}
+
+// checkWindowsBind rejects a window that can never take effect.
+//
+// A shorter period with a larger allowance is unreachable: spending the hourly
+// cap would already have exceeded the weekly one, so the hourly limit never
+// binds and the admin has configured something that does nothing. Equal
+// allowances are permitted — the shorter period simply binds first.
+func checkWindowsBind(qs []database.ProfileQuota) error {
+	for i, a := range qs {
+		for j, b := range qs {
+			if i == j {
+				continue
+			}
+			// a is the shorter window; it must not allow more than b.
+			if periodHours[a.Period] < periodHours[b.Period] && a.Tokens > b.Tokens {
+				return fmt.Errorf("%s allowance (%d) exceeds the longer %s allowance (%d)",
+					a.Period, a.Tokens, b.Period, b.Tokens)
+			}
+		}
+	}
+	return nil
 }
