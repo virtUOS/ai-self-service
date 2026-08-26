@@ -126,7 +126,31 @@
     <p class="text-muted" style="margin-bottom:1rem;font-size:.85rem">
       {{T .Lang "dash.usagestats.note"}}
     </p>
-    {{if .Usage.HasQuota}}
+    {{if .Usage.Windows}}
+      {{/* One bar per allowance: the tightest window binds, so a single bar
+           for the widest would promise headroom the user does not have. */}}
+      {{range .Usage.Windows}}
+        <p style="margin-bottom:.35rem">
+          <strong>{{thousands .Remaining}}</strong> {{T $.Lang "dash.tokens"}}
+          <span class="text-muted">{{T $.Lang "dash.quota.remaining"}}</span>
+          <span class="text-muted">· {{.LimitText}} {{.Label}}</span>
+        </p>
+        <div class="quota-bar" role="img"
+             aria-label="{{thousands .Used}} {{T $.Lang "dash.quota.of"}} {{thousands .Limit}} {{T $.Lang "dash.tokens"}} {{T $.Lang "dash.quota.used"}}">
+          <div class="quota-fill{{if ge .Pct 90}} quota-full{{end}}"
+               style="width:{{.Pct}}%"></div>
+        </div>
+        <p class="text-muted" style="font-size:.85rem;margin-bottom:1rem">
+          {{thousands .Used}} {{T $.Lang "dash.quota.of"}}
+          {{thousands .Limit}} {{T $.Lang "dash.tokens"}}
+          {{T $.Lang "dash.quota.used"}}{{if not .ResetsAt.IsZero}} ·
+          {{T $.Lang "dash.quota.resets"}}
+          <span class="reset-at" data-reset="{{.ResetsAt.Format "2006-01-02T15:04:05Z"}}"></span>{{end}}
+        </p>
+      {{end}}
+    {{else if .Usage.HasQuota}}
+      {{/* No per-window figures — spend logging is off, so consumption inside
+           each window cannot be summed. One bar for the window that binds. */}}
       <p style="margin-bottom:.5rem">
         <strong>{{thousands .Usage.Remaining}}</strong> {{T .Lang "dash.tokens"}}
         <span class="text-muted">{{T .Lang "dash.quota.remaining"}}</span>

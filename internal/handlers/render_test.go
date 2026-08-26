@@ -392,3 +392,61 @@ func TestAdminShowsProfileQuotaWindows(t *testing.T) {
 		t.Error("a profile with two windows still renders as unlimited")
 	}
 }
+
+// The usage card draws a bar per allowance window. A single bar for the widest
+// window would show headroom the user does not have when a tighter cap is
+// nearly spent.
+func TestDashboardDrawsABarPerWindow(t *testing.T) {
+	var buf bytes.Buffer
+	err := parseDashboardTemplate().Execute(&buf, dashboardData{
+		Lang:   i18n.EN,
+		Langs:  i18n.Supported,
+		User:   &database.User{Email: "a@b.c"},
+		APIKey: &database.APIKey{KeyPrefix: "sk-x", ExpiresAt: time.Now().Add(24 * time.Hour)},
+		Usage: usageReport{
+			HasQuota: true,
+			Windows: []quotaWindowView{
+				{Period: "1h", Label: "per hour", LimitText: "1k", Used: 950, Limit: 1_000, Remaining: 50, Pct: 95},
+				{Period: "30d", Label: "per month", LimitText: "1M", Used: 9_590, Limit: 1_000_000, Remaining: 990_410, Pct: 1},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+
+	if got := strings.Count(out, "quota-fill"); got != 2 {
+		t.Errorf("drew %d bars, want one per window", got)
+	}
+	// The nearly-spent window is marked as full so it reads as urgent.
+	if !strings.Contains(out, "quota-full") {
+		t.Error("the 95% window is not marked as nearly exhausted")
+	}
+	for _, want := range []string{"per hour", "per month", "width:95%", "width:1%"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("card is missing %q", want)
+		}
+	}
+}
+
+// With no per-window figures the card keeps the single bar rather than showing
+// nothing, so a gateway without spend logging still reports a quota.
+func TestDashboardFallsBackToOneBar(t *testing.T) {
+	var buf bytes.Buffer
+	err := parseDashboardTemplate().Execute(&buf, dashboardData{
+		Lang:   i18n.EN,
+		Langs:  i18n.Supported,
+		User:   &database.User{Email: "a@b.c"},
+		APIKey: &database.APIKey{KeyPrefix: "sk-x", ExpiresAt: time.Now().Add(24 * time.Hour)},
+		Usage: usageReport{
+			HasQuota: true, Used: 9_590, Remaining: 990_410, QuotaPct: 1,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(buf.String(), "quota-fill"); got != 1 {
+		t.Errorf("drew %d bars, want exactly one in the fallback", got)
+	}
+}

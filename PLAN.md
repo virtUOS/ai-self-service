@@ -43,11 +43,15 @@ Phases 1–6 of the original assessment all shipped:
 - **Local dev** — Keycloak, or a faster OIDC mock under `--profile mock`.
 - **Stacked quota windows** — a profile holds several allowances at once
   (100k/day AND 1M/month); the gateway enforces each independently.
+- **A usage bar per quota window** — the card shows every allowance, since the
+  tightest binds; the headline names the window closest to exhausted rather
+  than the widest. Consumption per window is summed from the spend log, as the
+  gateway tracks each window internally but reports only one total.
 - **Quota follows the person** — the widest window is enforced on a LiteLLM
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-173 tests. `go test ./...` needs nothing external; the one skip is a manual
+182 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -122,6 +126,13 @@ end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
   "unlimited" — while `GetProfile`, which did call `Relation("Quotas")`, showed
   them correctly. Every query returning a profile needs the `Relation` call;
   the failure is silent and looks like missing data, not a missing join.
+- **`budget_limits` reports no spend per window.** Each entry carries
+  `max_budget`, `budget_duration` and `reset_at`, but no consumption: LiteLLM
+  tracks a counter per window internally and exposes only the key's single
+  total. Per-window usage therefore has to be summed from `/spend/logs`, whose
+  rows carry full timestamps — the window opened at `reset_at` minus its
+  period. With spend logging off there are no rows, and a zero must not be read
+  as "nothing used": the dashboard falls back to one bar instead.
 - **SQLite ignores `ON DELETE CASCADE`** unless `PRAGMA foreign_keys` is set on
   every connection, which the driver does not do here. Rows referencing a
   deleted parent are simply orphaned — delete children explicitly, in the same

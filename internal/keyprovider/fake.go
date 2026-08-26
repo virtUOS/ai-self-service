@@ -47,6 +47,12 @@ type Fake struct {
 	QuotaByRef map[string]Quota
 	QuotaErr   error
 
+	// WindowsByRef and WindowsByOwner are what Windows returns; WindowsErr
+	// forces it to fail. The owner's entry wins, as on the real gateway.
+	WindowsByRef   map[string][]WindowUsage
+	WindowsByOwner map[string][]WindowUsage
+	WindowsErr     error
+
 	// QuotaByOwner is the allowance held against a person rather than a key.
 	// It takes precedence over QuotaByRef, mirroring the real gateway, so a
 	// test can assert that a figure survives a key rotation.
@@ -92,6 +98,21 @@ func (f *Fake) UpdateLimits(_ context.Context, ref, ownerID string, l Limits) er
 	f.Relimited = append(f.Relimited, ref)
 	f.RelimitedOwners = append(f.RelimitedOwners, ownerID)
 	return nil
+}
+
+// WindowsByRef is what Windows returns per key ref; WindowsErr forces failure.
+// Keyed by ref so a test can model a rotation.
+// Windows returns the canned per-window figures.
+func (f *Fake) Windows(_ context.Context, ref, ownerID string) ([]WindowUsage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.WindowsErr != nil {
+		return nil, f.WindowsErr
+	}
+	if w, ok := f.WindowsByOwner[ownerID]; ok && ownerID != "" {
+		return w, nil
+	}
+	return f.WindowsByRef[ref], nil
 }
 
 // Quota returns the allowance figures for a key, preferring the one held
