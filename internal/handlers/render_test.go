@@ -3,12 +3,14 @@ package handlers
 import (
 	"bytes"
 	"html"
+	"io/fs"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/virtuos/ai-self-service/internal/database"
 	"github.com/virtuos/ai-self-service/internal/i18n"
+	"github.com/virtuos/ai-self-service/web"
 )
 
 // Templates are parsed at construction time in production; these tests catch
@@ -324,5 +326,26 @@ func TestAdminEditButtonPassesBareValues(t *testing.T) {
 	}
 	if !strings.Contains(out, `"test quota"`) {
 		t.Error("profile name not passed to the edit button")
+	}
+}
+
+// The profiles table has more columns than fit a narrow viewport, and quota
+// windows stack inside their own cell. It must be allowed to overflow and
+// scroll: compressing it clipped the quota column off the right edge, so an
+// admin could not see the windows they had just saved.
+func TestAdminTableCanScroll(t *testing.T) {
+	css, err := fs.ReadFile(web.StaticFS, "style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	style := string(css)
+
+	if !strings.Contains(style, ".table-wrap { overflow-x: auto; }") {
+		t.Error("table wrapper does not scroll horizontally")
+	}
+	// Without a min-width the table compresses to the wrapper instead of
+	// overflowing it, so the scrollbar never appears and columns are clipped.
+	if !strings.Contains(style, "min-width: max-content") {
+		t.Error("table has no min-width, so it compresses rather than scrolling")
 	}
 }
