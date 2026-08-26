@@ -142,7 +142,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		ProfileName:   profileName(profile),
 		Quotas:        profileQuotaLines(profile, lang),
 		Models:        u.userModels(r.Context(), profile),
-		Usage:         u.userUsage(r.Context(), apiKey, su.User.OIDCSub),
+		Usage:         u.userUsage(r.Context(), apiKey, su.User.OIDCSub, lang),
 		CSRFToken:     u.csrf.Token(w, r),
 		Lang:          lang,
 		Langs:         i18n.Supported,
@@ -495,6 +495,32 @@ type usageReport struct {
 	Remaining int64
 	QuotaPct  int
 	ResetsAt  time.Time
+
+	// Windows is one entry per quota window, tightest first, so the card can
+	// show what each allowance has left. A profile can hold several at once
+	// and the tightest binds: a user with room on their monthly allowance can
+	// still be blocked by an hourly cap.
+	//
+	// Empty when the gateway keeps no per-request log, since consumption per
+	// window is summed from it — the gateway tracks each window internally but
+	// does not report it. The card falls back to the single bar then.
+	Windows []quotaWindowView
+}
+
+// quotaWindowView is one quota window as the dashboard renders it.
+//
+// Label and LimitText are pre-formatted here rather than in the template, the
+// way the account card does it: the period has to be translated, and a
+// template function would have to carry the language through a range.
+type quotaWindowView struct {
+	Period    string
+	Label     string
+	LimitText string
+	Used      int64
+	Limit     int64
+	Remaining int64
+	Pct       int
+	ResetsAt  time.Time
 }
 
 // userUsage summarises what the user has consumed.
@@ -506,7 +532,7 @@ type usageReport struct {
 //
 // An empty report means "show nothing": no key, a gateway that cannot be
 // reached, or a provider that does not report usage at all.
-func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string) usageReport {
+func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, lang i18n.Lang) usageReport {
 	if k == nil {
 		return usageReport{}
 	}
@@ -526,10 +552,18 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string) 
 		if rep.Remaining = q.LimitTokens - q.UsedTokens; rep.Remaining < 0 {
 			rep.Remaining = 0
 		}
-		rep.QuotaPct = int(q.UsedTokens * 100 / q.LimitTokens)
-		if rep.QuotaPct > 100 {
-			rep.QuotaPct = 100
-		}
+		rep.QuotaPct = quotaPct(q.UsedTokens, q.LimitTokens)
+	}
+
+	rep.Windows = u.quotaWindows(ctx, k.LiteLLMKey, ownerID, lang)
+
+	// With per-window figures the headline should name the window that binds,
+	// not the widest one: a user is blocked by whichever allowance runs out
+	// first, and the loosest reads as more headroom than they have.
+	if b := bindingWindow(rep.Windows); b != nil {
+		rep.HasQuota = true
+		rep.Used, rep.Remaining = b.Used, b.Remaining
+		rep.QuotaPct, rep.ResetsAt = b.Pct, b.ResetsAt
 	}
 
 	if len(days) > 0 {
@@ -613,4 +647,74 @@ func (u *UI) syncKeyLimits(ctx context.Context, k *database.APIKey, p *database.
 	if err := limiter.UpdateLimits(ctx, k.LiteLLMKey, ownerID, profileLimits(p)); err != nil {
 		slog.Error("re-apply profile limits", "key_prefix", k.KeyPrefix, "err", err)
 	}
+}
+
+// quotaPct is consumption as a percentage of an allowance, clamped to 100 so
+// an over-spent window renders as full rather than overflowing its bar.
+func quotaPct(used, limit int64) int {
+	if limit <= 0 {
+		return 0
+	}
+	pct := int(used * 100 / limit)
+	if pct > 100 {
+		return 100
+	}
+	return pct
+}
+
+// quotaWindows reports each allowance window with what it has left.
+//
+// Returns nothing when the provider cannot report per-window figures, or when
+// consumption is unknown for any window — spend logging can be switched off,
+// and a bar drawn from a silent zero would promise an allowance the user may
+// not have. The card falls back to the single gateway-reported bar then.
+func (u *UI) quotaWindows(ctx context.Context, ref, ownerID string, lang i18n.Lang) []quotaWindowView {
+	reporter, ok := u.keys.(keyprovider.UsageReporter)
+	if !ok || ref == "" {
+		return nil
+	}
+	windows, err := reporter.Windows(ctx, ref, ownerID)
+	if err != nil {
+		slog.Error("read quota windows", "err", err)
+		return nil
+	}
+
+	out := make([]quotaWindowView, 0, len(windows))
+	for _, w := range windows {
+		if w.LimitTokens <= 0 {
+			continue
+		}
+		if !w.UsedKnown {
+			// One unknown window makes the whole set untrustworthy: the others
+			// would imply this one is fine. Fall back rather than mislead.
+			return nil
+		}
+		remaining := w.LimitTokens - w.UsedTokens
+		if remaining < 0 {
+			remaining = 0
+		}
+		out = append(out, quotaWindowView{
+			Period:    w.Period,
+			Label:     periodLabel(w.Period, lang),
+			LimitText: litellm.FormatTokens(w.LimitTokens),
+			Used:      w.UsedTokens,
+			Limit:     w.LimitTokens,
+			Remaining: remaining,
+			Pct:       quotaPct(w.UsedTokens, w.LimitTokens),
+			ResetsAt:  w.ResetsAt,
+		})
+	}
+	return out
+}
+
+// bindingWindow is the window closest to being exhausted — the one that will
+// reject the next request. Nil when there are none.
+func bindingWindow(windows []quotaWindowView) *quotaWindowView {
+	var binding *quotaWindowView
+	for i := range windows {
+		if binding == nil || windows[i].Pct > binding.Pct {
+			binding = &windows[i]
+		}
+	}
+	return binding
 }

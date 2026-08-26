@@ -27,7 +27,7 @@ func TestUserUsageReportsCurrentKey(t *testing.T) {
 	}
 	u := usageUI(t, fake)
 
-	got := u.userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "")
+	got := u.userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN)
 	if got.Total != 157 {
 		t.Errorf("Total = %d, want 157", got.Total)
 	}
@@ -45,18 +45,18 @@ func TestUserUsageDegradesQuietly(t *testing.T) {
 	fake := keyprovider.NewFake()
 	fake.UsageByRef = map[string][]keyprovider.DailyUsage{"sk-live": {{Day: "2026-08-01", Tokens: 5}}}
 
-	if got := usageUI(t, fake).userUsage(context.Background(), nil, ""); got.Total != 0 || len(got.Days) != 0 {
+	if got := usageUI(t, fake).userUsage(context.Background(), nil, "", i18n.EN); got.Total != 0 || len(got.Days) != 0 {
 		t.Errorf("no key = %+v, want empty", got)
 	}
 
 	failing := keyprovider.NewFake()
 	failing.UsageErr = errors.New("gateway down")
-	if got := usageUI(t, failing).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, ""); got.Total != 0 {
+	if got := usageUI(t, failing).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN); got.Total != 0 {
 		t.Errorf("gateway down = %+v, want empty", got)
 	}
 
 	u := &UI{usage: newUsageCache(nil)}
-	if got := u.userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, ""); got.Total != 0 {
+	if got := u.userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN); got.Total != 0 {
 		t.Errorf("no reporter = %+v, want empty", got)
 	}
 }
@@ -67,7 +67,7 @@ func TestUserUsageReportsPeak(t *testing.T) {
 	fake.UsageByRef = map[string][]keyprovider.DailyUsage{
 		"k": {{Day: "2026-08-01", Tokens: 10}, {Day: "2026-08-02", Tokens: 40}},
 	}
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"}, "")
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"}, "", i18n.EN)
 	if got.Peak != 40 {
 		t.Errorf("Peak = %d, want 40", got.Peak)
 	}
@@ -128,7 +128,7 @@ func TestUserUsageFallsBackToTotal(t *testing.T) {
 	fake.UsageByRef = nil // logging disabled: no per-day rows
 	fake.TotalByRef = map[string]int64{"sk-live": 545}
 
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "")
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN)
 	if got.Total != 545 {
 		t.Errorf("Total = %d, want 545 from the key's own spend", got.Total)
 	}
@@ -149,7 +149,7 @@ func TestUserUsagePrefersPerDayRows(t *testing.T) {
 	}
 	fake.TotalByRef = map[string]int64{"sk-live": 999999}
 
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "")
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN)
 	if got.Total != 100 {
 		t.Errorf("Total = %d, want 100 from the per-day rows", got.Total)
 	}
@@ -171,7 +171,7 @@ func TestUserUsageReportsRemaining(t *testing.T) {
 			ResetsAt: time.Now().Add(6 * time.Hour)},
 	}
 
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"}, "")
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"}, "", i18n.EN)
 	if !got.HasQuota {
 		t.Fatal("HasQuota should be set when the key has a budget")
 	}
@@ -190,7 +190,7 @@ func TestUserUsageUnlimitedHasNoRemaining(t *testing.T) {
 	fake.QuotaByRef = map[string]keyprovider.Quota{
 		"k": {UsedTokens: 545, LimitTokens: 0},
 	}
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"}, "")
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"}, "", i18n.EN)
 	if got.HasQuota {
 		t.Error("HasQuota should be false for an unlimited key")
 	}

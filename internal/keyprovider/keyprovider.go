@@ -82,6 +82,29 @@ type Quota struct {
 	ResetsAt time.Time
 }
 
+// WindowUsage is consumption against one of a profile's quota windows.
+//
+// Reported per window because a profile can hold several at once and the
+// tightest one binds: a user with headroom on their monthly allowance can
+// still be blocked by an hourly cap, so showing only one window misstates
+// what they have left.
+type WindowUsage struct {
+	// Period is the window this covers ("1h" | "24h" | "7d" | "30d").
+	Period string
+	// UsedTokens is consumption since the window last reset. It is derived
+	// from the spend log rather than read from the gateway, which keeps a
+	// per-window counter but does not expose it.
+	UsedTokens int64
+	// LimitTokens is the allowance for this window.
+	LimitTokens int64
+	// ResetsAt is when this window rolls over.
+	ResetsAt time.Time
+	// UsedKnown reports whether UsedTokens is a real figure. Spend logging can
+	// be switched off, and a bar drawn from a silent zero would claim a full
+	// allowance the user may not have.
+	UsedKnown bool
+}
+
 // DailyUsage is one day's token consumption for a key.
 type DailyUsage struct {
 	// Day is the UTC date the tokens were spent on, as YYYY-MM-DD.
@@ -107,6 +130,13 @@ type UsageReporter interface {
 	// that survives when per-request logging is unavailable, so it is reported
 	// separately rather than derived from Usage.
 	TotalUsage(ctx context.Context, ref string) (int64, error)
+
+	// Windows reports consumption against every quota window that applies to
+	// the key and its owner, tightest period first.
+	//
+	// Returns nothing when the key has no quota, or when the windows cannot be
+	// determined — callers fall back to Quota.
+	Windows(ctx context.Context, ref, ownerID string) ([]WindowUsage, error)
 
 	// Quota reports consumption against the enforced allowance, in the window
 	// the gateway resets on.

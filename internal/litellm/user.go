@@ -95,6 +95,43 @@ type userInfoResponse struct {
 	} `json:"user_info"`
 }
 
+// userWindow is the owner's allowance expressed as a budget window, or nil
+// when they have none. The owner holds the widest window since issue #26, so
+// it belongs alongside the key's own windows when reporting what binds.
+func (c *Client) userWindow(ctx context.Context, userID string) (*budgetWindow, error) {
+	q := url.Values{}
+	q.Set("user_id", userID)
+
+	resp, err := c.do(ctx, http.MethodGet, "/user/info?"+q.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// A user that was never created has no allowance, which is the normal
+	// state for keys issued before owners were tracked.
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("LiteLLM /user/info returned %d: %s", resp.StatusCode, b)
+	}
+
+	var info userInfoResponse
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return nil, fmt.Errorf("decode user info: %w", err)
+	}
+	if info.UserInfo.MaxBudget == nil || info.UserInfo.BudgetDuration == nil {
+		return nil, nil
+	}
+	return &budgetWindow{
+		BudgetDuration: *info.UserInfo.BudgetDuration,
+		MaxBudget:      *info.UserInfo.MaxBudget,
+		ResetAt:        info.UserInfo.BudgetResetAt,
+	}, nil
+}
+
 // UserQuota reports a user's consumption against the allowance enforced on
 // them, across every key they own.
 //
