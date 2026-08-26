@@ -118,12 +118,69 @@ func TestModelCopyConfirmsInWords(t *testing.T) {
 			t.Fatal(err)
 		}
 		out := buf.String()
-		want := i18n.T(lang, "dash.copied")
+		// The chip copies a curl example, so it confirms with its own wording
+		// rather than the generic "Copied!" the other copy buttons use.
+		want := i18n.T(lang, "dash.models.copied")
 		if !strings.Contains(out, want) {
 			t.Errorf("%s: copy confirmation %q not available to the script", lang, want)
 		}
-		if !strings.Contains(out, "code.textContent = COPIED") {
+		if !strings.Contains(out, "code.textContent = CURL_COPIED") {
 			t.Errorf("%s: chip does not swap its label on copy", lang)
 		}
+	}
+}
+
+// Clicking a model copies a complete curl example for it, not just the name:
+// knowing the model is only half of what someone needs to make a first call.
+func TestModelChipCopiesACurlExample(t *testing.T) {
+	var buf bytes.Buffer
+	if err := parseDashboardTemplate().Execute(&buf, dashboardData{
+		Lang:       i18n.EN,
+		User:       &database.User{Name: "T", Email: "t@example.com"},
+		APIKey:     &database.APIKey{KeyPrefix: "sk-a", ExpiresAt: time.Now().Add(24 * time.Hour)},
+		APIBaseURL: "https://gateway.example/v1",
+		Models:     []string{"gpt-4o"},
+		CSRFToken:  "TOK",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+
+	// The example is built in the page, so the base URL has to reach the script.
+	if !strings.Contains(out, "https://gateway.example/v1") {
+		t.Error("base URL not available to the curl example")
+	}
+	for _, want := range []string{"chat/completions", "Authorization: Bearer", "curlExample("} {
+		if !strings.Contains(out, want) {
+			t.Errorf("curl example is missing %q", want)
+		}
+	}
+}
+
+// The example must reference the key by environment variable. The page only
+// ever shows a prefix, and a command carrying a live secret would land in the
+// user's shell history.
+func TestCurlExampleDoesNotEmbedTheKey(t *testing.T) {
+	var buf bytes.Buffer
+	if err := parseDashboardTemplate().Execute(&buf, dashboardData{
+		Lang:       i18n.EN,
+		User:       &database.User{Name: "T", Email: "t@example.com"},
+		APIKey:     &database.APIKey{KeyPrefix: "sk-a", ExpiresAt: time.Now().Add(24 * time.Hour)},
+		APIBaseURL: "https://gateway.example/v1",
+		NewKey:     "sk-supersecretvalue",
+		Models:     []string{"gpt-4o"},
+		CSRFToken:  "TOK",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+
+	if !strings.Contains(out, "$OPENAI_API_KEY") {
+		t.Error("curl example does not read the key from the environment")
+	}
+	// The freshly issued key is shown once in its own box; it must not also be
+	// baked into a command the user pastes into a terminal.
+	if strings.Count(out, "sk-supersecretvalue") != 1 {
+		t.Error("the secret appears outside its own box, likely in the curl example")
 	}
 }

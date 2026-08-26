@@ -223,6 +223,9 @@
                       onclick="copyModel(this)"><code>{{.}}</code></button></li>
           {{end}}
         </ul>
+        <p class="text-muted" style="margin:.5rem 0 0;font-size:.8rem">
+          {{T $.Lang "dash.models.curlnote"}}
+        </p>
       </dd>
       {{end}}
     </dl>
@@ -233,6 +236,8 @@
 
 <script>
 const COPIED = {{T .Lang "dash.copied"}};
+const CURL_COPIED = {{T .Lang "dash.models.copied"}};
+const BASE_URL = {{.APIBaseURL}};
 
 // Time words, translated server-side: the browser does the arithmetic, but
 // the wording has to match the page.
@@ -259,11 +264,27 @@ function copyText(id, btn) {
   });
 }
 
-// Model names are long and easy to mistype, so the whole chip copies the exact
-// name. The label is swapped rather than the code element replaced, so the
-// button keeps its width and the row does not jump.
+// Model names are long and easy to mistype, and knowing the name is only half
+// of what someone needs to make a request. The chip copies a complete curl
+// example for that model, so a first call is a paste away.
+//
+// The key is referenced as $OPENAI_API_KEY rather than pasted in: the page only
+// ever shows a prefix once the key has been issued, and a command carrying a
+// live secret would end up in the user's shell history.
+function curlExample(model) {
+  return "curl " + BASE_URL + "/chat/completions \\\n" +
+    "  -H \"Authorization: Bearer $OPENAI_API_KEY\" \\\n" +
+    "  -H \"Content-Type: application/json\" \\\n" +
+    "  -d '{\n" +
+    "    \"model\": \"" + model + "\",\n" +
+    "    \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}]\n" +
+    "  }'";
+}
+
+// The label is swapped rather than the code element replaced, so the button
+// keeps its width and the row does not jump.
 function copyModel(btn) {
-  navigator.clipboard.writeText(btn.dataset.model).then(() => {
+  navigator.clipboard.writeText(curlExample(btn.dataset.model)).then(() => {
     if (btn.dataset.busy) return;
     btn.dataset.busy = '1';
 
@@ -273,7 +294,7 @@ function copyModel(btn) {
     const code = btn.querySelector('code');
     code.style.minWidth = code.offsetWidth + 'px';
     const name = btn.dataset.model;
-    code.textContent = COPIED;
+    code.textContent = CURL_COPIED;
     btn.classList.add('copied');
 
     setTimeout(() => {
