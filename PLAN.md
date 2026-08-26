@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.3.2` (main is ahead: stacked quotas, unreleased) |
+| Latest release | `v0.4.0` |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -51,7 +51,7 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-182 tests. `go test ./...` needs nothing external; the one skip is a manual
+195 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -237,6 +237,16 @@ needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and cr
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
 
+### Released as v0.4.0 (2026-08-26)
+
+Stacked quota windows (#25), quota enforced against the person rather than the
+key (#26), a usage bar per window, identity by OIDC subject (#31), and a curl
+example on model click (#30). The schema changed, and #26 changed how quotas
+are enforced upstream.
+
+Deployed to testing and verified: the running image reports revision `f34e129`
+and `ADMIN_IDS` carries subjects rather than addresses.
+
 ### Also outstanding
 
 - `test quota` profile on testing has a mangled name (`"test quota"` with
@@ -253,8 +263,9 @@ deleting that user also removes any key left attached to it.
 
 ## Suggested next steps
 
-1. Release the unreleased work as `v0.4.0` — stacked quotas and the #26 fix.
-   The schema changed, and #26 changes how quotas are enforced upstream.
-2. Provision production: VM, DNS, Keycloak client, vault secrets, pricing.
-3. Ask the IdP team what group or affiliation claim the realm emits, then map
+1. Provision production: VM, DNS, Keycloak client, vault secrets, pricing.
+2. Ask the IdP team what group or affiliation claim the realm emits, then map
    profiles onto it.
+3. Issue #7 — several named keys per user, for different services. Blocked by
+   the unique index on `api_keys.user_id`, which is deliberate: the one-key
+   model runs through the schema, the dashboard and the rotation logic.
