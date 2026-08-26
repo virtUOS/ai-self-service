@@ -349,3 +349,46 @@ func TestAdminTableCanScroll(t *testing.T) {
 		t.Error("table has no min-width, so it compresses rather than scrolling")
 	}
 }
+
+// A profile's quota windows must reach both places the admin panel shows them:
+// the table cell, and the edit button's argument list that populates the form.
+// They were absent from both because the query behind this page did not load
+// the relation, so a profile with two windows rendered as "unlimited" and its
+// edit form opened empty.
+func TestAdminShowsProfileQuotaWindows(t *testing.T) {
+	var buf bytes.Buffer
+	err := parseAdminTemplate().Execute(&buf, adminData{
+		Profiles: []database.Profile{{
+			ID: 2, Name: "test quota",
+			Quotas: []database.ProfileQuota{
+				{Tokens: 1_000, Period: "1h"},
+				{Tokens: 1_000_000, Period: "30d"},
+			},
+		}},
+		Users:     []userRow{},
+		CSRFToken: "TOK",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := html.UnescapeString(buf.String())
+
+	// The table cell renders each window in the admin's own units.
+	for _, want := range []string{"1k", "1M"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("table does not show the %s window", want)
+		}
+	}
+	// The edit button carries them as JSON so the form opens populated. The
+	// field names are Go's, which is what setQuotaRows reads.
+	for _, want := range []string{`"Period":"1h"`, `"Period":"30d"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("edit button does not carry %s", want)
+		}
+	}
+	// A profile with windows must not advertise itself as unlimited. The
+	// default language is German, so that is the string to look for.
+	if strings.Contains(out, ">unbegrenzt</em>") {
+		t.Error("a profile with two windows still renders as unlimited")
+	}
+}

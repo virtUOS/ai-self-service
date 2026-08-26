@@ -47,7 +47,7 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-167 tests. `go test ./...` needs nothing external; the one skip is a manual
+173 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -116,6 +116,12 @@ end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
   `budget_duration` pair persists. Verified against the testing gateway on
   2026-08-26. Trusting the create response would ship quotas that enforce one
   window while the UI promises several. Stacking works on *keys*, not users.
+- **Bun does not load a `has-many` relation unless you ask.** A model with
+  `bun:"rel:has-many"` scans with the slice empty and no error, so a profile
+  came back with no quota windows and the admin panel rendered it as
+  "unlimited" — while `GetProfile`, which did call `Relation("Quotas")`, showed
+  them correctly. Every query returning a profile needs the `Relation` call;
+  the failure is silent and looks like missing data, not a missing join.
 - **SQLite ignores `ON DELETE CASCADE`** unless `PRAGMA foreign_keys` is set on
   every connection, which the driver does not do here. Rows referencing a
   deleted parent are simply orphaned — delete children explicitly, in the same
@@ -225,7 +231,9 @@ deleting that user also removes any key left attached to it.
 - `test quota` profile on testing has a mangled name (`"test quota"` with
   literal quotes) from the quoting bug #27 fixed. Editing and saving it in the
   admin panel rewrites it correctly; the fix stops it worsening but does not
-  clean up what is already stored.
+  clean up what is already stored. Its description is likewise a literal `""`.
+  Note this is only the *name*: its quota windows were missing for a different
+  reason, now fixed — see the Bun relation trap above.
 - **LiteLLM production** has neither the re-enabled spend logs nor the removal
   of the nightly restart. Both are merged in `litellm-setup` and deployed to
   testing only, deliberately — the restart bounded a memory leak, and it was

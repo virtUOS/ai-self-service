@@ -86,9 +86,16 @@ func (s *Store) upsertProfile(ctx context.Context, p *Profile) error {
 
 // --- Profiles ---
 
+// ListProfiles returns every profile with its quota windows.
+//
+// The relation is loaded here, not left to the caller: the admin table and the
+// edit form both render straight from this, so a profile without its windows
+// silently reads as unlimited.
 func (s *Store) ListProfiles(ctx context.Context) ([]Profile, error) {
 	var profiles []Profile
-	err := s.db.NewSelect().Model(&profiles).OrderExpr("is_default DESC, name ASC").Scan(ctx)
+	err := s.db.NewSelect().Model(&profiles).
+		Relation("Quotas").
+		OrderExpr("is_default DESC, name ASC").Scan(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -137,9 +144,15 @@ func (s *Store) SetProfileQuotas(ctx context.Context, profileID int64, quotas []
 	})
 }
 
+// GetDefaultProfile returns the fallback profile, with its quota windows.
+//
+// Users with no profile of their own are issued keys from this one, so
+// dropping the windows here would issue keys that enforce no quota at all.
 func (s *Store) GetDefaultProfile(ctx context.Context) (*Profile, error) {
 	p := &Profile{}
-	err := s.db.NewSelect().Model(p).Where("is_default <> 0").Limit(1).Scan(ctx)
+	err := s.db.NewSelect().Model(p).
+		Relation("Quotas").
+		Where("is_default <> 0").Limit(1).Scan(ctx)
 	if err != nil {
 		return nil, err
 	}
