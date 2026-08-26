@@ -228,8 +228,17 @@ textarea { resize: vertical; min-height: 72px; }
 .checkbox-row input[type=checkbox] { width: auto; }
 
 /* ── Tables ─────────────────────────────────────────────── */
+/* The profiles table has nine columns and quota windows stack inside their
+   cell, so it does not fit a narrow viewport. min-width lets it overflow and
+   scroll rather than compressing until the last columns are unreadable —
+   width:100% alone squeezed them off the edge. */
 .table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+table {
+  width: 100%;
+  min-width: max-content;
+  border-collapse: collapse;
+  font-size: .875rem;
+}
 th {
   text-align: left;
   padding: .55rem .9rem;
