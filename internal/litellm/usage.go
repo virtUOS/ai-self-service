@@ -184,12 +184,32 @@ func (c *Client) UpdateKeyLimits(ctx context.Context, key string, l keyprovider.
 	}
 	payload["models"] = models
 
-	if l.QuotaTokens > 0 && l.QuotaPeriod != "" {
-		payload["max_budget"] = TokensToBudget(l.QuotaTokens)
-		payload["budget_duration"] = l.QuotaPeriod
-	} else {
+	// Both shapes are always sent, one of them null: LiteLLM leaves an omitted
+	// field untouched, so a key moving between shapes would otherwise keep
+	// enforcing the one it no longer uses.
+	windows := effectiveWindows(l)
+	switch {
+	case len(windows) > 1:
+		// Several windows: budget_limits, enforced independently upstream.
+		limits := make([]map[string]any, 0, len(windows))
+		for _, w := range windows {
+			limits = append(limits, map[string]any{
+				"budget_duration": w.Period,
+				"max_budget":      TokensToBudget(w.Tokens),
+			})
+		}
+		payload["budget_limits"] = limits
 		payload["max_budget"] = nil
 		payload["budget_duration"] = nil
+	case len(windows) == 1:
+		// One window: the plain pair already works, so leave it alone.
+		payload["max_budget"] = TokensToBudget(windows[0].Tokens)
+		payload["budget_duration"] = windows[0].Period
+		payload["budget_limits"] = nil
+	default:
+		payload["max_budget"] = nil
+		payload["budget_duration"] = nil
+		payload["budget_limits"] = nil
 	}
 
 	body, err := json.Marshal(payload)
@@ -206,6 +226,24 @@ func (c *Client) UpdateKeyLimits(ctx context.Context, key string, l keyprovider.
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("LiteLLM /key/update returned %d: %s", resp.StatusCode, b)
+	}
+	return nil
+}
+
+// effectiveWindows is the set of allowance windows a Limits describes,
+// accepting the older single-quota fields when Quotas is empty.
+func effectiveWindows(l keyprovider.Limits) []keyprovider.QuotaWindow {
+	if len(l.Quotas) > 0 {
+		out := make([]keyprovider.QuotaWindow, 0, len(l.Quotas))
+		for _, q := range l.Quotas {
+			if q.Tokens > 0 && q.Period != "" {
+				out = append(out, q)
+			}
+		}
+		return out
+	}
+	if l.QuotaTokens > 0 && l.QuotaPeriod != "" {
+		return []keyprovider.QuotaWindow{{Tokens: l.QuotaTokens, Period: l.QuotaPeriod}}
 	}
 	return nil
 }

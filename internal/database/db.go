@@ -91,11 +91,44 @@ func (s *Store) ListProfiles(ctx context.Context) ([]Profile, error) {
 
 func (s *Store) GetProfile(ctx context.Context, id int64) (*Profile, error) {
 	p := &Profile{}
-	err := s.db.NewSelect().Model(p).Where("id = ?", id).Scan(ctx)
+	err := s.db.NewSelect().Model(p).Relation("Quotas").Where("profile.id = ?", id).Scan(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return p, nil
+}
+
+// SetProfileQuotas replaces a profile's allowance windows.
+//
+// Replace rather than merge: a window an admin removed must stop being
+// enforced, and the upstream key is rebuilt from this set on the next
+// dashboard load. Done in one transaction so a profile is never briefly
+// unlimited.
+func (s *Store) SetProfileQuotas(ctx context.Context, profileID int64, quotas []ProfileQuota) error {
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewDelete().Model((*ProfileQuota)(nil)).
+			Where("profile_id = ?", profileID).Exec(ctx); err != nil {
+			return fmt.Errorf("clear profile quotas: %w", err)
+		}
+		if len(quotas) == 0 {
+			return nil
+		}
+		rows := make([]ProfileQuota, 0, len(quotas))
+		for _, q := range quotas {
+			if q.Tokens <= 0 || q.Period == "" {
+				continue
+			}
+			q.ID, q.ProfileID = 0, profileID
+			rows = append(rows, q)
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		if _, err := tx.NewInsert().Model(&rows).Exec(ctx); err != nil {
+			return fmt.Errorf("insert profile quotas: %w", err)
+		}
+		return nil
+	})
 }
 
 func (s *Store) GetDefaultProfile(ctx context.Context) (*Profile, error) {

@@ -245,8 +245,13 @@ func TestGenerateKeyPassesQuotaToProvider(t *testing.T) {
 	ui, fake, store, user := newTestUI(t, "kf7")
 	ctx := context.Background()
 
-	p := &database.Profile{Name: "students", QuotaTokens: 1_000_000, QuotaPeriod: "24h"}
+	p := &database.Profile{Name: "students"}
 	if err := store.CreateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetProfileQuotas(ctx, p.ID, []database.ProfileQuota{
+		{Tokens: 1_000_000, Period: "24h"},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SetUserProfile(ctx, user.ID, &p.ID); err != nil {
@@ -258,7 +263,7 @@ func TestGenerateKeyPassesQuotaToProvider(t *testing.T) {
 		t.Fatal("no key created")
 	}
 	got := fake.Created[0].Limits
-	if got.QuotaTokens != 1_000_000 || got.QuotaPeriod != "24h" {
-		t.Errorf("limits = %d/%s, want 1000000/24h", got.QuotaTokens, got.QuotaPeriod)
+	if len(got.Quotas) != 1 || got.Quotas[0].Tokens != 1_000_000 || got.Quotas[0].Period != "24h" {
+		t.Errorf("limits = %+v, want one window of 1000000/24h", got.Quotas)
 	}
 }

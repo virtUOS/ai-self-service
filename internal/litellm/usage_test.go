@@ -286,3 +286,87 @@ func TestUpdateKeyLimitsSendsModelList(t *testing.T) {
 		t.Errorf("models = %v, want [gpt-4o]", got["models"])
 	}
 }
+
+// Several windows go upstream as budget_limits, which LiteLLM enforces
+// independently. Confirmed against the live gateway on v1.97.0: capping 1h
+// tight and 24h loose blocks on the hour, and the reverse blocks on the day.
+func TestUpdateKeyLimitsSendsStackedWindows(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&got)
+		w.Write([]byte("{}"))
+	}))
+	defer srv.Close()
+
+	err := NewClient(srv.URL, "mk").UpdateKeyLimits(context.Background(), "sk-x", keyprovider.Limits{
+		Quotas: []keyprovider.QuotaWindow{
+			{Tokens: 100_000, Period: "24h"},
+			{Tokens: 1_000_000, Period: "30d"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	limits, ok := got["budget_limits"].([]any)
+	if !ok || len(limits) != 2 {
+		t.Fatalf("budget_limits = %v, want two windows", got["budget_limits"])
+	}
+	first := limits[0].(map[string]any)
+	if first["budget_duration"] != "24h" {
+		t.Errorf("first window period = %v", first["budget_duration"])
+	}
+	if first["max_budget"] != 100_000*NominalTokenPrice {
+		t.Errorf("first window budget = %v", first["max_budget"])
+	}
+	// The single-window fields must not also be set, or the two disagree.
+	if got["max_budget"] != nil {
+		t.Errorf("max_budget should be nil when stacked windows are used, got %v", got["max_budget"])
+	}
+}
+
+// One window keeps using the plain pair: it already works, and there is no
+// reason to change the shape for the common case.
+func TestUpdateKeyLimitsSingleWindowStaysFlat(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&got)
+		w.Write([]byte("{}"))
+	}))
+	defer srv.Close()
+
+	if err := NewClient(srv.URL, "mk").UpdateKeyLimits(context.Background(), "sk-x", keyprovider.Limits{
+		Quotas: []keyprovider.QuotaWindow{{Tokens: 10_000, Period: "1h"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got["max_budget"] != 10_000*NominalTokenPrice {
+		t.Errorf("max_budget = %v", got["max_budget"])
+	}
+	if got["budget_duration"] != "1h" {
+		t.Errorf("budget_duration = %v", got["budget_duration"])
+	}
+}
+
+// Dropping from several windows to none must clear both shapes, or the key
+// keeps enforcing whichever one was left behind.
+func TestUpdateKeyLimitsClearsStackedWindows(t *testing.T) {
+	var raw string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		w.Write([]byte("{}"))
+	}))
+	defer srv.Close()
+
+	if err := NewClient(srv.URL, "mk").UpdateKeyLimits(
+		context.Background(), "sk-x", keyprovider.Limits{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(raw, `"max_budget":null`) {
+		t.Errorf("payload does not clear max_budget: %s", raw)
+	}
+	if !strings.Contains(raw, `"budget_limits":null`) {
+		t.Errorf("payload does not clear budget_limits: %s", raw)
+	}
+}

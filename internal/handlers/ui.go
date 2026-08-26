@@ -561,12 +561,15 @@ func profileLimits(p *database.Profile) keyprovider.Limits {
 	if p == nil {
 		return keyprovider.Limits{}
 	}
+	windows := make([]keyprovider.QuotaWindow, 0, len(p.Quotas))
+	for _, q := range p.Quotas {
+		windows = append(windows, keyprovider.QuotaWindow{Tokens: q.Tokens, Period: q.Period})
+	}
 	return keyprovider.Limits{
 		Models:            p.Models,
 		TokensPerMinute:   p.TPMLimit,
 		RequestsPerMinute: p.RPMLimit,
-		QuotaTokens:       p.QuotaTokens,
-		QuotaPeriod:       p.QuotaPeriod,
+		Quotas:            windows,
 	}
 }
 

@@ -59,10 +59,11 @@ func TestDashboardQuotaRendering(t *testing.T) {
 func TestProfileLimits(t *testing.T) {
 	tpm := int64(1000)
 	p := &database.Profile{
-		Models:      []string{"Qwen/Qwen3.8-27B-FP8"},
-		TPMLimit:    &tpm,
-		QuotaTokens: 1_000_000,
-		QuotaPeriod: "24h",
+		Models:   []string{"Qwen/Qwen3.8-27B-FP8"},
+		TPMLimit: &tpm,
+		Quotas: []database.ProfileQuota{
+			{Tokens: 1_000_000, Period: "24h"},
+		},
 	}
 	got := profileLimits(p)
 	if len(got.Models) != 1 || got.Models[0] != "Qwen/Qwen3.8-27B-FP8" {
@@ -71,15 +72,15 @@ func TestProfileLimits(t *testing.T) {
 	if got.TokensPerMinute == nil || *got.TokensPerMinute != 1000 {
 		t.Errorf("TokensPerMinute = %v", got.TokensPerMinute)
 	}
-	if got.QuotaTokens != 1_000_000 || got.QuotaPeriod != "24h" {
-		t.Errorf("quota = %d/%s", got.QuotaTokens, got.QuotaPeriod)
+	if len(got.Quotas) != 1 || got.Quotas[0].Tokens != 1_000_000 || got.Quotas[0].Period != "24h" {
+		t.Errorf("quotas = %+v, want one window of 1M/24h", got.Quotas)
 	}
 }
 
 // A nil profile must produce empty limits rather than panic.
 func TestProfileLimitsNil(t *testing.T) {
 	got := profileLimits(nil)
-	if got.QuotaTokens != 0 || got.Models != nil {
+	if len(got.Quotas) != 0 || got.Models != nil {
 		t.Errorf("nil profile gave %#v", got)
 	}
 	_ = keyprovider.Limits{}

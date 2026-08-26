@@ -23,8 +23,13 @@ func TestDashboardReappliesProfileLimits(t *testing.T) {
 	k, _ := store.GetAPIKeyByUser(ctx, user.ID)
 
 	// The user is then put on a profile that does have one.
-	p := &database.Profile{Name: "test quota", QuotaTokens: 10_000, QuotaPeriod: "1h"}
+	p := &database.Profile{Name: "test quota"}
 	if err := store.CreateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetProfileQuotas(ctx, p.ID, []database.ProfileQuota{
+		{Tokens: 10_000, Period: "1h"},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SetUserProfile(ctx, user.ID, &p.ID); err != nil {
@@ -37,8 +42,8 @@ func TestDashboardReappliesProfileLimits(t *testing.T) {
 	if !ok {
 		t.Fatal("dashboard did not push limits to the existing key")
 	}
-	if got.QuotaTokens != 10_000 || got.QuotaPeriod != "1h" {
-		t.Errorf("pushed %+v, want 10000/1h", got)
+	if len(got.Quotas) != 1 || got.Quotas[0].Tokens != 10_000 || got.Quotas[0].Period != "1h" {
+		t.Errorf("pushed %+v, want one window of 10000/1h", got)
 	}
 }
 
@@ -62,4 +67,35 @@ func getPage(t *testing.T, ui *UI, h http.HandlerFunc, path string) *httptest.Re
 	rec := httptest.NewRecorder()
 	h(rec, req)
 	return rec
+}
+
+// A profile with several windows must push all of them, so the gateway can
+// enforce each independently.
+func TestDashboardPushesStackedWindows(t *testing.T) {
+	ui, fake, store, user := newTestUI(t, "psync3")
+	ctx := context.Background()
+
+	post(t, ui, ui.GenerateKey, "/key/generate")
+	k, _ := store.GetAPIKeyByUser(ctx, user.ID)
+
+	p := &database.Profile{Name: "stacked"}
+	if err := store.CreateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetProfileQuotas(ctx, p.ID, []database.ProfileQuota{
+		{Tokens: 100_000, Period: "24h"},
+		{Tokens: 1_000_000, Period: "30d"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetUserProfile(ctx, user.ID, &p.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	getPage(t, ui, ui.Dashboard, "/")
+
+	got := fake.LimitsByRef[k.LiteLLMKey]
+	if len(got.Quotas) != 2 {
+		t.Fatalf("pushed %d windows, want 2", len(got.Quotas))
+	}
 }
