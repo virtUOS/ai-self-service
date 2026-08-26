@@ -56,16 +56,18 @@ Phases 1–6 of the original assessment all shipped:
 
 ## Things that will waste your time if you do not know them
 
-- **Stacked quota windows do not work.** LiteLLM v1.97.0 accepts
-  `budget_limits` (“100k/day AND 1M/month”), stores it, computes a `reset_at`
-  — and never enforces it. Verified three times, including driving spend
-  5,000,000× past the cap. Only `max_budget` + `budget_duration` is enforced,
-  so a profile gets **one** period. Re-test on a newer LiteLLM before
-  promising otherwise.
-- **`asvc_smtp_host` must carry the port.** The app calls `net.SplitHostPort`,
-  so a bare `relay.rz.uni-osnabrueck.de` fails at runtime with “missing port in
-  address”. The HIT site splits host and port into separate variables; this one
-  does not.
+- **Stacked quota windows DO work** on v1.97.0, contrary to an earlier note
+  here. A key takes `budget_limits` as a list of
+  `{budget_duration, max_budget}` objects, and each window is enforced
+  independently: verified by capping 1h tiny with 24h generous (the 1h blocked)
+  and then the reverse (the 24h blocked). The error names the window, e.g.
+  `ExceededBudget: Key over 1h budget`.
+
+  The earlier finding was made on v1.90.0, where `budget_limits` took a dict
+  (`{"1h": 0.0001}`) — that shape is now rejected outright, so the API changed
+  along with the behaviour. The portal still exposes only one period per
+  profile; supporting stacked windows is issue #1.
+
 - **Budgets reset lazily.** LiteLLM clears a key's spend on the first request
   after the window passes, not on a timer. A key can sit past its
   `budget_reset_at` still reporting the old spend and still rejecting requests,
