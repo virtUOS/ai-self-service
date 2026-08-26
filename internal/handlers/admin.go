@@ -146,9 +146,17 @@ func (a *Admin) Middleware(next http.Handler) http.Handler {
 			http.Redirect(w, r, "/login", http.StatusFound)
 			return
 		}
-		if !a.cfg.IsAdmin(su.User.Email) {
+		admin, bySubject := a.cfg.IsAdmin(su.User.OIDCSub, su.User.Email)
+		if !admin {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
+		}
+		if !bySubject {
+			// The entry that granted this is an email address, which the IdP
+			// can reassign. Say so once per request rather than silently
+			// relying on it, so an operator can migrate the allowlist.
+			slog.Warn("admin granted by email rather than OIDC subject",
+				"email", su.User.Email, "sub", su.User.OIDCSub)
 		}
 		next.ServeHTTP(w, r)
 	})

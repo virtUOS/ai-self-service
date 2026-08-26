@@ -36,7 +36,8 @@ Copy `.env.example` to `.env` and fill in the values:
 | `OIDC_CLIENT_SECRET` | yes      | —           | OIDC client secret                                                 |
 | `OIDC_REDIRECT_URL`  | yes      | —           | Callback URL (must match OIDC client config)                       |
 | `FRONTEND_URL`       | yes      | —           | Public base URL of this app (shown to users as the API base URL)   |
-| `ADMIN_EMAILS`       | no       | —           | Comma-separated list of admin email addresses                      |
+| `ADMIN_IDS`          | no       | —           | Comma-separated admins, each an OIDC subject **or** an email       |
+| `ADMIN_EMAILS`       | no       | —           | Deprecated alias for `ADMIN_IDS`; still read, email entries only   |
 | `DB_PATH`            | no       | `./data.db` | Path to the SQLite database file                                   |
 | `LISTEN_ADDR`        | no       | `:8080`     | Address and port to listen on                                      |
 | `COOKIE_SECURE`      | no       | `false`     | Set `true` when serving over HTTPS                                 |
@@ -76,7 +77,13 @@ in-process issuer, so `go test ./...` requires nothing external.
 
 ## Admin panel
 
-Users whose email appears in `ADMIN_EMAILS` see an **Admin** link in the header. The admin panel at `/admin` provides:
+Users listed in `ADMIN_IDS` see an **Admin** link in the header. An entry is
+either an **OIDC subject** or an email address, and the subject is the form to
+prefer: an address is assigned by the IdP and can be reassigned, so an
+allowlist keyed on it grants admin to whoever holds that address today rather
+than to a person. Each user's subject is shown in the admin panel's user table,
+click to copy. Granting by email still works and is logged as such, so an
+existing `ADMIN_EMAILS` deployment keeps running while it is migrated. The admin panel at `/admin` provides:
 
 - **Profiles** — create and edit profiles with model restrictions, TPM/RPM limits, and budget caps. Mark one profile as default; it applies to users with no explicit profile assignment.
 - **Users** — view everyone who has logged in, see their key prefix and expiry,

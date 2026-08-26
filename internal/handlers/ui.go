@@ -126,6 +126,8 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 	// the gateway does not enforce.
 	u.syncKeyLimits(r.Context(), apiKey, profile, su.User.OIDCSub)
 
+	isAdmin, _ := u.cfg.IsAdmin(su.User.OIDCSub, su.User.Email)
+
 	// Redeem a one-time new key stashed by GenerateKey. The secret never
 	// appears in the URL; the query string carries only an opaque token.
 	newKey := u.flash.Take(su.User.ID, r.URL.Query().Get("k"))
@@ -134,7 +136,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		User:          su.User,
 		APIKey:        apiKey,
 		NewKey:        newKey,
-		IsAdmin:       u.cfg.IsAdmin(su.User.Email),
+		IsAdmin:       isAdmin,
 		APIBaseURL:    strings.TrimRight(u.cfg.LiteLLMBaseURL, "/") + "/v1",
 		ExtendUntil:   u.extendUntil(profile),
 		ExpiresInDays: daysUntilExpiry(apiKey),
@@ -230,20 +232,51 @@ func (u *UI) SessionStatus(w http.ResponseWriter, r *http.Request) {
 
 // keyAlias builds the label a key carries in the provider's UI. LiteLLM requires
 // aliases to be unique across all live keys, and rotation deliberately creates
-// the replacement while the old key is still live, so the address alone would
+// the replacement while the old key is still live, so an identifier alone would
 // collide on every regeneration.
 //
+// The subject leads because it is the one identifier that never changes; the
+// username follows so a human reading LiteLLM's UI can tell whose key it is.
+// An email address is deliberately not used: the IdP can reassign it, which
+// would leave the gateway labelling a key with someone else's address.
+//
 // The suffix is random rather than a timestamp: two rotations can land in the
-// same millisecond, so a clock-derived suffix is not actually unique. The
-// address keeps the alias readable; ownership is tracked by KeyRequest.Owner.
-func keyAlias(email string) (string, error) {
+// same millisecond, so a clock-derived suffix is not actually unique.
+//
+// The alias is a label, not a binding — ownership is KeyRequest.OwnerID, which
+// is the subject. A username that changes later leaves old aliases reading the
+// old name, which is cosmetic and deliberately not chased with a rename.
+func keyAlias(sub, username string) (string, error) {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {
-		// Falling back to a bare address would 400 on the next rotation, so
+		// Falling back to a bare identifier would 400 on the next rotation, so
 		// fail here rather than issue a key that cannot be replaced.
 		return "", fmt.Errorf("generate key alias: %w", err)
 	}
-	return email + "-" + hex.EncodeToString(b), nil
+
+	label := sub
+	if username = sanitiseAlias(username); username != "" {
+		label += "-" + username
+	}
+	return label + "-" + hex.EncodeToString(b), nil
+}
+
+// sanitiseAlias reduces a username to characters that are safe in an alias.
+// Names arrive from the IdP and can carry spaces or punctuation, which would
+// make the alias awkward to read and to quote in the gateway's own tooling.
+func sanitiseAlias(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r + 32)
+		case r == ' ' || r == '.' || r == '@':
+			b.WriteRune('-')
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 // GenerateKey creates a new LiteLLM key for the user, replacing any existing one.
@@ -267,7 +300,7 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	alias, err := keyAlias(su.User.Email)
+	alias, err := keyAlias(su.User.OIDCSub, su.User.Name)
 	if err != nil {
 		slog.Error("build key alias", "err", err)
 		metrics.KeyOperations.WithLabelValues("generate", "alias_error").Inc()

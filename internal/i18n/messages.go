@@ -100,6 +100,8 @@ var messages = map[string]map[Lang]string{
 	"admin.col.quota":         {DE: "Kontingent", EN: "Quota"},
 	"admin.col.default":       {DE: "Standard", EN: "Default"},
 	"admin.col.email":         {DE: "E-Mail", EN: "Email"},
+	"admin.col.oidcsub":       {DE: "OIDC-Subject", EN: "OIDC subject"},
+	"admin.col.oidcsub.help":  {DE: "Dauerhafte Kennung dieser Person. Zum Kopieren klicken — dieser Wert gehört in ADMIN_IDS, nicht die E-Mail-Adresse.", EN: "This person's durable identifier. Click to copy — this is the value for ADMIN_IDS, not the email address."},
 	"admin.col.profile":       {DE: "Profil", EN: "Profile"},
 	"admin.col.apikey":        {DE: "API-Schlüssel", EN: "API key"},
 	"admin.col.changeprofile": {DE: "Profil ändern", EN: "Change profile"},
