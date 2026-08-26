@@ -46,7 +46,7 @@ var messages = map[string]map[Lang]string{
 	"dash.baseurl":                {DE: "Basis-URL", EN: "Base URL"},
 	"dash.models":                 {DE: "Verfügbare Modelle", EN: "Available models"},
 	"dash.usagestats":             {DE: "Ihr Verbrauch", EN: "Your usage"},
-	"dash.usagestats.note":        {DE: "Tokenverbrauch dieses Schlüssels in den letzten 30 Tagen. Ein neu erzeugter Schlüssel beginnt wieder bei null.", EN: "Tokens used by this key over the last 30 days. A newly generated key starts again at zero."},
+	"dash.usagestats.note":        {DE: "Tokenverbrauch dieses Schlüssels in den letzten 30 Tagen. Das Kontingent gilt für Sie, nicht für den einzelnen Schlüssel: Ein neu erzeugter Schlüssel setzt es nicht zurück.", EN: "Tokens used by this key over the last 30 days. Your quota applies to you rather than to a single key, so generating a new key does not reset it."},
 	"dash.usagestats.total":       {DE: "Gesamt", EN: "Total"},
 	"admin.form.quota.add":        {DE: "Fenster hinzufügen", EN: "Add window"},
 	"admin.form.quota.tokens":     {DE: "Tokens", EN: "Tokens"},

@@ -24,6 +24,10 @@ type Limits struct {
 	// Quotas are fair-use allowances applied together, each resetting on its
 	// own period, after which requests fail until that period rolls over. The
 	// tightest window binds. Empty means unlimited.
+	//
+	// Where they are enforced is a provider concern: a provider that can bind
+	// an allowance to a person may enforce the widest window there and the
+	// rest on the key, so that the wide one survives a rotation.
 	Quotas []QuotaWindow
 }
 
@@ -32,7 +36,13 @@ type KeyRequest struct {
 	// Alias identifies the key in the provider's own UI.
 	Alias string
 	// Owner is recorded as metadata so a key can be traced back to a person.
-	Owner     string
+	Owner string
+	// OwnerID identifies the person to the provider, stably across key
+	// rotations. A provider that can hold an allowance against a person rather
+	// than a key enforces the widest quota window there, so that regenerating
+	// a key no longer resets it. Empty means the provider falls back to
+	// enforcing everything on the key alone.
+	OwnerID   string
 	ExpiresAt time.Time
 	Limits    Limits
 }
@@ -100,7 +110,11 @@ type UsageReporter interface {
 
 	// Quota reports consumption against the enforced allowance, in the window
 	// the gateway resets on.
-	Quota(ctx context.Context, ref string) (Quota, error)
+	//
+	// ownerID names the person the key belongs to. Where an allowance is held
+	// against the person, that is the figure reported: it is the one that
+	// binds after a rotation, and the one a user cannot reset by regenerating.
+	Quota(ctx context.Context, ref, ownerID string) (Quota, error)
 }
 
 // Provider issues and revokes keys on an upstream gateway.
@@ -116,5 +130,9 @@ type Provider interface {
 	// the only time its limits change: users move between profiles and
 	// profiles get edited, and without this the portal would advertise limits
 	// the gateway does not enforce.
-	UpdateLimits(ctx context.Context, ref string, limits Limits) error
+	//
+	// ownerID identifies the person the key belongs to, so that a provider
+	// enforcing part of the allowance against the person can update that too.
+	// Empty means enforce everything on the key.
+	UpdateLimits(ctx context.Context, ref, ownerID string, limits Limits) error
 }

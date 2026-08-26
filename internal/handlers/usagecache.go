@@ -96,12 +96,14 @@ func (c *usageCache) Total(ctx context.Context, ref string) int64 {
 	return total
 }
 
-// Quota returns the key's consumption against its enforced allowance.
+// Quota returns consumption against the enforced allowance, for the key and
+// the person who owns it.
+//
 // Uncached: it is the figure users act on when they are close to the limit,
 // and a minute-stale number there is worse than a fresh call.
-func (c *usageCache) Quota(ctx context.Context, ref string) (keyprovider.Quota, error) {
+func (c *usageCache) Quota(ctx context.Context, ref, ownerID string) (keyprovider.Quota, error) {
 	if c.reporter == nil || ref == "" {
 		return keyprovider.Quota{}, nil
 	}
-	return c.reporter.Quota(ctx, ref)
+	return c.reporter.Quota(ctx, ref, ownerID)
 }

@@ -40,6 +40,7 @@ type KeyParams struct {
 	MaxBudget      *float64       `json:"max_budget,omitempty"`
 	BudgetDuration *string        `json:"budget_duration,omitempty"`
 	BudgetLimits   []BudgetWindow `json:"budget_limits,omitempty"`
+	UserID         string         `json:"user_id,omitempty"`
 	Duration       string         `json:"duration,omitempty"`
 	Metadata       map[string]any `json:"metadata,omitempty"`
 }

@@ -124,7 +124,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 	// here so an existing key converges on its profile rather than keeping
 	// whatever it was created with — otherwise this page advertises a limit
 	// the gateway does not enforce.
-	u.syncKeyLimits(r.Context(), apiKey, profile)
+	u.syncKeyLimits(r.Context(), apiKey, profile, su.User.OIDCSub)
 
 	// Redeem a one-time new key stashed by GenerateKey. The secret never
 	// appears in the URL; the query string carries only an opaque token.
@@ -142,7 +142,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		ProfileName:   profileName(profile),
 		Quotas:        profileQuotaLines(profile, lang),
 		Models:        u.userModels(r.Context(), profile),
-		Usage:         u.userUsage(r.Context(), apiKey),
+		Usage:         u.userUsage(r.Context(), apiKey, su.User.OIDCSub),
 		CSRFToken:     u.csrf.Token(w, r),
 		Lang:          lang,
 		Langs:         i18n.Supported,
@@ -281,6 +281,7 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	result, err := u.keys.CreateKey(r.Context(), keyprovider.KeyRequest{
 		Alias:     alias,
 		Owner:     su.User.Email,
+		OwnerID:   su.User.OIDCSub,
 		ExpiresAt: expiresAt,
 		Limits:    profileLimits(profile),
 	})
@@ -496,13 +497,16 @@ type usageReport struct {
 	ResetsAt  time.Time
 }
 
-// userUsage summarises what the user's current key has consumed. Usage belongs
-// to a key rather than a person upstream, so regenerating starts the history
-// over — the new key is a different key.
+// userUsage summarises what the user has consumed.
+//
+// The per-day history belongs to a key upstream, so regenerating starts that
+// chart over — the new key is a different key. The quota does not: ownerID
+// names the person, and the allowance enforced against them survives a
+// rotation, which is the figure users are actually held to.
 //
 // An empty report means "show nothing": no key, a gateway that cannot be
 // reached, or a provider that does not report usage at all.
-func (u *UI) userUsage(ctx context.Context, k *database.APIKey) usageReport {
+func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string) usageReport {
 	if k == nil {
 		return usageReport{}
 	}
@@ -516,7 +520,7 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey) usageReport {
 			rep.Peak = d.Tokens
 		}
 	}
-	if q, err := u.usage.Quota(ctx, k.LiteLLMKey); err == nil && q.LimitTokens > 0 {
+	if q, err := u.usage.Quota(ctx, k.LiteLLMKey, ownerID); err == nil && q.LimitTokens > 0 {
 		rep.HasQuota = true
 		rep.Used, rep.ResetsAt = q.UsedTokens, q.ResetsAt
 		if rep.Remaining = q.LimitTokens - q.UsedTokens; rep.Remaining < 0 {
@@ -589,22 +593,24 @@ func profileLimits(p *database.Profile) keyprovider.Limits {
 	}
 }
 
-// syncKeyLimits re-applies a profile's limits to an existing key.
+// syncKeyLimits re-applies a profile's limits to an existing key and to the
+// allowance held against its owner, so a profile edit takes effect without the
+// user regenerating.
 //
 // A failure is logged and swallowed: the dashboard is a read path, and a
 // gateway blip must not stop the user seeing their key. The next page load
 // retries, so the key converges rather than staying stale.
-func (u *UI) syncKeyLimits(ctx context.Context, k *database.APIKey, p *database.Profile) {
+func (u *UI) syncKeyLimits(ctx context.Context, k *database.APIKey, p *database.Profile, ownerID string) {
 	if k == nil {
 		return
 	}
 	limiter, ok := u.keys.(interface {
-		UpdateLimits(context.Context, string, keyprovider.Limits) error
+		UpdateLimits(context.Context, string, string, keyprovider.Limits) error
 	})
 	if !ok {
 		return
 	}
-	if err := limiter.UpdateLimits(ctx, k.LiteLLMKey, profileLimits(p)); err != nil {
+	if err := limiter.UpdateLimits(ctx, k.LiteLLMKey, ownerID, profileLimits(p)); err != nil {
 		slog.Error("re-apply profile limits", "key_prefix", k.KeyPrefix, "err", err)
 	}
 }

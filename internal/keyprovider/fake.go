@@ -22,6 +22,8 @@ type Fake struct {
 	Deleted   []string
 	Extended  []string
 	Relimited []string
+	// RelimitedOwners records the owner passed alongside each Relimited ref.
+	RelimitedOwners []string
 
 	// LimitsByRef is the live limits per key, updated by UpdateLimits.
 	LimitsByRef map[string]Limits
@@ -44,6 +46,11 @@ type Fake struct {
 	// QuotaByRef is what Quota returns per key ref; QuotaErr forces failure.
 	QuotaByRef map[string]Quota
 	QuotaErr   error
+
+	// QuotaByOwner is the allowance held against a person rather than a key.
+	// It takes precedence over QuotaByRef, mirroring the real gateway, so a
+	// test can assert that a figure survives a key rotation.
+	QuotaByOwner map[string]Quota
 
 	// CreateErr, DeleteErr and ExpiryErr force the respective call to fail.
 	CreateErr error
@@ -72,7 +79,7 @@ func (f *Fake) Usage(_ context.Context, ref string, _ int) ([]DailyUsage, error)
 }
 
 // UpdateLimits records a re-application of limits to an existing key.
-func (f *Fake) UpdateLimits(_ context.Context, ref string, l Limits) error {
+func (f *Fake) UpdateLimits(_ context.Context, ref, ownerID string, l Limits) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.LimitsErr != nil {
@@ -83,15 +90,21 @@ func (f *Fake) UpdateLimits(_ context.Context, ref string, l Limits) error {
 	}
 	f.LimitsByRef[ref] = l
 	f.Relimited = append(f.Relimited, ref)
+	f.RelimitedOwners = append(f.RelimitedOwners, ownerID)
 	return nil
 }
 
-// Quota returns the canned allowance figures for a key.
-func (f *Fake) Quota(_ context.Context, ref string) (Quota, error) {
+// Quota returns the allowance figures for a key, preferring the one held
+// against its owner where there is one — as the real gateway does, so that the
+// figure does not reset when the key is rotated.
+func (f *Fake) Quota(_ context.Context, ref, ownerID string) (Quota, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.QuotaErr != nil {
 		return Quota{}, f.QuotaErr
+	}
+	if q, ok := f.QuotaByOwner[ownerID]; ok && ownerID != "" {
+		return q, nil
 	}
 	return f.QuotaByRef[ref], nil
 }

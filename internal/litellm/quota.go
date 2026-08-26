@@ -1,6 +1,10 @@
 package litellm
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/virtuos/ai-self-service/internal/keyprovider"
+)
 
 // NominalTokenPrice is the synthetic per-token price configured on the local
 // models in LiteLLM. Input and output are priced identically, which is what
@@ -63,4 +67,55 @@ func trimZero(v float64) string {
 		return s[:len(s)-2]
 	}
 	return s
+}
+
+// periodRank orders the reset windows from tightest to widest. The order is
+// explicit rather than derived from the string, because "7d" and "30d" do not
+// sort lexicographically and a wrong order would silently put the wrong
+// allowance on the user.
+func periodRank(period string) int {
+	switch period {
+	case "1h":
+		return 1
+	case "24h":
+		return 2
+	case "7d":
+		return 3
+	case "30d":
+		return 4
+	}
+	return 0
+}
+
+// WidestWindow splits a profile's windows into the one enforced on the user
+// and the ones left on the key.
+//
+// The widest window is the allowance worth rotating a key to escape, so that
+// is the one that has to follow the person (issue #26). The shorter windows
+// stay on the key: they cap bursts and reset on their own within hours, so a
+// rotation that resets them gains nothing worth defending against. An internal
+// user can hold only one window — it accepts budget_limits and silently drops
+// them — which is why this is a split rather than a copy.
+//
+// Returns the widest window and the remainder, preserving input order. For no
+// windows the widest is the zero value, which callers read as "no budget".
+func WidestWindow(windows []keyprovider.QuotaWindow) (keyprovider.QuotaWindow, []keyprovider.QuotaWindow) {
+	if len(windows) == 0 {
+		return keyprovider.QuotaWindow{}, nil
+	}
+
+	widest := 0
+	for i, w := range windows[1:] {
+		if periodRank(w.Period) > periodRank(windows[widest].Period) {
+			widest = i + 1
+		}
+	}
+
+	rest := make([]keyprovider.QuotaWindow, 0, len(windows)-1)
+	for i, w := range windows {
+		if i != widest {
+			rest = append(rest, w)
+		}
+	}
+	return windows[widest], rest
 }

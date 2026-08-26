@@ -43,8 +43,12 @@ Phases 1–6 of the original assessment all shipped:
 - **Local dev** — Keycloak, or a faster OIDC mock under `--profile mock`.
 - **Stacked quota windows** — a profile holds several allowances at once
   (100k/day AND 1M/month); the gateway enforces each independently.
+- **Quota follows the person** — the widest window is enforced on a LiteLLM
+  internal user rather than the key, so regenerating a key no longer resets it
+  (#26). Shorter burst windows stay on the key.
 
-146 tests, no skips. `go test ./...` needs nothing external.
+167 tests. `go test ./...` needs nothing external; the one skip is a manual
+end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
 
@@ -145,17 +149,28 @@ documentation correction that unblocked them (#24), quota validation and a
 profile-name quoting fix (#27). Testing runs all of it; `v0.4.0` is warranted
 when someone wants a tagged build, since the schema changed.
 
-### The thing to look at first: issue #26
+### Issue #26 — fixed, unreleased
 
 A user pointed out that **regenerating a key resets the quota**, so anyone at
-their limit can simply issue a new key and carry on. That is a real hole, and
-it comes from a decision recorded in this file: usage was scoped to the current
-key because usage lives on the key upstream, and carrying it across rotations
-was judged not obviously wanted. #26 is that judgement being wrong.
+their limit could simply issue a new key and carry on. That came from a
+decision recorded in this file: usage was scoped to the current key because
+usage lives on the key upstream, and carrying it across rotations was judged
+not obviously wanted. #26 was that judgement being wrong.
 
-Fixing it means the quota has to follow the *user*, not the key. Three routes:
+**Now fixed.** The quota follows the person: each key is bound to a LiteLLM
+internal user keyed by the user's OIDC subject, and the widest quota window is
+enforced there rather than on the key. Verified end to end against the testing
+gateway — the same 1M/30d allowance is reported through a key and through its
+replacement.
 
-- **LiteLLM internal users (recommended).** The gateway already has the exact
+The `Quota` call falls back to the key's own counter when a user has no
+allowance upstream, so keys issued before this change keep reporting a figure
+instead of showing nothing. They move onto the user allowance the next time
+their profile syncs or they regenerate.
+
+The routes considered, and why the first won:
+
+- **LiteLLM internal users — chosen.** The gateway already has the exact
   primitive: `/user/new` takes `max_budget` and `budget_duration`, and an
   internal user's budget applies across *every* key that user owns. Generating
   a key with `user_id` set attaches it to that budget, so rotation no longer
@@ -187,9 +202,23 @@ Fixing it means the quota has to follow the *user*, not the key. Three routes:
 - Track usage per user in the portal and enforce there, using the gateway only
   for a coarse backstop. Correct, but duplicates what the gateway does.
 
-Worth deciding before building. The dashboard text ("a newly generated key
-starts again at zero") documents the current behaviour honestly, so nothing is
-lying to users in the meantime.
+The dashboard text no longer says "a newly generated key starts again at
+zero"; it now states that the quota applies to the person, which is what the
+gateway enforces.
+
+**Still unverified:** that spend *accumulates* on the user across two keys.
+Confirming it needs real traffic through a key on a shared gateway, which would
+burn live quota, so it was left alone. The limit and the reset boundary are
+confirmed; the spend field is present and reads 0.0 on a fresh user. If
+anything here is going to be wrong, this is the part — check it once real usage
+exists on testing.
+
+A manual end-to-end test covers the rotation against a real gateway:
+`LITELLM_E2E=1 go test ./internal/litellm/ -run E2E`, with `LITELLM_BASE_URL`
+and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
+needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
+`zz-probe-e2e-issue26` user;
+deleting that user also removes any key left attached to it.
 
 ### Also outstanding
 
@@ -205,8 +234,8 @@ lying to users in the meantime.
 
 ## Suggested next steps
 
-1. Decide how issue #26 should work — quota per user rather than per key — and
-   implement it. It is the only open item that lets someone bypass a limit.
+1. Release the unreleased work as `v0.4.0` — stacked quotas and the #26 fix.
+   The schema changed, and #26 changes how quotas are enforced upstream.
 2. Provision production: VM, DNS, Keycloak client, vault secrets, pricing.
 3. Ask the IdP team what group or affiliation claim the realm emits, then map
    profiles onto it.
