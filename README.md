@@ -36,6 +36,7 @@ Copy `.env.example` to `.env` and fill in the values:
 | `OIDC_CLIENT_SECRET` | yes      | —           | OIDC client secret                                                 |
 | `OIDC_REDIRECT_URL`  | yes      | —           | Callback URL (must match OIDC client config)                       |
 | `FRONTEND_URL`       | yes      | —           | Public base URL of this app (shown to users as the API base URL)   |
+| `ADMIN_ROLE`         | no       | —           | IdP role that grants the admin panel; supersedes `ADMIN_IDS`       |
 | `ADMIN_IDS`          | no       | —           | Comma-separated admins, each an OIDC subject **or** an email       |
 | `ADMIN_EMAILS`       | no       | —           | Deprecated alias for `ADMIN_IDS`; still read, email entries only   |
 | `DB_PATH`            | no       | `./data.db` | Path to the SQLite database file                                   |
@@ -76,6 +77,17 @@ The auth-path tests need neither: `internal/oidc/mockprovider_test.go` runs an
 in-process issuer, so `go test ./...` requires nothing external.
 
 ## Admin panel
+
+**Prefer `ADMIN_ROLE`.** Set it to a realm role and admin membership is managed
+in the IdP, where staff changes are already handled — the portal stops being a
+second list to keep in step, and nothing has to be redeployed when someone
+joins or leaves. It needs the IdP team to create the role and add a mapper that
+puts it in the **ID token**: Keycloak sends realm roles only in the access
+token by default. `dev/realm-export.json` contains a working example of both.
+
+A realm that emits no role claim falls back to `ADMIN_IDS`, so configuring a
+role before the IdP is ready locks nobody out. With `ADMIN_ROLE` unset, roles
+are ignored entirely.
 
 Users listed in `ADMIN_IDS` see an **Admin** link in the header. An entry is
 either an **OIDC subject** or an email address, and the subject is the form to

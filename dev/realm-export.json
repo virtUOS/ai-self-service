@@ -21,7 +21,23 @@
         "post.logout.redirect.uris": "http://localhost:8080/*",
         "backchannel.logout.url": "http://host.docker.internal:8080/backchannel-logout",
         "backchannel.logout.session.required": "true"
-      }
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
   "users": [
@@ -53,7 +69,18 @@
           "value": "admin",
           "temporary": false
         }
+      ],
+      "realmRoles": [
+        "ai-self-service-admin"
       ]
     }
-  ]
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "ai-self-service-admin",
+        "description": "Grants the portal admin panel"
+      }
+    ]
+  }
 }

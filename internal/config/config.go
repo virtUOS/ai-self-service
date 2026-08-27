@@ -30,6 +30,14 @@ type Config struct {
 	// carry that risk — see IsAdmin.
 	AdminIDs []string
 
+	// AdminRole is a role from the IdP that grants the admin panel. Set it and
+	// admin membership is managed where staff changes are already handled,
+	// rather than in a list this repo has to keep in step.
+	//
+	// Empty disables role checking entirely: a realm that emits roles must not
+	// hand out the panel until an operator has named the one that counts.
+	AdminRole string
+
 	DBPath string
 
 	// SMTPHost enables expiry emails when set (host:port). Without it the
@@ -67,6 +75,8 @@ func Load() (*Config, error) {
 		ListenAddr: envOr("LISTEN_ADDR", ":8080"),
 	}
 
+	cfg.AdminRole = strings.TrimSpace(os.Getenv("ADMIN_ROLE"))
+
 	// ADMIN_IDS supersedes ADMIN_EMAILS but does not replace it: an existing
 	// deployment keeps working untouched, and both are read so an operator can
 	// migrate one admin at a time.
@@ -97,6 +107,23 @@ func Load() (*Config, error) {
 	cfg.KeyDurationDays = days
 
 	return cfg, nil
+}
+
+// HasAdminRole reports whether any of the roles a user's token carries is the
+// one configured to grant the admin panel.
+//
+// Matching is exact: a role name is an opaque identifier from the IdP, and
+// folding case could collide two roles the realm considers distinct.
+func (c *Config) HasAdminRole(roles []string) bool {
+	if c.AdminRole == "" {
+		return false
+	}
+	for _, r := range roles {
+		if r == c.AdminRole {
+			return true
+		}
+	}
+	return false
 }
 
 // IsAdmin reports whether a user holds admin rights, and whether that was

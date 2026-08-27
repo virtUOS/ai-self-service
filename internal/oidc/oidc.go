@@ -3,6 +3,7 @@ package oidc
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/virtuos/ai-self-service/internal/config"
@@ -122,6 +124,9 @@ func (p *Provider) HandleCallback(w http.ResponseWriter, r *http.Request) (*Call
 		Name              string `json:"name"`
 		PreferredUsername string `json:"preferred_username"`
 		Sub               string `json:"sub"`
+		RealmAccess       struct {
+			Roles []string `json:"roles"`
+		} `json:"realm_access"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		return nil, fmt.Errorf("parse claims: %w", err)
@@ -197,4 +202,33 @@ func generateState() string {
 		log.Fatalf("generate state: %v", err)
 	}
 	return hex.EncodeToString(b)
+}
+
+// RealmRoles reads the roles a Keycloak-style ID token carries.
+//
+// Keycloak puts realm roles under realm_access.roles, and only in the access
+// token unless a mapper is told to add them to the ID token as well. A realm
+// without that mapper simply yields nothing, which is why role checking has to
+// degrade to the configured list rather than assume the claim is present.
+//
+// The token is not re-verified here: it was verified when the session was
+// created, and this reads the same string back out of it.
+func RealmRoles(rawIDToken string) []string {
+	parts := strings.Split(rawIDToken, ".")
+	if len(parts) != 3 {
+		return nil
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil
+	}
+	var claims struct {
+		RealmAccess struct {
+			Roles []string `json:"roles"`
+		} `json:"realm_access"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return nil
+	}
+	return claims.RealmAccess.Roles
 }
