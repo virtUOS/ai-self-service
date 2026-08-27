@@ -118,21 +118,20 @@ func TestModelCopyConfirmsInWords(t *testing.T) {
 			t.Fatal(err)
 		}
 		out := buf.String()
-		// The chip copies a curl example, so it confirms with its own wording
-		// rather than the generic "Copied!" the other copy buttons use.
-		want := i18n.T(lang, "dash.models.copied")
+		want := i18n.T(lang, "dash.copied")
 		if !strings.Contains(out, want) {
 			t.Errorf("%s: copy confirmation %q not available to the script", lang, want)
 		}
-		if !strings.Contains(out, "code.textContent = CURL_COPIED") {
+		if !strings.Contains(out, "code.textContent = COPIED") {
 			t.Errorf("%s: chip does not swap its label on copy", lang)
 		}
 	}
 }
 
-// Clicking a model copies a complete curl example for it, not just the name:
-// knowing the model is only half of what someone needs to make a first call.
-func TestModelChipCopiesACurlExample(t *testing.T) {
+// Clicking a model copies the bare name — what goes into an SDK call or a
+// config file — and reveals the request around it below, so wanting an example
+// does not cost the ability to grab the name.
+func TestModelChipCopiesTheNameAndShowsCurl(t *testing.T) {
 	var buf bytes.Buffer
 	if err := parseDashboardTemplate().Execute(&buf, dashboardData{
 		Lang:       i18n.EN,
@@ -154,6 +153,24 @@ func TestModelChipCopiesACurlExample(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("curl example is missing %q", want)
 		}
+	}
+
+	// The clipboard gets the name; the example is revealed, not copied.
+	if !strings.Contains(out, "writeText(btn.dataset.model)") {
+		t.Error("the chip does not copy the bare model name")
+	}
+	if !strings.Contains(out, "showCurl(btn.dataset.model)") {
+		t.Error("the chip does not reveal the example request")
+	}
+
+	// The panel starts hidden, so the card is not padded with an example for a
+	// model nobody has chosen yet.
+	if !strings.Contains(out, `id="curl-panel" class="curl-panel" hidden`) {
+		t.Error("the example panel is not hidden until a model is picked")
+	}
+	// It carries its own copy button, separate from the chips.
+	if !strings.Contains(out, "copyCurl(this)") {
+		t.Error("the example cannot be copied on its own")
 	}
 }
 
