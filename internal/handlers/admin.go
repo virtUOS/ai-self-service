@@ -17,6 +17,7 @@ import (
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 	"github.com/virtuos/ai-self-service/internal/litellm"
 	"github.com/virtuos/ai-self-service/internal/metrics"
+	oidcpkg "github.com/virtuos/ai-self-service/internal/oidc"
 	"github.com/virtuos/ai-self-service/internal/session"
 	"github.com/virtuos/ai-self-service/web"
 )
@@ -146,6 +147,14 @@ func (a *Admin) Middleware(next http.Handler) http.Handler {
 			http.Redirect(w, r, "/login", http.StatusFound)
 			return
 		}
+		// A role from the IdP wins: membership is then managed where staff
+		// changes already are, and the list is only a fallback for realms that
+		// do not emit one.
+		if a.cfg.HasAdminRole(oidcpkg.RealmRoles(su.IDToken)) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		admin, bySubject := a.cfg.IsAdmin(su.User.OIDCSub, su.User.Email)
 		if !admin {
 			http.Error(w, "Forbidden", http.StatusForbidden)

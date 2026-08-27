@@ -126,7 +126,12 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 	// the gateway does not enforce.
 	u.syncKeyLimits(r.Context(), apiKey, profile, su.User.OIDCSub)
 
-	isAdmin, _ := u.cfg.IsAdmin(su.User.OIDCSub, su.User.Email)
+	// The Admin link must agree with what the /admin gate will actually allow,
+	// so it is decided the same way: role first, then the configured list.
+	isAdmin := u.cfg.HasAdminRole(oidcpkg.RealmRoles(su.IDToken))
+	if !isAdmin {
+		isAdmin, _ = u.cfg.IsAdmin(su.User.OIDCSub, su.User.Email)
+	}
 
 	// Redeem a one-time new key stashed by GenerateKey. The secret never
 	// appears in the URL; the query string carries only an opaque token.

@@ -51,7 +51,7 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-195 tests. `go test ./...` needs nothing external; the one skip is a manual
+211 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -264,8 +264,14 @@ and `ADMIN_IDS` carries subjects rather than addresses.
 ## Suggested next steps
 
 1. Provision production: VM, DNS, Keycloak client, vault secrets, pricing.
-2. Ask the IdP team what group or affiliation claim the realm emits, then map
+2. Ask the IdP team for an `ai-self-service-admin` **realm role** plus a mapper
+   that puts realm roles in the **ID token** — Keycloak sends them only in the
+   access token by default, and the portal reads the ID token. Then set
+   `ADMIN_ROLE` and drop `asvc_admin_ids` from the deploy repo. The app already
+   supports this and falls back to the list until the claim appears;
+   `dev/realm-export.json` has a working example of both halves.
+3. Ask the same team what group or affiliation claim the realm emits, then map
    profiles onto it.
-3. Issue #7 — several named keys per user, for different services. Blocked by
+4. Issue #7 — several named keys per user, for different services. Blocked by
    the unique index on `api_keys.user_id`, which is deliberate: the one-key
    model runs through the schema, the dashboard and the rotation logic.

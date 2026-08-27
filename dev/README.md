@@ -51,6 +51,12 @@ FRONTEND_URL=http://localhost:8080
 ADMIN_IDS=admin@example.com
 ```
 
+The realm also defines an `ai-self-service-admin` role, assigned to the `admin`
+user, with a mapper that puts realm roles in the ID token — the configuration
+the IdP team would create in production. Set `ADMIN_ROLE=ai-self-service-admin`
+and admin comes from the role rather than the list; the app logs no
+email-grant warning when that path is used, which is how to tell them apart.
+
 `ADMIN_IDS` takes an OIDC subject or an email address, and production should
 prefer subjects. An address is used here because `realm-export.json` does not
 pin user ids: Keycloak mints new ones on each import, so a subject written into
