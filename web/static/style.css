@@ -99,6 +99,12 @@ header {
   align-items: center;
   justify-content: space-between;
   height: 56px;
+  /* Follows the page down: the dashboard is long enough that the language
+     switch, admin link and logout would otherwise need a scroll back to the
+     top to reach. z-index keeps it over the cards it slides across. */
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 header h1 { font-size: 1.1rem; font-weight: 600; letter-spacing: .02em; }
 header nav { display: flex; gap: 1rem; align-items: center; }
@@ -286,7 +292,56 @@ tr:hover td { background: var(--tr-hover); }
 @media (max-width: 600px) {
   main { margin: 1rem auto; }
   .card { padding: 1.25rem; }
-  header { padding: 0 1rem; }
+
+  /* The header holds a title and up to four nav items. Below this width they
+     no longer fit on one line, so it wraps to its own row and the height is
+     released — a fixed 56px would clip the second line. */
+  header {
+    padding: .5rem 1rem;
+    height: auto;
+    flex-wrap: wrap;
+    gap: .35rem .75rem;
+  }
+  header h1 { font-size: 1rem; }
+  header nav { gap: .5rem; flex-wrap: wrap; }
+
+  /* A max-content label column leaves the value squeezed against the right
+     edge on a narrow screen — "Nutzungslimit" alone is most of the width.
+     Stacking gives each its own line. */
+  .info-grid { grid-template-columns: 1fr; gap: .15rem; }
+  .info-grid dt { padding-top: .5rem; }
+  .info-grid dd { margin-inline-start: 0; }
+
+  /* The copy button drops under the value rather than competing with it. */
+  .key-box { flex-wrap: wrap; gap: .5rem; }
+
+  /* Touch targets. The help dot and the language buttons are sized for a
+     mouse; a finger needs the 24px of WCAG 2.5.8. The dot keeps its drawn
+     size — growing the circle would shout on a small screen — and gains the
+     rest as an invisible tap area, so only the hit box changes. */
+  .help {
+    position: relative;
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+  .help::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 24px;
+    height: 24px;
+    transform: translate(-50%, -50%);
+  }
+  .lang-switch button { min-height: 24px; min-width: 24px; }
+
+  /* The checkbox is a 13px browser control with a sibling label, so tapping
+     the label works but the box itself is a small target. Grow the control
+     rather than the row: `for=` already makes the text tappable, and this
+     makes the box match. */
+  .checkbox-row { min-height: 24px; }
+  .checkbox-row input[type=checkbox] { width: 24px; height: 24px; }
+  .copy-btn { min-height: 24px; }
 }
 
 /* ── Help tooltips ──────────────────────────────────────────────────────── */
@@ -509,3 +564,45 @@ tr:hover td { background: var(--tr-hover); }
 .quota-fill.quota-full {
   background: var(--alert-danger-border);
 }
+
+/* ── Example request ────────────────────────────────────── */
+/* Revealed under the model list when a model is clicked. The chip copies the
+   bare name; this shows the request around it, so wanting one does not cost
+   the other. */
+.curl-panel {
+  margin-top: .75rem;
+  border: 1px solid var(--key-border);
+  border-radius: 6px;
+  background: var(--key-bg);
+  padding: .6rem .8rem;
+}
+
+.curl-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  font-size: .8rem;
+  margin-bottom: .5rem;
+  flex-wrap: wrap;
+}
+
+.curl-panel-head code {
+  font-family: 'Courier New', monospace;
+  word-break: break-all;
+}
+
+.curl-code {
+  margin: 0;
+  font-family: 'Courier New', monospace;
+  font-size: .8rem;
+  line-height: 1.5;
+  /* The command is pre-wrapped with backslash continuations, so it must keep
+     its line breaks; long model names still need to wrap rather than force the
+     card to scroll sideways. */
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+.curl-note { margin: .5rem 0 0; font-size: .75rem; }

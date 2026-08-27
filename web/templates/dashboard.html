@@ -223,9 +223,18 @@
                       onclick="copyModel(this)"><code>{{.}}</code></button></li>
           {{end}}
         </ul>
-        <p class="text-muted" style="margin:.5rem 0 0;font-size:.8rem">
-          {{T $.Lang "dash.models.curlnote"}}
-        </p>
+        {{/* Clicking a chip copies the bare name — what someone pasting into
+             an SDK or a config file needs — and reveals the request around it
+             here, for the people who wanted a whole example. */}}
+        <div id="curl-panel" class="curl-panel" hidden>
+          <div class="curl-panel-head">
+            <span class="text-muted">{{T $.Lang "dash.models.curltitle"}}
+              <code id="curl-model"></code></span>
+            <button type="button" class="copy-btn" onclick="copyCurl(this)">{{T $.Lang "dash.copy"}}</button>
+          </div>
+          <pre id="curl-code" class="curl-code"></pre>
+          <p class="text-muted curl-note">{{T $.Lang "dash.models.curlnote"}}</p>
+        </div>
       </dd>
       {{end}}
     </dl>
@@ -236,7 +245,6 @@
 
 <script>
 const COPIED = {{T .Lang "dash.copied"}};
-const CURL_COPIED = {{T .Lang "dash.models.copied"}};
 const BASE_URL = {{.APIBaseURL}};
 
 // Time words, translated server-side: the browser does the arithmetic, but
@@ -264,10 +272,34 @@ function copyText(id, btn) {
   });
 }
 
-// Model names are long and easy to mistype, and knowing the name is only half
-// of what someone needs to make a request. The chip copies a complete curl
-// example for that model, so a first call is a paste away.
-//
+// Reveals the request around a model, for the people who want a whole example
+// rather than the name. Focus is not moved: the click was a copy, and yanking
+// the caret down the page would fight anyone tabbing through the chips.
+function showCurl(model) {
+  const panel = document.getElementById('curl-panel');
+  if (!panel) return;
+  document.getElementById('curl-model').textContent = model;
+  document.getElementById('curl-code').textContent = curlExample(model);
+  panel.hidden = false;
+}
+
+// Copies the example currently on show. Separate from the chips so that
+// copying the name and copying the request are never the same gesture.
+function copyCurl(btn) {
+  const code = document.getElementById('curl-code');
+  if (!code) return;
+  navigator.clipboard.writeText(code.textContent).then(() => {
+    if (btn.dataset.busy) return;
+    btn.dataset.busy = '1';
+    const label = btn.textContent;
+    btn.textContent = COPIED;
+    setTimeout(() => {
+      btn.textContent = label;
+      delete btn.dataset.busy;
+    }, 1200);
+  });
+}
+
 // The key is referenced as $OPENAI_API_KEY rather than pasted in: the page only
 // ever shows a prefix once the key has been issued, and a command carrying a
 // live secret would end up in the user's shell history.
@@ -281,10 +313,16 @@ function curlExample(model) {
     "  }'";
 }
 
+// Clicking a model copies its bare name: that is what goes into an SDK call, a
+// config file or an environment variable, and it is the thing that is tedious
+// to retype correctly. The curl example is revealed below rather than put on
+// the clipboard, so wanting one does not cost the other.
+//
 // The label is swapped rather than the code element replaced, so the button
 // keeps its width and the row does not jump.
 function copyModel(btn) {
-  navigator.clipboard.writeText(curlExample(btn.dataset.model)).then(() => {
+  showCurl(btn.dataset.model);
+  navigator.clipboard.writeText(btn.dataset.model).then(() => {
     if (btn.dataset.busy) return;
     btn.dataset.busy = '1';
 
@@ -294,7 +332,7 @@ function copyModel(btn) {
     const code = btn.querySelector('code');
     code.style.minWidth = code.offsetWidth + 'px';
     const name = btn.dataset.model;
-    code.textContent = CURL_COPIED;
+    code.textContent = COPIED;
     btn.classList.add('copied');
 
     setTimeout(() => {
