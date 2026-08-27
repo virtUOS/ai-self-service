@@ -36,7 +36,7 @@ two users:
 | User      | Password  | Email                        | Role in the app |
 | --------- | --------- | ---------------------------- | --------------- |
 | `student` | `student` | student@uni-osnabrueck.de    | regular user    |
-| `admin`   | `admin`   | admin@example.com            | admin (matches `ADMIN_EMAILS`) |
+| `admin`   | `admin`   | admin@example.com            | admin (matches `ADMIN_IDS`) |
 
 ## Point the app at it
 
@@ -48,8 +48,14 @@ OIDC_CLIENT_ID=ai-self-service
 OIDC_CLIENT_SECRET=local-dev-secret
 OIDC_REDIRECT_URL=http://localhost:8080/callback
 FRONTEND_URL=http://localhost:8080
-ADMIN_EMAILS=admin@example.com
+ADMIN_IDS=admin@example.com
 ```
+
+`ADMIN_IDS` takes an OIDC subject or an email address, and production should
+prefer subjects. An address is used here because `realm-export.json` does not
+pin user ids: Keycloak mints new ones on each import, so a subject written into
+`.env` goes stale as soon as the volume is dropped. The app logs a warning on
+every email-based grant, which is expected locally.
 
 Then `go run ./cmd/server` and open <http://localhost:8080>.
 
@@ -68,7 +74,8 @@ OIDC_ISSUER_URL=http://localhost:8081
 
 At the login prompt, enter the subject of the user you want to be — `student`
 or `admin`, matching `dev/mock-users.json`. They carry the same emails as the
-Keycloak users, so `ADMIN_EMAILS` behaves identically.
+Keycloak users, so `ADMIN_IDS` behaves identically. The mock's subjects are
+fixed rather than generated, so `ADMIN_IDS=admin` also works here.
 
 ## Automated tests
 
