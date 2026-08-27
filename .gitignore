@@ -16,3 +16,8 @@
 
 # OS / editor cruft
 .DS_Store
+
+# Browser-automation output. Playwright writes screenshots and traces into the
+# working directory when it is driven from here; they are throwaway captures.
+.playwright-mcp/
+*.png
