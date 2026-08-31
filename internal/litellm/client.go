@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -16,6 +17,11 @@ type Client struct {
 	baseURL   string
 	masterKey string
 	http      *http.Client
+
+	// mu guards the cached pricing, which is refreshed in the background while
+	// requests read it.
+	mu      sync.RWMutex
+	pricing Pricing
 }
 
 func NewClient(baseURL, masterKey string) *Client {
@@ -24,6 +30,60 @@ func NewClient(baseURL, masterKey string) *Client {
 		masterKey: masterKey,
 		http:      &http.Client{Timeout: 15 * time.Second},
 	}
+}
+
+// RefreshPricing re-reads what the gateway charges per token.
+//
+// The price is cached rather than fetched per conversion: it changes only when
+// an operator edits a model, and a quota calculation must not depend on the
+// gateway answering. A failed refresh leaves the previous value in place.
+func (c *Client) RefreshPricing(ctx context.Context) error {
+	p, err := c.Pricing(ctx)
+	if err != nil {
+		return err
+	}
+	// A gateway with no priced model would otherwise set the rate to zero,
+	// making every quota cost nothing and so never bind.
+	if p.TokenPrice <= 0 {
+		return nil
+	}
+	c.mu.Lock()
+	c.pricing = p
+	c.mu.Unlock()
+	return nil
+}
+
+// CurrentPricing is the cached view of what the gateway charges, for callers
+// that want to report on it rather than convert with it.
+func (c *Client) CurrentPricing() Pricing {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.pricing
+}
+
+// tokenPrice is the rate conversions use: whatever the gateway last reported,
+// falling back to the nominal rate before the first successful refresh. A
+// dashboard that cannot price a quota is worse than one priced at the rate the
+// deployment is expected to use.
+func (c *Client) tokenPrice() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.pricing.TokenPrice > 0 {
+		return c.pricing.TokenPrice
+	}
+	return NominalTokenPrice
+}
+
+// TokensToBudget converts a token allowance into the spend cap LiteLLM
+// enforces, at the price the gateway actually charges.
+func (c *Client) TokensToBudget(tokens int64) float64 {
+	return float64(tokens) * c.tokenPrice()
+}
+
+// BudgetToTokens is the inverse, for showing an upstream spend figure back in
+// the units an admin configured.
+func (c *Client) BudgetToTokens(budget float64) int64 {
+	return int64(budget / c.tokenPrice())
 }
 
 // BudgetWindow is one allowance window as LiteLLM's API expects it.

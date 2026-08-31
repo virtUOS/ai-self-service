@@ -7,10 +7,14 @@ import (
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
 
+// testProvider is a provider whose client has never refreshed its pricing, so
+// conversions use the nominal rate — which is what these assertions expect.
+func testProvider() *Provider { return NewProvider(NewClient("http://127.0.0.1:1", "mk")) }
+
 // The adapter owns the token->spend translation; these assertions moved here
 // from the handlers when the interface was introduced.
 func TestToKeyParamsConvertsQuota(t *testing.T) {
-	params := toKeyParams(keyprovider.KeyRequest{
+	params := testProvider().toKeyParams(keyprovider.KeyRequest{
 		Owner:     "s@uni-osnabrueck.de",
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 		Limits: keyprovider.Limits{
@@ -32,7 +36,7 @@ func TestToKeyParamsConvertsQuota(t *testing.T) {
 }
 
 func TestToKeyParamsNoQuota(t *testing.T) {
-	params := toKeyParams(keyprovider.KeyRequest{Owner: "a@b.c"})
+	params := testProvider().toKeyParams(keyprovider.KeyRequest{Owner: "a@b.c"})
 	if params.MaxBudget != nil || params.BudgetDuration != nil {
 		t.Error("no quota should mean no budget fields")
 	}
@@ -40,7 +44,7 @@ func TestToKeyParamsNoQuota(t *testing.T) {
 
 // Tokens without a period is not an enforceable window.
 func TestToKeyParamsIgnoresIncompleteQuota(t *testing.T) {
-	params := toKeyParams(keyprovider.KeyRequest{
+	params := testProvider().toKeyParams(keyprovider.KeyRequest{
 		Limits: keyprovider.Limits{
 			Quotas: []keyprovider.QuotaWindow{{Tokens: 500_000}},
 		},
@@ -52,7 +56,7 @@ func TestToKeyParamsIgnoresIncompleteQuota(t *testing.T) {
 
 // LiteLLM reads an empty model list as "no models"; nil means "all".
 func TestToKeyParamsEmptyModelsBecomesNil(t *testing.T) {
-	params := toKeyParams(keyprovider.KeyRequest{
+	params := testProvider().toKeyParams(keyprovider.KeyRequest{
 		Limits: keyprovider.Limits{Models: []string{}},
 	})
 	if params.Models != nil {
@@ -62,7 +66,7 @@ func TestToKeyParamsEmptyModelsBecomesNil(t *testing.T) {
 
 func TestToKeyParamsPassesRateLimits(t *testing.T) {
 	tpm, rpm := int64(1000), int64(60)
-	params := toKeyParams(keyprovider.KeyRequest{
+	params := testProvider().toKeyParams(keyprovider.KeyRequest{
 		Limits: keyprovider.Limits{TokensPerMinute: &tpm, RequestsPerMinute: &rpm},
 	})
 	if params.TPMLimit == nil || *params.TPMLimit != 1000 {
