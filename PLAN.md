@@ -1,6 +1,6 @@
 # Status and next steps
 
-Last updated 2026-08-26. Written as a handover: what is done, what is not, and
+Last updated 2026-08-31. Written as a handover: what is done, what is not, and
 the things that are surprising enough to waste an afternoon rediscovering.
 
 ## Where it runs
@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.4.0` |
+| Latest release | `v0.5.0` |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -51,7 +51,7 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-211 tests. `go test ./...` needs nothing external; the one skip is a manual
+221 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -236,6 +236,24 @@ and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
 needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
+
+### Released as v0.5.0 (2026-08-31)
+
+The admin panel granted by IdP role with the list as fallback (`ADMIN_ROLE`,
+superseding `ADMIN_IDS`), token quotas converted at the price the gateway
+actually charges rather than a constant, the spend log fetched once per
+dashboard render with a bar shown for an unused key, model-name copy with a
+sticky header, and the orphaned-key fix below.
+
+No schema change, so the upgrade is the image alone.
+
+**`/user/new` mints a key.** LiteLLM's `/user/new` does not only create an
+internal user: it also mints a key for that user and returns it. The portal
+called it for its side effect and discarded the response, so every user's first
+key generation stranded a second credential carrying no alias and no expiry,
+which nothing could revoke. `UpsertUser` now deletes that key. This looked like
+a broken revoke and is not: `/key/delete` was never at fault. The 13 orphans it
+had already left on testing were deleted.
 
 ### Released as v0.4.0 (2026-08-26)
 
