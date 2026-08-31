@@ -60,6 +60,24 @@ func (c *Client) UpsertUser(ctx context.Context, userID string, budget *UserBudg
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
+		// /user/new does not only create the user: it also mints a key for
+		// them and returns it. That key carries no alias and no expiry, and
+		// the portal never records it, so leaving it behind strands a live
+		// credential that no rotation or deletion here can ever reach.
+		//
+		// A body that cannot be read or carries no key is not an error: the
+		// user exists, which is what this call was for.
+		var created struct {
+			Key string `json:"key"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&created); err == nil && created.Key != "" {
+			if delErr := c.DeleteKey(ctx, created.Key); delErr != nil {
+				// The user is created and usable, so failing the whole upsert
+				// would block a key the caller can still legitimately get.
+				// Report the leak rather than the operation.
+				return fmt.Errorf("revoke key minted by /user/new: %w", delErr)
+			}
+		}
 		return nil
 	}
 	if resp.StatusCode != http.StatusConflict {
