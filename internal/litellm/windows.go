@@ -43,23 +43,24 @@ func periodDuration(period string) time.Duration {
 }
 
 // keyWindows reads the stacked windows configured on a key.
-func (c *Client) keyWindows(ctx context.Context, key string) ([]budgetWindow, error) {
+func (c *Client) keyWindows(ctx context.Context, key string) (windows []budgetWindow, spend float64, err error) {
 	q := url.Values{}
 	q.Set("key", key)
 
 	resp, err := c.do(ctx, http.MethodGet, "/key/info?"+q.Encode(), nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("LiteLLM /key/info returned %d: %s", resp.StatusCode, b)
+		return nil, 0, fmt.Errorf("LiteLLM /key/info returned %d: %s", resp.StatusCode, b)
 	}
 
 	var body struct {
 		Info struct {
+			Spend          float64        `json:"spend"`
 			BudgetLimits   []budgetWindow `json:"budget_limits"`
 			MaxBudget      *float64       `json:"max_budget"`
 			BudgetDuration *string        `json:"budget_duration"`
@@ -67,11 +68,11 @@ func (c *Client) keyWindows(ctx context.Context, key string) ([]budgetWindow, er
 		} `json:"info"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, fmt.Errorf("decode key info: %w", err)
+		return nil, 0, fmt.Errorf("decode key info: %w", err)
 	}
 
 	if len(body.Info.BudgetLimits) > 0 {
-		return body.Info.BudgetLimits, nil
+		return body.Info.BudgetLimits, body.Info.Spend, nil
 	}
 	// A single window is held in the flat pair rather than the array.
 	if body.Info.MaxBudget != nil && body.Info.BudgetDuration != nil {
@@ -79,42 +80,44 @@ func (c *Client) keyWindows(ctx context.Context, key string) ([]budgetWindow, er
 			BudgetDuration: *body.Info.BudgetDuration,
 			MaxBudget:      *body.Info.MaxBudget,
 			ResetAt:        body.Info.BudgetResetAt,
-		}}, nil
+		}}, body.Info.Spend, nil
 	}
-	return nil, nil
+	return nil, body.Info.Spend, nil
 }
 
-// spentSince sums the tokens a key consumed at or after start.
+// spendLog fetches a key's per-request log.
 //
-// Returns known=false when the gateway keeps no per-request log, which is a
-// deployment choice rather than an error: production disables it to bound a
-// memory leak. A zero total is then not evidence of no usage, and the caller
-// must not draw a bar from it.
-func (c *Client) spentSince(ctx context.Context, key string, start time.Time) (tokens int64, known bool, err error) {
+// The whole log comes back whatever is asked for: LiteLLM ignores page_size,
+// limit and size on this route, and passing start_date/end_date switches the
+// response to an aggregated shape that drops token counts entirely. So it is
+// fetched once and every window counted from it, rather than once per window —
+// three windows meant three identical multi-megabyte downloads per page load.
+func (c *Client) spendLog(ctx context.Context, key string) ([]spendRow, error) {
 	q := url.Values{}
 	q.Set("api_key", keyHash(key))
 
 	resp, err := c.do(ctx, http.MethodGet, "/spend/logs?"+q.Encode(), nil)
 	if err != nil {
-		return 0, false, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return 0, false, fmt.Errorf("LiteLLM /spend/logs returned %d: %s", resp.StatusCode, b)
+		return nil, fmt.Errorf("LiteLLM /spend/logs returned %d: %s", resp.StatusCode, b)
 	}
 
 	var rows []spendRow
 	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
-		return 0, false, fmt.Errorf("decode spend log: %w", err)
+		return nil, fmt.Errorf("decode spend log: %w", err)
 	}
-	if len(rows) == 0 {
-		// Indistinguishable from logging being switched off, so report the
-		// figure as unknown rather than claiming a full allowance.
-		return 0, false, nil
-	}
+	return rows, nil
+}
 
+// spentSince sums the tokens consumed at or after start, from an already
+// fetched log.
+func spentSince(rows []spendRow, start time.Time) int64 {
+	var tokens int64
 	for _, r := range rows {
 		if r.TotalTokens <= 0 {
 			continue
@@ -127,7 +130,7 @@ func (c *Client) spentSince(ctx context.Context, key string, start time.Time) (t
 			tokens += r.TotalTokens
 		}
 	}
-	return tokens, true, nil
+	return tokens
 }
 
 // Windows reports consumption against every quota window applying to a key and
@@ -137,7 +140,7 @@ func (c *Client) spentSince(ctx context.Context, key string, start time.Time) (t
 // the owner so it survives a key rotation, and the shorter ones stay on the
 // key. Both are gathered here so the dashboard can show what actually binds.
 func (p *Provider) Windows(ctx context.Context, ref, ownerID string) ([]keyprovider.WindowUsage, error) {
-	windows, err := p.client.keyWindows(ctx, ref)
+	windows, keySpend, err := p.client.keyWindows(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -156,6 +159,22 @@ func (p *Provider) Windows(ctx context.Context, ref, ownerID string) ([]keyprovi
 		return nil, nil
 	}
 
+	// One fetch for every window: the log cannot be narrowed server-side, so
+	// asking three times would download the same megabytes three times.
+	rows, err := p.client.spendLog(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	// An empty log usually means logging is switched off, which production
+	// does deliberately — a zero would then not be evidence of no usage, and a
+	// bar drawn from it would promise an allowance the user may not have.
+	//
+	// The key's own spend counter settles which it is: the gateway maintains
+	// that whether or not per-request logging is on, so a key that has spent
+	// nothing really has consumed nothing, and its windows can be shown at
+	// zero instead of hidden. That is the common case for a key just issued.
+	known := len(rows) > 0 || keySpend == 0
+
 	out := make([]keyprovider.WindowUsage, 0, len(windows))
 	for _, w := range windows {
 		if w.MaxBudget <= 0 || w.BudgetDuration == "" {
@@ -170,11 +189,8 @@ func (p *Provider) Windows(ctx context.Context, ref, ownerID string) ([]keyprovi
 				u.ResetsAt = t
 				// The window opened one period before it next resets.
 				if d := periodDuration(w.BudgetDuration); d > 0 {
-					used, known, err := p.client.spentSince(ctx, ref, t.Add(-d))
-					if err != nil {
-						return nil, err
-					}
-					u.UsedTokens, u.UsedKnown = used, known
+					u.UsedTokens = spentSince(rows, t.Add(-d))
+					u.UsedKnown = known
 				}
 			}
 		}
