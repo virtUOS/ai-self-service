@@ -105,7 +105,7 @@ func (p *Provider) CreateKey(ctx context.Context, req keyprovider.KeyRequest) (k
 		req.Limits.Quotas = rest
 	}
 
-	secret, err := p.client.CreateKey(ctx, req.Alias, toKeyParams(req), req.ExpiresAt)
+	secret, err := p.client.CreateKey(ctx, req.Alias, p.toKeyParams(req), req.ExpiresAt)
 	if err != nil {
 		return keyprovider.KeyResult{}, err
 	}
@@ -122,7 +122,7 @@ func (p *Provider) UpdateExpiry(ctx context.Context, ref string, expiresAt time.
 }
 
 // toKeyParams converts the neutral request into LiteLLM's wire shape.
-func toKeyParams(req keyprovider.KeyRequest) KeyParams {
+func (p *Provider) toKeyParams(req keyprovider.KeyRequest) KeyParams {
 	models := req.Limits.Models
 	if len(models) == 0 {
 		// LiteLLM reads an empty list as "no models"; nil means "all".
@@ -146,7 +146,7 @@ func toKeyParams(req keyprovider.KeyRequest) KeyParams {
 	switch windows := effectiveWindows(req.Limits); len(windows) {
 	case 0:
 	case 1:
-		budget := TokensToBudget(windows[0].Tokens)
+		budget := p.client.TokensToBudget(windows[0].Tokens)
 		period := windows[0].Period
 		params.MaxBudget = &budget
 		params.BudgetDuration = &period
@@ -155,7 +155,7 @@ func toKeyParams(req keyprovider.KeyRequest) KeyParams {
 		for _, w := range windows {
 			limits = append(limits, BudgetWindow{
 				BudgetDuration: w.Period,
-				MaxBudget:      TokensToBudget(w.Tokens),
+				MaxBudget:      p.client.TokensToBudget(w.Tokens),
 			})
 		}
 		params.BudgetLimits = limits

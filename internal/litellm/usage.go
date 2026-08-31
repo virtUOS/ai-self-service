@@ -127,9 +127,9 @@ func (c *Client) KeyQuota(ctx context.Context, key string) (keyprovider.Quota, e
 		return keyprovider.Quota{}, err
 	}
 
-	q := keyprovider.Quota{UsedTokens: BudgetToTokens(info.Info.Spend)}
+	q := keyprovider.Quota{UsedTokens: c.BudgetToTokens(info.Info.Spend)}
 	if info.Info.MaxBudget != nil {
-		q.LimitTokens = BudgetToTokens(*info.Info.MaxBudget)
+		q.LimitTokens = c.BudgetToTokens(*info.Info.MaxBudget)
 	}
 	if info.Info.BudgetResetAt != nil {
 		if t, err := time.Parse(time.RFC3339, *info.Info.BudgetResetAt); err == nil {
@@ -152,7 +152,7 @@ func (c *Client) KeySpendTokens(ctx context.Context, key string) (int64, error) 
 	if err != nil {
 		return 0, err
 	}
-	return BudgetToTokens(info.Info.Spend), nil
+	return c.BudgetToTokens(info.Info.Spend), nil
 }
 
 // UpdateKeyLimits pushes a profile's limits onto a key that already exists.
@@ -195,7 +195,7 @@ func (c *Client) UpdateKeyLimits(ctx context.Context, key string, l keyprovider.
 		for _, w := range windows {
 			limits = append(limits, map[string]any{
 				"budget_duration": w.Period,
-				"max_budget":      TokensToBudget(w.Tokens),
+				"max_budget":      c.TokensToBudget(w.Tokens),
 			})
 		}
 		payload["budget_limits"] = limits
@@ -203,7 +203,7 @@ func (c *Client) UpdateKeyLimits(ctx context.Context, key string, l keyprovider.
 		payload["budget_duration"] = nil
 	case len(windows) == 1:
 		// One window: the plain pair already works, so leave it alone.
-		payload["max_budget"] = TokensToBudget(windows[0].Tokens)
+		payload["max_budget"] = c.TokensToBudget(windows[0].Tokens)
 		payload["budget_duration"] = windows[0].Period
 		payload["budget_limits"] = nil
 	default:

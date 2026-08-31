@@ -6,15 +6,38 @@ import (
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
 
-// NominalTokenPrice is the synthetic per-token price configured on the local
-// models in LiteLLM. Input and output are priced identically, which is what
-// makes a token quota exact: cost is strictly proportional to total tokens, so
-// TokensToBudget is not sensitive to the input/output mix of real traffic.
+// NominalTokenPrice is the per-token price a deployment is expected to
+// configure on its models, used only as a fallback.
 //
-// This MUST match input_cost_per_token / output_cost_per_token on every model
-// the portal issues keys for. A model left at 0 or null accrues no spend, and
-// a quota over it can never trigger.
+// The live price is read from the gateway by Client.RefreshPricing, so this
+// constant no longer has to be kept in step by hand — a mismatch used to be
+// silent, which is how a model priced five times the rest went unnoticed and
+// quietly made every token quota wrong.
+//
+// It still applies before the first successful refresh and when the gateway
+// cannot be reached: a quota priced at the expected rate is more useful than
+// no quota at all.
+//
+// A token quota is exact only while every model costs the same per token, for
+// input and output alike. LiteLLM enforces one spend cap per key whatever
+// model a request names, so a dearer model draws the allowance down faster.
+// Client.CurrentPricing reports when models disagree.
 const NominalTokenPrice = 1e-07
+
+// TokensToBudget converts a token allowance at the nominal rate.
+//
+// Prefer Client.TokensToBudget, which uses the price the gateway actually
+// reports. This remains for callers with no client to hand, and for tests
+// stating an expected value in the units the constant defines.
+func TokensToBudget(tokens int64) float64 {
+	return float64(tokens) * NominalTokenPrice
+}
+
+// BudgetToTokens is the inverse of TokensToBudget at the nominal rate. Prefer
+// Client.BudgetToTokens.
+func BudgetToTokens(budget float64) int64 {
+	return int64(budget / NominalTokenPrice)
+}
 
 // ValidQuotaPeriods are the reset windows LiteLLM accepts for budget_duration.
 // They reset on fixed boundaries (24h at midnight UTC, 7d weekly, 30d monthly)
@@ -33,18 +56,6 @@ func IsValidQuotaPeriod(p string) bool {
 		}
 	}
 	return false
-}
-
-// TokensToBudget converts a token allowance into the spend cap LiteLLM
-// enforces. Admins configure tokens; only this function knows about the price.
-func TokensToBudget(tokens int64) float64 {
-	return float64(tokens) * NominalTokenPrice
-}
-
-// BudgetToTokens is the inverse, for displaying an upstream spend figure back
-// to an admin in the units they configured.
-func BudgetToTokens(budget float64) int64 {
-	return int64(budget / NominalTokenPrice)
 }
 
 // FormatTokens renders a token count compactly for the UI (1500000 -> "1.5M").

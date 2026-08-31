@@ -88,7 +88,28 @@ func main() {
 	}
 	// The adapter is what the handlers see; swapping gateways means writing a
 	// different keyprovider.Provider, not touching the handlers.
-	keys := litellm.NewProvider(litellm.NewClient(cfg.LiteLLMBaseURL, cfg.LiteLLMMasterKey))
+	gateway := litellm.NewClient(cfg.LiteLLMBaseURL, cfg.LiteLLMMasterKey)
+	keys := litellm.NewProvider(gateway)
+
+	// Token quotas are converted to spend caps at the price the gateway
+	// charges. Read it now rather than trusting a constant to have been kept
+	// in step, and say so when models disagree: LiteLLM enforces one cap per
+	// key whatever model a request names, so a dearer model draws the
+	// allowance down faster and the token figure stops being exact.
+	//
+	// A failure here is not fatal. The conversion falls back to the nominal
+	// rate, which is what the deployment is expected to use, and the portal is
+	// more useful with an approximate quota than not starting at all.
+	if err := gateway.RefreshPricing(ctx); err != nil {
+		slog.Warn("could not read model pricing; quotas use the nominal rate", "err", err)
+	} else if p := gateway.CurrentPricing(); !p.Uniform {
+		for _, o := range p.Outliers {
+			slog.Warn("model priced differently from the rest; token quotas are approximate",
+				"model", o.Model, "input_cost_per_token", o.Input, "output_cost_per_token", o.Output)
+		}
+		slog.Warn("converting token quotas at the dearest rate so caps are not overshot",
+			"token_price", p.TokenPrice)
+	}
 
 	ui := handlers.NewUI(cfg, store, sessions, oidcProvider, keys, csrf)
 	admin := handlers.NewAdmin(cfg, store, sessions, keys, csrf)

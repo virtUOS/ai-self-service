@@ -163,7 +163,7 @@ func (p *Provider) Windows(ctx context.Context, ref, ownerID string) ([]keyprovi
 		}
 		u := keyprovider.WindowUsage{
 			Period:      w.BudgetDuration,
-			LimitTokens: BudgetToTokens(w.MaxBudget),
+			LimitTokens: p.client.BudgetToTokens(w.MaxBudget),
 		}
 		if w.ResetAt != nil {
 			if t, err := time.Parse(time.RFC3339, *w.ResetAt); err == nil {

@@ -41,7 +41,7 @@ func (c *Client) UpsertUser(ctx context.Context, userID string, budget *UserBudg
 	// leaves an omitted field untouched, so a profile that drops its quota
 	// would otherwise keep enforcing the allowance it no longer has.
 	if budget != nil {
-		payload["max_budget"] = TokensToBudget(budget.Tokens)
+		payload["max_budget"] = c.TokensToBudget(budget.Tokens)
 		payload["budget_duration"] = budget.Period
 	} else {
 		payload["max_budget"] = nil
@@ -181,9 +181,9 @@ func (c *Client) UserQuota(ctx context.Context, userID string) (keyprovider.Quot
 		return keyprovider.Quota{}, fmt.Errorf("decode user info: %w", err)
 	}
 
-	quota := keyprovider.Quota{UsedTokens: BudgetToTokens(info.UserInfo.Spend)}
+	quota := keyprovider.Quota{UsedTokens: c.BudgetToTokens(info.UserInfo.Spend)}
 	if info.UserInfo.MaxBudget != nil {
-		quota.LimitTokens = BudgetToTokens(*info.UserInfo.MaxBudget)
+		quota.LimitTokens = c.BudgetToTokens(*info.UserInfo.MaxBudget)
 	}
 	if info.UserInfo.BudgetResetAt != nil {
 		if t, err := time.Parse(time.RFC3339, *info.UserInfo.BudgetResetAt); err == nil {
