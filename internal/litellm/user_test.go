@@ -143,3 +143,82 @@ func TestUserQuotaTreatsMissingUserAsNoUsage(t *testing.T) {
 		t.Errorf("got %+v, want an empty quota", q)
 	}
 }
+
+// /user/new does not only create the user: it also mints a key for them and
+// returns it. That key carries no alias and no expiry, and the portal never
+// records it, so leaving it behind strands a live credential that nothing can
+// revoke. It must be deleted as soon as the user is created.
+func TestUpsertUserRevokesTheKeyUserNewMints(t *testing.T) {
+	var paths []string
+	var deleted []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		switch r.URL.Path {
+		case "/user/new":
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"user_id":"u1","key":"sk-minted-by-user-new"}`))
+		case "/key/delete":
+			var body struct {
+				Keys []string `json:"keys"`
+			}
+			b, _ := io.ReadAll(r.Body)
+			json.Unmarshal(b, &body)
+			deleted = append(deleted, body.Keys...)
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
+
+	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(deleted) != 1 || deleted[0] != "sk-minted-by-user-new" {
+		t.Errorf("deleted = %v, want the key /user/new returned; an orphan key is left live otherwise", deleted)
+	}
+	if len(paths) != 2 || paths[0] != "/user/new" || paths[1] != "/key/delete" {
+		t.Errorf("call sequence = %v, want [/user/new /key/delete]", paths)
+	}
+}
+
+// The 409 path means the user already existed, so no key was minted and there
+// is nothing to revoke. Deleting on that path would target an empty key.
+func TestUpsertUserDeletesNothingOnConflict(t *testing.T) {
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		if r.URL.Path == "/user/new" {
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range paths {
+		if p == "/key/delete" {
+			t.Errorf("call sequence = %v, want no /key/delete when the user already existed", paths)
+		}
+	}
+}
+
+// A create that returns no key needs no cleanup, and must not fail the upsert:
+// the user exists, which is what the caller needed.
+func TestUpsertUserToleratesResponseWithoutKey(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/key/delete" {
+			t.Errorf("deleted a key though /user/new returned none")
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"user_id":"u1"}`))
+	}))
+	defer srv.Close()
+
+	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", nil); err != nil {
+		t.Fatal(err)
+	}
+}
