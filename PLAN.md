@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.5.0` |
+| Latest release | `v0.5.1` |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -51,7 +51,7 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-221 tests. `go test ./...` needs nothing external; the one skip is a manual
+226 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -237,6 +237,17 @@ and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
 needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
+
+### Released as v0.5.1 (2026-09-01)
+
+The dashboard's example request hardcoded `/chat/completions` and a `messages`
+array for every model, which fails against an embedding model: pasting it for
+`bge-m3` returns a 400. The endpoint and body now follow the gateway's own
+`model_info.mode`, and a model whose mode is missing or null is treated as a
+chat model — several models here report no mode at all.
+
+Verified against the production gateway: the new example returns a 1024-dim
+vector, the old one a 400.
 
 ### Production went live (2026-09-01)
 
