@@ -193,7 +193,49 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte) (*htt
 type modelInfoResponse struct {
 	Data []struct {
 		ModelName string `json:"model_name"`
+		ModelInfo struct {
+			// Mode is how the gateway classifies the model. It is absent or
+			// null for several models, which is why nothing may treat a
+			// missing mode as meaningful.
+			Mode string `json:"mode"`
+		} `json:"model_info"`
 	} `json:"data"`
+}
+
+// EmbeddingModels is the set of models the gateway serves as embedding models.
+//
+// An embedding model takes a different endpoint and body than a chat model, so
+// the dashboard's example request has to know which it is showing. The gateway
+// is asked rather than the name inspected: "bge-m3" reads as an embedding model
+// to a human, but nothing guarantees the next one will.
+//
+// A model whose mode is missing or null is deliberately NOT reported here.
+// Several models report no mode at all, and a chat example is the safe default
+// — it is what nearly every model on this gateway is.
+func (c *Client) EmbeddingModels(ctx context.Context) (map[string]bool, error) {
+	resp, err := c.do(ctx, http.MethodGet, "/model/info", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("LiteLLM /model/info returned %d: %s", resp.StatusCode, b)
+	}
+
+	var result modelInfoResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode model list: %w", err)
+	}
+
+	out := make(map[string]bool)
+	for _, m := range result.Data {
+		if m.ModelName != "" && m.ModelInfo.Mode == "embedding" {
+			out[m.ModelName] = true
+		}
+	}
+	return out, nil
 }
 
 // ListModels returns the model names the gateway serves.

@@ -20,9 +20,10 @@ type Provider struct {
 func NewProvider(c *Client) *Provider { return &Provider{client: c} }
 
 var (
-	_ keyprovider.Provider      = (*Provider)(nil)
-	_ keyprovider.ModelLister   = (*Provider)(nil)
-	_ keyprovider.UsageReporter = (*Provider)(nil)
+	_ keyprovider.Provider        = (*Provider)(nil)
+	_ keyprovider.ModelLister     = (*Provider)(nil)
+	_ keyprovider.EmbeddingLister = (*Provider)(nil)
+	_ keyprovider.UsageReporter   = (*Provider)(nil)
 )
 
 // Usage reports what a key has consumed, per day.
@@ -83,6 +84,11 @@ func (p *Provider) TotalUsage(ctx context.Context, ref string) (int64, error) {
 // ListModels reports the models the gateway serves.
 func (p *Provider) ListModels(ctx context.Context) ([]string, error) {
 	return p.client.ListModels(ctx)
+}
+
+// EmbeddingModels reports which of those models are embedding models.
+func (p *Provider) EmbeddingModels(ctx context.Context) (map[string]bool, error) {
+	return p.client.EmbeddingModels(ctx)
 }
 
 // CreateKey issues a key, and binds it to its owner so that the widest quota

@@ -63,6 +63,14 @@ type ModelLister interface {
 	ListModels(ctx context.Context) ([]string, error)
 }
 
+// EmbeddingLister is implemented by providers that can say which of their
+// models are embedding models, so the dashboard's example request shows the
+// right endpoint and body for each. Separate from ModelLister because a
+// gateway may be able to list models without classifying them.
+type EmbeddingLister interface {
+	EmbeddingModels(ctx context.Context) (map[string]bool, error)
+}
+
 // QuotaWindow is one allowance and the period it resets on.
 type QuotaWindow struct {
 	Tokens int64

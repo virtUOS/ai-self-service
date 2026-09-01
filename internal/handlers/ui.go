@@ -79,8 +79,11 @@ type dashboardData struct {
 	ProfileName   string
 	Quotas        []quotaLine
 	Models        []string
-	Usage         usageReport
-	CSRFToken     string
+	// EmbeddingModels are the ones among Models that take /embeddings and an
+	// "input" body rather than /chat/completions and "messages".
+	EmbeddingModels map[string]bool
+	Usage           usageReport
+	CSRFToken       string
 }
 
 // audit records a self-service action, attributing it to the user themselves.
@@ -138,22 +141,23 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 	newKey := u.flash.Take(su.User.ID, r.URL.Query().Get("k"))
 
 	if err := u.tmpl.Execute(w, dashboardData{
-		User:          su.User,
-		APIKey:        apiKey,
-		NewKey:        newKey,
-		IsAdmin:       isAdmin,
-		APIBaseURL:    strings.TrimRight(u.cfg.LiteLLMBaseURL, "/") + "/v1",
-		ExtendUntil:   u.extendUntil(profile),
-		ExpiresInDays: daysUntilExpiry(apiKey),
-		ExpiryUrgent:  isExpiryUrgent(apiKey),
-		ProfileName:   profileName(profile),
-		Quotas:        profileQuotaLines(profile, lang),
-		Models:        u.userModels(r.Context(), profile),
-		Usage:         u.userUsage(r.Context(), apiKey, su.User.OIDCSub, lang),
-		CSRFToken:     u.csrf.Token(w, r),
-		Lang:          lang,
-		Langs:         i18n.Supported,
-		Path:          r.URL.Path,
+		User:            su.User,
+		APIKey:          apiKey,
+		NewKey:          newKey,
+		IsAdmin:         isAdmin,
+		APIBaseURL:      strings.TrimRight(u.cfg.LiteLLMBaseURL, "/") + "/v1",
+		ExtendUntil:     u.extendUntil(profile),
+		ExpiresInDays:   daysUntilExpiry(apiKey),
+		ExpiryUrgent:    isExpiryUrgent(apiKey),
+		ProfileName:     profileName(profile),
+		Quotas:          profileQuotaLines(profile, lang),
+		Models:          u.userModels(r.Context(), profile),
+		EmbeddingModels: u.models.Embeddings(r.Context()),
+		Usage:           u.userUsage(r.Context(), apiKey, su.User.OIDCSub, lang),
+		CSRFToken:       u.csrf.Token(w, r),
+		Lang:            lang,
+		Langs:           i18n.Supported,
+		Path:            r.URL.Path,
 	}); err != nil {
 		slog.Error("dashboard template", "err", err)
 	}

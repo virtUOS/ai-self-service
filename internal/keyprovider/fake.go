@@ -34,6 +34,9 @@ type Fake struct {
 	AvailableModels []string
 	ModelsErr       error
 
+	// EmbeddingByModel is what EmbeddingModels returns.
+	EmbeddingByModel map[string]bool
+
 	// UsageByRef is what Usage returns per key ref; UsageErr forces it to fail.
 	UsageByRef map[string][]DailyUsage
 	UsageErr   error
@@ -69,9 +72,10 @@ func NewFake() *Fake {
 }
 
 var (
-	_ Provider      = (*Fake)(nil)
-	_ ModelLister   = (*Fake)(nil)
-	_ UsageReporter = (*Fake)(nil)
+	_ Provider        = (*Fake)(nil)
+	_ ModelLister     = (*Fake)(nil)
+	_ EmbeddingLister = (*Fake)(nil)
+	_ UsageReporter   = (*Fake)(nil)
 )
 
 // Usage returns the canned per-day totals for a key.
@@ -148,6 +152,14 @@ func (f *Fake) ListModels(context.Context) ([]string, error) {
 		return nil, f.ModelsErr
 	}
 	return f.AvailableModels, nil
+}
+
+// EmbeddingModels is which of AvailableModels are embedding models.
+func (f *Fake) EmbeddingModels(context.Context) (map[string]bool, error) {
+	if f.ModelsErr != nil {
+		return nil, f.ModelsErr
+	}
+	return f.EmbeddingByModel, nil
 }
 
 func (f *Fake) CreateKey(_ context.Context, req KeyRequest) (KeyResult, error) {
