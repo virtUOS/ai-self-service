@@ -1,6 +1,6 @@
 # Status and next steps
 
-Last updated 2026-08-31. Written as a handover: what is done, what is not, and
+Last updated 2026-09-01. Written as a handover: what is done, what is not, and
 the things that are surprising enough to waste an afternoon rediscovering.
 
 ## Where it runs
@@ -8,7 +8,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | | |
 |---|---|
 | Testing | <https://ai-keys-testing-virtuos-openstack.uni-osnabrueck.de> — live, tracks `:main` |
-| Production | not provisioned |
+| Production | <https://ai-keys.uni-osnabrueck.de> — live since 2026-09-01, pinned to a release tag |
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
@@ -56,9 +56,10 @@ end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
 
-1. **Production does not exist.** No VM, no DNS, no Keycloak client
-   (`ai-self-service` is unregistered — only `ai-self-service-testing` exists),
-   and `group_vars/production/vault.yml` still holds `CHANGEME`.
+1. **Production profiles.** The portal auto-seeds a `default` profile with no
+   limits at all, so every user who generates a key there is uncapped until a
+   limited profile is created and marked default. Testing uses
+   `default-limited` (four models; 10M/1h, 20M/24h, 50M/7d). Mirror it.
 2. **Production model pricing.** Chat models are priced at `1e-07`; the
    embedding and OCR models are deliberately left at `None`.
 3. **Profile assignment from an OIDC claim.** Still manual, which will not
@@ -236,6 +237,23 @@ and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
 needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
+
+### Production went live (2026-09-01)
+
+`ai-keys.uni-osnabrueck.de` on `vmegh.rz` (131.173.23.12), running v0.5.0.
+Login, the admin panel and `preferred_username` in the alias all verified.
+
+Both portals now issue keys against the **production** gateway
+(`litellm.uni-osnabrueck.de`): testing was pointed at it deliberately, so
+testing activity spends against production budgets. Each environment has its
+own scoped `proxy_admin` service key rather than the gateway master key, so
+either can be revoked without touching the other.
+
+The certificate took ~12 minutes: every ACME challenge failed with
+`Timeout during connect` until the external path opened, and Caddy's own retry
+then succeeded. Nothing was reconfigured. If it happens again on a new host,
+check reachability from *outside* the university before touching the Caddyfile
+— the host, firewalld and Caddy all looked healthy the whole time.
 
 ### Released as v0.5.0 (2026-08-31)
 
