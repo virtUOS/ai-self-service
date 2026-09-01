@@ -147,6 +147,8 @@ func (c *Client) userWindow(ctx context.Context, userID string) (*budgetWindow, 
 		BudgetDuration: *info.UserInfo.BudgetDuration,
 		MaxBudget:      *info.UserInfo.MaxBudget,
 		ResetAt:        info.UserInfo.BudgetResetAt,
+		Spend:          info.UserInfo.Spend,
+		HasSpend:       true,
 	}, nil
 }
 

@@ -22,6 +22,16 @@ type budgetWindow struct {
 	BudgetDuration string  `json:"budget_duration"`
 	MaxBudget      float64 `json:"max_budget"`
 	ResetAt        *string `json:"reset_at"`
+
+	// Spend is consumption the gateway itself tracks against this window, set
+	// only for the owner's window. The key's windows have no such counter
+	// exposed, so theirs is derived from the spend log instead.
+	//
+	// It matters because the owner's window outlives the key: after a rotation
+	// the new key's log is empty, and deriving the owner's usage from it would
+	// draw the widest window at zero and imply the allowance had reset.
+	Spend    float64
+	HasSpend bool
 }
 
 // periodDuration is how long a reset window lasts. Used to step back from the
@@ -193,6 +203,13 @@ func (p *Provider) Windows(ctx context.Context, ref, ownerID string) ([]keyprovi
 					u.UsedKnown = known
 				}
 			}
+		}
+		// The owner's window carries its own counter, which survives the key.
+		// Prefer it over anything derived from the key's log, and trust it
+		// even when logging is off: the gateway maintains it regardless.
+		if w.HasSpend {
+			u.UsedTokens = p.client.BudgetToTokens(w.Spend)
+			u.UsedKnown = true
 		}
 		out = append(out, u)
 	}

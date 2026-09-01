@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.5.1` |
+| Latest release | `v0.5.2` |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -51,7 +51,7 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-226 tests. `go test ./...` needs nothing external; the one skip is a manual
+228 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -237,6 +237,19 @@ and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
 needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
+
+### Released as v0.5.2 (2026-09-01)
+
+The dashboard drew every usage bar from the current key's spend log, including
+the widest window — which is enforced on the internal user precisely so it
+survives a rotation (#26). Straight after regenerating a key the weekly bar
+therefore read zero, contradicting the text above it and implying a rotation
+clears the allowance. It never did: enforcement reads the gateway's own
+counter, so only the display was wrong.
+
+The owner's window now takes its usage from the owner's spend, which the
+gateway maintains whether or not per-request logging is on. The key's own
+windows still come from the key log: those really do reset with a new key.
 
 ### Released as v0.5.1 (2026-09-01)
 
