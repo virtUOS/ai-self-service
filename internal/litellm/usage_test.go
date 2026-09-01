@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
@@ -34,10 +35,17 @@ func TestKeyHashIsSHA256(t *testing.T) {
 // Raw spend rows must aggregate into per-day totals. LiteLLM's own daily
 // aggregation reports spend only and drops token counts, so it cannot be used.
 func TestUsageAggregatesRowsPerDay(t *testing.T) {
+	// Dates are relative to today, not fixed: Usage drops anything older than
+	// the window it is asked for, so hardcoded days eventually fall outside it
+	// and the test starts failing on a date that has nothing to do with the
+	// code. Two days back and four days back sit inside any window worth
+	// testing.
+	dayOne := time.Now().UTC().AddDate(0, 0, -4).Format("2006-01-02")
+	dayTwo := time.Now().UTC().AddDate(0, 0, -2).Format("2006-01-02")
 	rows := []spendRow{
-		{APIKey: "h", TotalTokens: 100, StartTime: "2026-08-01T10:00:00Z"},
-		{APIKey: "h", TotalTokens: 50, StartTime: "2026-08-01T18:30:00Z"},
-		{APIKey: "h", TotalTokens: 7, StartTime: "2026-08-03T09:00:00Z"},
+		{APIKey: "h", TotalTokens: 100, StartTime: dayOne + "T10:00:00Z"},
+		{APIKey: "h", TotalTokens: 50, StartTime: dayOne + "T18:30:00Z"},
+		{APIKey: "h", TotalTokens: 7, StartTime: dayTwo + "T09:00:00Z"},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("api_key"); got == "" {
@@ -54,11 +62,11 @@ func TestUsageAggregatesRowsPerDay(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("got %d days, want 2 (two rows share a day)", len(got))
 	}
-	if got[0].Day != "2026-08-01" || got[0].Tokens != 150 {
-		t.Errorf("day 1 = %+v, want 2026-08-01/150", got[0])
+	if got[0].Day != dayOne || got[0].Tokens != 150 {
+		t.Errorf("day 1 = %+v, want %s/150", got[0], dayOne)
 	}
-	if got[1].Day != "2026-08-03" || got[1].Tokens != 7 {
-		t.Errorf("day 2 = %+v, want 2026-08-03/7", got[1])
+	if got[1].Day != dayTwo || got[1].Tokens != 7 {
+		t.Errorf("day 2 = %+v, want %s/7", got[1], dayTwo)
 	}
 }
 
