@@ -201,3 +201,55 @@ func TestCurlExampleDoesNotEmbedTheKey(t *testing.T) {
 		t.Error("the secret appears outside its own box, likely in the curl example")
 	}
 }
+
+// The example request has to match the model: an embedding model takes
+// /embeddings with an "input" body, and pasting the chat example against one
+// simply fails. The page carries the classification so its script can pick.
+func TestDashboardMarksEmbeddingModels(t *testing.T) {
+	d := dashboardData{
+		Lang:            i18n.DE,
+		User:            &database.User{Name: "T", Email: "t@example.com"},
+		APIKey:          &database.APIKey{KeyPrefix: "sk-abc", ExpiresAt: time.Now().Add(24 * time.Hour)},
+		APIBaseURL:      "https://gw.example.com/v1",
+		CSRFToken:       "TOK",
+		Models:          []string{"gpt-4o", "bge-m3"},
+		EmbeddingModels: map[string]bool{"bge-m3": true},
+	}
+	var buf bytes.Buffer
+	if err := parseDashboardTemplate().Execute(&buf, d); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `"bge-m3":true`) {
+		t.Error("embedding model not marked; its curl example would use /chat/completions")
+	}
+	if strings.Contains(out, `"gpt-4o":true`) {
+		t.Error("chat model marked as an embedding model")
+	}
+	// The script must offer both endpoints, or the distinction cannot be drawn.
+	for _, want := range []string{"/embeddings", "/chat/completions"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("script does not mention %q", want)
+		}
+	}
+}
+
+// A gateway that cannot classify its models leaves the map nil. The page must
+// still render: every model then gets the chat example, as before.
+func TestDashboardRendersWithoutEmbeddingInfo(t *testing.T) {
+	d := dashboardData{
+		Lang:       i18n.DE,
+		User:       &database.User{Name: "T", Email: "t@example.com"},
+		APIKey:     &database.APIKey{KeyPrefix: "sk-abc", ExpiresAt: time.Now().Add(24 * time.Hour)},
+		APIBaseURL: "https://gw.example.com/v1",
+		CSRFToken:  "TOK",
+		Models:     []string{"gpt-4o"},
+	}
+	var buf bytes.Buffer
+	if err := parseDashboardTemplate().Execute(&buf, d); err != nil {
+		t.Fatalf("nil embedding map broke rendering: %v", err)
+	}
+	if !strings.Contains(buf.String(), "EMBEDDING_MODELS") {
+		t.Error("EMBEDDING_MODELS missing; the script would throw on a click")
+	}
+}

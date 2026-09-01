@@ -20,15 +20,45 @@ const modelCacheTTL = 5 * time.Minute
 // unrelated field should not lose the model checkboxes because the gateway
 // blipped.
 type modelCache struct {
-	lister keyprovider.ModelLister
+	lister   keyprovider.ModelLister
+	embedder keyprovider.EmbeddingLister
 
-	mu        sync.Mutex
-	models    []string
-	fetchedAt time.Time
+	mu         sync.Mutex
+	models     []string
+	embeddings map[string]bool
+	fetchedAt  time.Time
+	embFetched time.Time
 }
 
 func newModelCache(l keyprovider.ModelLister) *modelCache {
-	return &modelCache{lister: l}
+	e, _ := l.(keyprovider.EmbeddingLister)
+	return &modelCache{lister: l, embedder: e}
+}
+
+// Embeddings reports which models the gateway serves as embedding models, so
+// the dashboard can show the right example request for each.
+//
+// A failed lookup returns nil rather than an error: every model then gets the
+// chat example, which is what the page did before this existed. A wrong example
+// for one model is a smaller harm than no model list at all.
+func (c *modelCache) Embeddings(ctx context.Context) map[string]bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.embedder == nil {
+		return nil
+	}
+	if time.Since(c.embFetched) < modelCacheTTL && c.embeddings != nil {
+		return c.embeddings
+	}
+
+	emb, err := c.embedder.EmbeddingModels(ctx)
+	if err != nil {
+		slog.Error("list embedding models", "err", err)
+		return c.embeddings
+	}
+	c.embeddings, c.embFetched = emb, time.Now()
+	return emb
 }
 
 // Models returns the cached list, refreshing it when stale.

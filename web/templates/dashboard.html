@@ -246,6 +246,10 @@
 <script>
 const COPIED = {{T .Lang "dash.copied"}};
 const BASE_URL = {{.APIBaseURL}};
+// Which models take /embeddings instead of /chat/completions, as reported by
+// the gateway. Empty when it cannot say, in which case every model gets the
+// chat example — the behaviour before this was threaded through.
+const EMBEDDING_MODELS = {{.EmbeddingModels}} || {};
 
 // Time words, translated server-side: the browser does the arithmetic, but
 // the wording has to match the page.
@@ -303,13 +307,22 @@ function copyCurl(btn) {
 // The key is referenced as $OPENAI_API_KEY rather than pasted in: the page only
 // ever shows a prefix once the key has been issued, and a command carrying a
 // live secret would end up in the user's shell history.
+// An embedding model takes a different endpoint and a different body than a
+// chat model, so the same example cannot serve both: pasting the chat one
+// against bge-m3 just fails. Which is which comes from the gateway rather than
+// the name — see EMBEDDING_MODELS.
 function curlExample(model) {
-  return "curl " + BASE_URL + "/chat/completions \\\n" +
+  const embedding = EMBEDDING_MODELS[model] === true;
+  const path = embedding ? "/embeddings" : "/chat/completions";
+  const body = embedding
+    ? "    \"input\": \"Your text to embed\"\n"
+    : "    \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}]\n";
+  return "curl " + BASE_URL + path + " \\\n" +
     "  -H \"Authorization: Bearer $OPENAI_API_KEY\" \\\n" +
     "  -H \"Content-Type: application/json\" \\\n" +
     "  -d '{\n" +
     "    \"model\": \"" + model + "\",\n" +
-    "    \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}]\n" +
+    body +
     "  }'";
 }
 
