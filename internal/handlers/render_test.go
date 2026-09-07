@@ -258,7 +258,7 @@ func TestAdminPageFullyGerman(t *testing.T) {
 		">Profiles<",
 		">Audit log<",
 		"Allowed models",
-		"Usage limit (tokens)",
+		"Usage limit (cost)",
 	} {
 		if strings.Contains(out, english) {
 			t.Errorf("untranslated on the German page: %q", english)
@@ -361,12 +361,13 @@ func TestAdminShowsProfileQuotaWindows(t *testing.T) {
 		Profiles: []database.Profile{{
 			ID: 2, Name: "test quota",
 			Quotas: []database.ProfileQuota{
-				{Tokens: 1_000, Period: "1h"},
-				{Tokens: 1_000_000, Period: "30d"},
+				{Budget: 0.001, Period: "1h"},
+				{Budget: 0.1, Period: "30d"},
 			},
 		}},
-		Users:     []userRow{},
-		CSRFToken: "TOK",
+		Users:      []userRow{},
+		CSRFToken:  "TOK",
+		BudgetUnit: "$",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -374,7 +375,7 @@ func TestAdminShowsProfileQuotaWindows(t *testing.T) {
 	out := html.UnescapeString(buf.String())
 
 	// The table cell renders each window in the admin's own units.
-	for _, want := range []string{"1k", "1M"} {
+	for _, want := range []string{"$0.0010", "$0.10"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("table does not show the %s window", want)
 		}

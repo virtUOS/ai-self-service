@@ -71,7 +71,7 @@
               <td>{{if .RPMLimit}}{{.RPMLimit}}{{else}}<em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>{{end}}</td>
               <td>{{if .KeyDurationDays}}{{.KeyDurationDays}} days{{else}}<em class="text-faint">{{$.DefaultKeyDays}} days (server default)</em>{{end}}</td>
               <td>
-                {{if .Quotas}}{{range $i, $q := .Quotas}}{{if $i}}<br>{{end}}{{fmtTokens $q.Tokens}} {{fmtPeriod $q.Period}}{{end}}{{else}}<em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>{{end}}
+                {{if .Quotas}}{{range $i, $q := .Quotas}}{{if $i}}<br>{{end}}{{fmtBudget $q.Budget $.BudgetUnit}} {{fmtPeriod $q.Period}}{{end}}{{else}}<em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>{{end}}
               </td>
               <td>{{if .IsDefault}}✓{{end}}</td>
               <td>
@@ -158,7 +158,7 @@
             <button type="button" class="btn btn-sm btn-secondary" onclick="addQuotaRow()">
               + {{T .Lang "admin.form.quota.add"}}
             </button>
-            <div class="form-hint">{{T .Lang "admin.form.quota.hint"}}</div>
+            <div class="form-hint">{{T .Lang "admin.form.quota.hint"}} {{T .Lang "admin.form.quota.unit"}} {{.BudgetUnit}}</div>
           </div>
         </div>
         <div class="form-group">
@@ -306,8 +306,8 @@ function openEditProfile(id, name, desc, models, tpm, rpm, expiry, quotas, isDef
 }
 
 // Quota windows are a repeating group: a profile can hold several allowances
-// at once ("100k/day AND 1M/month"), which the gateway enforces
-// independently. Rows post as parallel quota_tokens/quota_period arrays and
+// at once ("0.10/day AND 5/month"), which the gateway enforces
+// independently. Rows post as parallel quota_budget/quota_period arrays and
 // are paired by position on the server.
 const QUOTA_PERIODS = [
   ['1h', {{T .Lang "period.hourly"}}],
@@ -316,16 +316,17 @@ const QUOTA_PERIODS = [
   ['30d', {{T .Lang "period.monthly"}}],
 ];
 
-function quotaRow(tokens, period) {
+function quotaRow(budget, period) {
   const row = document.createElement('div');
   row.className = 'quota-row';
 
   const n = document.createElement('input');
   n.type = 'number';
-  n.name = 'quota_tokens';
-  n.min = '1';
-  n.placeholder = {{T .Lang "admin.form.quota.tokens"}};
-  n.value = tokens || '';
+  n.name = 'quota_budget';
+  n.min = '0';
+  n.step = 'any';
+  n.placeholder = {{T .Lang "admin.form.quota.amount"}};
+  n.value = budget || '';
 
   const sel = document.createElement('select');
   sel.name = 'quota_period';
@@ -347,14 +348,14 @@ function quotaRow(tokens, period) {
   return row;
 }
 
-function addQuotaRow(tokens, period) {
-  document.getElementById('pf-quotas').appendChild(quotaRow(tokens, period));
+function addQuotaRow(budget, period) {
+  document.getElementById('pf-quotas').appendChild(quotaRow(budget, period));
 }
 
 function setQuotaRows(quotas) {
   const box = document.getElementById('pf-quotas');
   box.textContent = '';
-  for (const q of (quotas || [])) addQuotaRow(q.Tokens, q.Period);
+  for (const q of (quotas || [])) addQuotaRow(q.Budget, q.Period);
 }
 
 // Models arrive as a comma-separated string; tick the matching boxes, or fall
