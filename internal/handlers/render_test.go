@@ -48,6 +48,45 @@ func TestDashboardTemplateRenders(t *testing.T) {
 	}
 }
 
+// A portal being retired tells users where to go instead, and that keys
+// issued here will stop working. Nothing of the sort appears otherwise.
+func TestDashboardShowsSuccessorBanner(t *testing.T) {
+	base := dashboardData{
+		Lang:      i18n.EN,
+		User:      &database.User{Name: "T", Email: "t@example.com"},
+		CSRFToken: "TOK",
+	}
+	render := func(d dashboardData) string {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := parseDashboardTemplate().Execute(&buf, d); err != nil {
+			t.Fatal(err)
+		}
+		return html.UnescapeString(buf.String())
+	}
+
+	out := render(base)
+	if strings.Contains(out, "will be revoked") {
+		t.Error("banner shown with no successor configured")
+	}
+
+	with := base
+	with.SuccessorURL = "https://ai-keys.example.edu"
+	out = render(with)
+	for _, want := range []string{
+		`href="https://ai-keys.example.edu"`, "only for testing", "Keys issued here will be revoked.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("banner is missing %q", want)
+		}
+	}
+
+	with.SuccessorKeysRevokedOn = "2026-10-01"
+	if out = render(with); !strings.Contains(out, "will be revoked on 2026-10-01.") {
+		t.Error("banner does not name the revocation date")
+	}
+}
+
 // The no-key branch renders a different form set; it must be covered too.
 func TestDashboardTemplateNoKeyBranch(t *testing.T) {
 	tmpl := parseDashboardTemplate()
