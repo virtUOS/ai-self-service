@@ -28,7 +28,7 @@ func TestDashboardReappliesProfileLimits(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.SetProfileQuotas(ctx, p.ID, []database.ProfileQuota{
-		{Tokens: 10_000, Period: "1h"},
+		{Budget: 0.01, Period: "1h"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -42,8 +42,8 @@ func TestDashboardReappliesProfileLimits(t *testing.T) {
 	if !ok {
 		t.Fatal("dashboard did not push limits to the existing key")
 	}
-	if len(got.Quotas) != 1 || got.Quotas[0].Tokens != 10_000 || got.Quotas[0].Period != "1h" {
-		t.Errorf("pushed %+v, want one window of 10000/1h", got)
+	if len(got.Quotas) != 1 || got.Quotas[0].Budget != 0.01 || got.Quotas[0].Period != "1h" {
+		t.Errorf("pushed %+v, want one window of 0.01/1h", got)
 	}
 }
 
@@ -83,8 +83,8 @@ func TestDashboardPushesStackedWindows(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.SetProfileQuotas(ctx, p.ID, []database.ProfileQuota{
-		{Tokens: 100_000, Period: "24h"},
-		{Tokens: 1_000_000, Period: "30d"},
+		{Budget: 0.01, Period: "24h"},
+		{Budget: 0.1, Period: "30d"},
 	}); err != nil {
 		t.Fatal(err)
 	}

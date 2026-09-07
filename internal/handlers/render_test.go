@@ -77,12 +77,13 @@ func TestAdminTemplateRenders(t *testing.T) {
 		Profiles: []database.Profile{
 			{ID: 1, Name: "default", IsDefault: true},
 			{ID: 2, Name: "students", KeyDurationDays: 30, Quotas: []database.ProfileQuota{
-				{Tokens: 100_000, Period: "24h"},
-				{Tokens: 1_500_000, Period: "30d"},
+				{Budget: 0.01, Period: "24h"},
+				{Budget: 0.15, Period: "30d"},
 			}},
 		},
-		Users:     []userRow{{User: database.User{ID: 2, Name: "U", Email: "u@x.de"}}},
-		CSRFToken: "TOK456",
+		Users:      []userRow{{User: database.User{ID: 2, Name: "U", Email: "u@x.de"}}},
+		CSRFToken:  "TOK456",
+		BudgetUnit: "$",
 	})
 	if err != nil {
 		t.Fatalf("execute: %v", err)
@@ -93,9 +94,10 @@ func TestAdminTemplateRenders(t *testing.T) {
 	if n := strings.Count(out, `name="csrf_token" value="TOK456"`); n != 4 {
 		t.Errorf("csrf fields rendered = %d, want 4", n)
 	}
-	// Quotas must render in tokens, formatted, not as raw spend.
+	// Quotas must render as spend in the deployment's own unit.
 	// Several windows must all appear, not just the first.
-	if !strings.Contains(out, "100k per day") || !strings.Contains(out, "1.5M per month") {
+	out = html.UnescapeString(out)
+	if !strings.Contains(out, "$0.01 per day") || !strings.Contains(out, "$0.15 per month") {
 		t.Error("stacked quota windows not rendered in admin table")
 	}
 	if !strings.Contains(out, "30 days") {
@@ -143,8 +145,9 @@ func TestDashboardTooltipsRender(t *testing.T) {
 		User:       &database.User{Name: "T", Email: "t@x.de"},
 		APIKey:     &database.APIKey{KeyPrefix: "sk-a", ExpiresAt: time.Now().Add(48 * time.Hour)},
 		APIBaseURL: "https://litellm.example.com/v1",
-		Quotas:     []quotaLine{{Tokens: "1.5M", Period: "per day"}}, ProfileName: "students",
-		CSRFToken: "T",
+		Quotas:     []quotaLine{{Budget: "$0.15", Period: "per day"}}, ProfileName: "students",
+		BudgetUnit: "$",
+		CSRFToken:  "T",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -400,22 +403,23 @@ func TestAdminShowsProfileQuotaWindows(t *testing.T) {
 func TestDashboardDrawsABarPerWindow(t *testing.T) {
 	var buf bytes.Buffer
 	err := parseDashboardTemplate().Execute(&buf, dashboardData{
-		Lang:   i18n.EN,
-		Langs:  i18n.Supported,
-		User:   &database.User{Email: "a@b.c"},
-		APIKey: &database.APIKey{KeyPrefix: "sk-x", ExpiresAt: time.Now().Add(24 * time.Hour)},
+		Lang:       i18n.EN,
+		Langs:      i18n.Supported,
+		User:       &database.User{Email: "a@b.c"},
+		APIKey:     &database.APIKey{KeyPrefix: "sk-x", ExpiresAt: time.Now().Add(24 * time.Hour)},
+		BudgetUnit: "$",
 		Usage: usageReport{
 			HasQuota: true,
 			Windows: []quotaWindowView{
-				{Period: "1h", Label: "per hour", LimitText: "1k", Used: 950, Limit: 1_000, Remaining: 50, Pct: 95},
-				{Period: "30d", Label: "per month", LimitText: "1M", Used: 9_590, Limit: 1_000_000, Remaining: 990_410, Pct: 1},
+				{Period: "1h", Label: "per hour", Used: 0.00095, Limit: 0.001, Pct: 95},
+				{Period: "30d", Label: "per month", Used: 0.00959, Limit: 1, Pct: 1},
 			},
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := buf.String()
+	out := html.UnescapeString(buf.String())
 
 	if got := strings.Count(out, "quota-fill"); got != 2 {
 		t.Errorf("drew %d bars, want one per window", got)
@@ -424,7 +428,7 @@ func TestDashboardDrawsABarPerWindow(t *testing.T) {
 	if !strings.Contains(out, "quota-full") {
 		t.Error("the 95% window is not marked as nearly exhausted")
 	}
-	for _, want := range []string{"per hour", "per month", "width:95%", "width:1%"} {
+	for _, want := range []string{"per hour", "per month", "width:95%", "width:1%", "95%", "$0.0010", "$1.00"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("card is missing %q", want)
 		}
@@ -436,12 +440,13 @@ func TestDashboardDrawsABarPerWindow(t *testing.T) {
 func TestDashboardFallsBackToOneBar(t *testing.T) {
 	var buf bytes.Buffer
 	err := parseDashboardTemplate().Execute(&buf, dashboardData{
-		Lang:   i18n.EN,
-		Langs:  i18n.Supported,
-		User:   &database.User{Email: "a@b.c"},
-		APIKey: &database.APIKey{KeyPrefix: "sk-x", ExpiresAt: time.Now().Add(24 * time.Hour)},
+		Lang:       i18n.EN,
+		Langs:      i18n.Supported,
+		User:       &database.User{Email: "a@b.c"},
+		APIKey:     &database.APIKey{KeyPrefix: "sk-x", ExpiresAt: time.Now().Add(24 * time.Hour)},
+		BudgetUnit: "$",
 		Usage: usageReport{
-			HasQuota: true, Used: 9_590, Remaining: 990_410, QuotaPct: 1,
+			HasQuota: true, Used: 0.00959, Limit: 1, QuotaPct: 1,
 		},
 	})
 	if err != nil {

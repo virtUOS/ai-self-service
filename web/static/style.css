@@ -543,6 +543,17 @@ tr:hover td { background: var(--tr-hover); }
   margin-top: .3rem;
 }
 
+.usage-models-title {
+  margin-top: 1rem;
+  font-size: .95rem;
+}
+
+.usage-models td:not(:first-child),
+.usage-models th:not(:first-child) {
+  text-align: right;
+  white-space: nowrap;
+}
+
 /* Quota bar: how much of the enforced allowance is gone. Distinct from the
    usage chart above it, which counts a rolling 30 days rather than the
    window the gateway resets on. */

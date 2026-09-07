@@ -31,12 +31,13 @@ type usageCache struct {
 }
 
 type totalEntry struct {
-	tokens    int64
+	spend     float64
 	fetchedAt time.Time
 }
 
 type usageEntry struct {
 	days      []keyprovider.DailyUsage
+	models    []keyprovider.ModelUsage
 	fetchedAt time.Time
 }
 
@@ -68,14 +69,31 @@ func (c *usageCache) Days(ctx context.Context, ref string) []keyprovider.DailyUs
 		slog.Error("read key usage", "err", err)
 		return nil
 	}
-	c.entries[ref] = usageEntry{days: days, fetchedAt: time.Now()}
+	models, err := c.reporter.ModelUsage(ctx, ref, usageWindowDays)
+	if err != nil {
+		// The chart is still worth showing without its breakdown.
+		slog.Error("read key model usage", "err", err)
+		models = nil
+	}
+	c.entries[ref] = usageEntry{days: days, models: models, fetchedAt: time.Now()}
 	return days
 }
 
-// Total returns the key's cumulative token count, the coarse figure that
+// Models returns the cached per-model totals, refreshed together with Days.
+func (c *usageCache) Models(ctx context.Context, ref string) []keyprovider.ModelUsage {
+	if c.reporter == nil || ref == "" {
+		return nil
+	}
+	c.Days(ctx, ref) // refresh if stale
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.entries[ref].models
+}
+
+// TotalSpend returns the key's cumulative spend, the coarse figure that
 // survives when per-request logging is unavailable. Cached alongside the
 // per-day rows and on the same terms: a failed read reports nothing.
-func (c *usageCache) Total(ctx context.Context, ref string) int64 {
+func (c *usageCache) TotalSpend(ctx context.Context, ref string) float64 {
 	if c.reporter == nil || ref == "" {
 		return 0
 	}
@@ -84,15 +102,15 @@ func (c *usageCache) Total(ctx context.Context, ref string) int64 {
 	defer c.mu.Unlock()
 
 	if e, ok := c.totals[ref]; ok && time.Since(e.fetchedAt) < usageCacheTTL {
-		return e.tokens
+		return e.spend
 	}
 
-	total, err := c.reporter.TotalUsage(ctx, ref)
+	total, err := c.reporter.TotalSpend(ctx, ref)
 	if err != nil {
-		slog.Error("read key total usage", "err", err)
+		slog.Error("read key total spend", "err", err)
 		return 0
 	}
-	c.totals[ref] = totalEntry{tokens: total, fetchedAt: time.Now()}
+	c.totals[ref] = totalEntry{spend: total, fetchedAt: time.Now()}
 	return total
 }
 
