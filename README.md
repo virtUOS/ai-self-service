@@ -148,19 +148,15 @@ should review profile budgets after upgrading.
 Requests fail with HTTP 429 once the allowance is spent and resume when the
 period resets.
 
-**One period per profile — a portal limit, not a gateway one.** A profile
-exposes a single allowance and period, so it cannot combine caps the way
-Anthropic's plans do (e.g. 100k/day *and* 1M/month).
-
-LiteLLM itself *can*: a key accepts `budget_limits` as a list of
-`{budget_duration, max_budget}` objects and enforces each window
-independently, rejecting with `ExceededBudget: Key over 1h budget`. This was
-not true of v1.90.0, where the field took a dict and was stored without being
-enforced; the shape and the behaviour both changed by v1.97.0.
-
-Supporting stacked windows in profiles is [issue #1]. For fair use the shorter
-period is usually the binding one anyway: 100k/day already caps a user near
-3M/month.
+**Several windows per profile.** A profile can hold one allowance per period
+(hourly, daily, weekly, monthly) and LiteLLM enforces each independently — a
+key takes `budget_limits` as a list of `{budget_duration, max_budget}` objects
+and rejects with `ExceededBudget: Key over 1h budget` when any one is spent.
+The tightest window binds, so a shorter period may not carry a larger budget
+than a longer one; the admin form rejects that. The widest window is held
+against the user rather than the key so regenerating a key does not reset it
+(issue #26). This needs LiteLLM v1.97.0 or later; v1.90.0 accepted the field
+and ignored it.
 
 ### How profile changes reach existing keys
 
