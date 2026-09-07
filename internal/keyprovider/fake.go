@@ -41,9 +41,14 @@ type Fake struct {
 	UsageByRef map[string][]DailyUsage
 	UsageErr   error
 
-	// TotalByRef is what TotalUsage returns per key ref, standing in for a
+	// ModelUsageByRef is what ModelUsage returns per key ref; ModelUsageErr
+	// forces it to fail.
+	ModelUsageByRef map[string][]ModelUsage
+	ModelUsageErr   error
+
+	// TotalByRef is what TotalSpend returns per key ref, standing in for a
 	// gateway that records spend but keeps no per-request log.
-	TotalByRef map[string]int64
+	TotalByRef map[string]float64
 	TotalErr   error
 
 	// QuotaByRef is what Quota returns per key ref; QuotaErr forces failure.
@@ -134,14 +139,24 @@ func (f *Fake) Quota(_ context.Context, ref, ownerID string) (Quota, error) {
 	return f.QuotaByRef[ref], nil
 }
 
-// TotalUsage returns the canned cumulative total for a key.
-func (f *Fake) TotalUsage(_ context.Context, ref string) (int64, error) {
+// TotalSpend returns the canned cumulative spend for a key.
+func (f *Fake) TotalSpend(_ context.Context, ref string) (float64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.TotalErr != nil {
 		return 0, f.TotalErr
 	}
 	return f.TotalByRef[ref], nil
+}
+
+// ModelUsage returns the canned per-model totals for a key.
+func (f *Fake) ModelUsage(_ context.Context, ref string, _ int) ([]ModelUsage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.ModelUsageErr != nil {
+		return nil, f.ModelUsageErr
+	}
+	return f.ModelUsageByRef[ref], nil
 }
 
 // Models is what ListModels returns.
