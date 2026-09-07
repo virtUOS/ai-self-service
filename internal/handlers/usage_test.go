@@ -61,15 +61,26 @@ func TestUserUsageDegradesQuietly(t *testing.T) {
 	}
 }
 
-// The peak day scales the bars in the UI; without it every bar is full height.
+// The peak bar scales the chart; without it every bar is full height. Dates
+// are relative to today so the days stay inside the reporting window.
 func TestUserUsageReportsPeak(t *testing.T) {
+	today := time.Now().UTC()
 	fake := keyprovider.NewFake()
 	fake.UsageByRef = map[string][]keyprovider.DailyUsage{
-		"k": {{Day: "2026-08-01", Tokens: 10}, {Day: "2026-08-02", Tokens: 40}},
+		"k": {
+			{Day: today.AddDate(0, 0, -1).Format("2006-01-02"), Tokens: 10},
+			{Day: today.Format("2006-01-02"), Tokens: 40},
+		},
 	}
 	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"}, "", i18n.EN)
 	if got.Peak != 40 {
 		t.Errorf("Peak = %d, want 40", got.Peak)
+	}
+	if len(got.Bars) != usageWindowDays {
+		t.Errorf("drew %d bars, want the whole %d-day window", len(got.Bars), usageWindowDays)
+	}
+	if last := got.Bars[len(got.Bars)-1]; last.Tokens != 40 {
+		t.Errorf("today's bar = %+v, want 40 tokens", last)
 	}
 }
 
@@ -87,7 +98,12 @@ func TestDashboardRendersUsage(t *testing.T) {
 
 	withUsage := base
 	withUsage.Usage = usageReport{
-		Days:  []keyprovider.DailyUsage{{Day: "2026-08-01", Tokens: 10}, {Day: "2026-08-02", Tokens: 40}},
+		Days: []keyprovider.DailyUsage{{Day: "2026-08-01", Tokens: 10}, {Day: "2026-08-03", Tokens: 40}},
+		Bars: []usageBar{
+			{Label: "01", Title: "2026-08-01", Tokens: 10},
+			{Label: "02", Title: "2026-08-02"}, // no traffic: drawn as a gap
+			{Label: "03", Title: "2026-08-03", Tokens: 40},
+		},
 		Total: 50, Peak: 40,
 	}
 	var buf bytes.Buffer
@@ -95,8 +111,11 @@ func TestDashboardRendersUsage(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 	out := buf.String()
-	if n := strings.Count(out, "usage-bar"); n != 2 {
-		t.Errorf("rendered %d bars, want 2", n)
+	if n := strings.Count(out, "usage-bar"); n != 3 {
+		t.Errorf("rendered %d bars, want one per bucket including the empty one", n)
+	}
+	if !strings.Contains(out, "height:0%") {
+		t.Error("an empty bucket should render as a gap, not a floor-height bar")
 	}
 	// The peak day is full height; the quieter day is scaled below it.
 	if !strings.Contains(out, "height:100%") {

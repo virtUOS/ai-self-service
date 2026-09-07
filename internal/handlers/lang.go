@@ -18,10 +18,11 @@ import (
 func langFuncs() template.FuncMap {
 	return template.FuncMap{
 		"T": i18n.T,
-		// barPct scales a day's tokens against the busiest day, for the usage
-		// chart. A floor of 2% keeps a quiet day visible rather than invisible.
+		// barPct scales a bar's tokens against the busiest bar, for the usage
+		// chart. A floor of 2% keeps a quiet bar visible rather than invisible;
+		// an empty bucket stays empty, since a gap is the information.
 		"barPct": func(tokens, peak int64) int {
-			if peak <= 0 {
+			if peak <= 0 || tokens <= 0 {
 				return 0
 			}
 			pct := int(tokens * 100 / peak)

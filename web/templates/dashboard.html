@@ -187,10 +187,10 @@
         <span class="text-muted">({{T .Lang "dash.usagestats.total"}})</span>
       </p>
       <div class="usage-chart">
-        {{range .Usage.Days}}
-        <div class="usage-day" title="{{.Day}}: {{thousands .Tokens}}">
+        {{range .Usage.Bars}}
+        <div class="usage-day" title="{{.Title}}: {{thousands .Tokens}}">
           <div class="usage-bar" style="height:{{barPct .Tokens $.Usage.Peak}}%"></div>
-          <span class="usage-label">{{slice .Day 8 10}}</span>
+          <span class="usage-label">{{.Label}}</span>
         </div>
         {{end}}
       </div>

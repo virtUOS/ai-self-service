@@ -9,8 +9,9 @@ import (
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
 
-// usageWindowDays is how far back the dashboard reports. Long enough to cover
-// a month's key validity, short enough that the per-request log stays small.
+// usageWindowDays is how far back the dashboard reports unless configured
+// otherwise (USAGE_HISTORY_DAYS). Long enough to cover a month's key
+// validity, short enough that the per-request log stays small.
 const usageWindowDays = 30
 
 // usageCacheTTL bounds how stale a usage report can be. LiteLLM takes about
@@ -28,6 +29,8 @@ const usageCacheTTL = 60 * time.Second
 // pick up.
 type usageCache struct {
 	reporter keyprovider.UsageReporter
+	// windowDays is how far back History reaches.
+	windowDays int
 
 	mu      sync.Mutex
 	entries map[string]usageEntry
@@ -46,9 +49,10 @@ type usageEntry struct {
 
 func newUsageCache(r keyprovider.UsageReporter) *usageCache {
 	return &usageCache{
-		reporter: r,
-		entries:  make(map[string]usageEntry),
-		totals:   make(map[string]totalEntry),
+		reporter:   r,
+		windowDays: usageWindowDays,
+		entries:    make(map[string]usageEntry),
+		totals:     make(map[string]totalEntry),
 	}
 }
 
@@ -72,7 +76,7 @@ func (c *usageCache) history(ctx context.Context, ref string) keyprovider.Histor
 		return e.history
 	}
 
-	h, err := c.reporter.History(ctx, ref, usageWindowDays)
+	h, err := c.reporter.History(ctx, ref, c.windowDays)
 	if err != nil {
 		slog.Error("read key usage", "err", err)
 		return keyprovider.History{}

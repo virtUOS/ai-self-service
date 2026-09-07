@@ -52,6 +52,11 @@ type Config struct {
 	SessionDuration time.Duration
 	KeyDurationDays int
 
+	// UsageHistoryDays is how far back the dashboard's usage chart and
+	// per-model table reach. The gateway's spend-log retention must cover it,
+	// or users silently see less history than the page offers.
+	UsageHistoryDays int
+
 	// BudgetUnit labels quota amounts on the dashboard and admin page. It is
 	// the currency LiteLLM prices models in, or a word like "credits" when the
 	// prices are nominal and should not read as money.
@@ -105,6 +110,12 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("SESSION_DURATION must be a valid duration: %w", err)
 	}
 	cfg.SessionDuration = dur
+
+	history, err := strconv.Atoi(envOr("USAGE_HISTORY_DAYS", "30"))
+	if err != nil || history < 1 {
+		return nil, fmt.Errorf("USAGE_HISTORY_DAYS must be a positive integer")
+	}
+	cfg.UsageHistoryDays = history
 
 	days, err := strconv.Atoi(envOr("KEY_DURATION_DAYS", "90"))
 	if err != nil {
