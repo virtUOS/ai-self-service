@@ -37,12 +37,13 @@ type Fake struct {
 	// EmbeddingByModel is what EmbeddingModels returns.
 	EmbeddingByModel map[string]bool
 
-	// UsageByRef is what Usage returns per key ref; UsageErr forces it to fail.
+	// UsageByRef is the per-day half of what History returns per key ref;
+	// UsageErr forces it to fail.
 	UsageByRef map[string][]DailyUsage
 	UsageErr   error
 
-	// ModelUsageByRef is what ModelUsage returns per key ref; ModelUsageErr
-	// forces it to fail.
+	// ModelUsageByRef is the per-model half of what History returns per key
+	// ref; ModelUsageErr forces it to fail.
 	ModelUsageByRef map[string][]ModelUsage
 	ModelUsageErr   error
 
@@ -83,14 +84,19 @@ var (
 	_ UsageReporter   = (*Fake)(nil)
 )
 
-// Usage returns the canned per-day totals for a key.
-func (f *Fake) Usage(_ context.Context, ref string, _ int) ([]DailyUsage, error) {
+// History returns the canned per-day and per-model totals for a key. Either
+// canned error fails the whole call, as on a real gateway where both halves
+// come from one read of the same log.
+func (f *Fake) History(_ context.Context, ref string, _ int) (History, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.UsageErr != nil {
-		return nil, f.UsageErr
+		return History{}, f.UsageErr
 	}
-	return f.UsageByRef[ref], nil
+	if f.ModelUsageErr != nil {
+		return History{}, f.ModelUsageErr
+	}
+	return History{Days: f.UsageByRef[ref], Models: f.ModelUsageByRef[ref]}, nil
 }
 
 // UpdateLimits records a re-application of limits to an existing key.
@@ -147,16 +153,6 @@ func (f *Fake) TotalSpend(_ context.Context, ref string) (float64, error) {
 		return 0, f.TotalErr
 	}
 	return f.TotalByRef[ref], nil
-}
-
-// ModelUsage returns the canned per-model totals for a key.
-func (f *Fake) ModelUsage(_ context.Context, ref string, _ int) ([]ModelUsage, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.ModelUsageErr != nil {
-		return nil, f.ModelUsageErr
-	}
-	return f.ModelUsageByRef[ref], nil
 }
 
 // Models is what ListModels returns.

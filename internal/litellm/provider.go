@@ -26,9 +26,9 @@ var (
 	_ keyprovider.UsageReporter   = (*Provider)(nil)
 )
 
-// Usage reports what a key has consumed, per day.
-func (p *Provider) Usage(ctx context.Context, ref string, days int) ([]keyprovider.DailyUsage, error) {
-	return p.client.Usage(ctx, ref, days)
+// History reports what a key has consumed, per day and per model.
+func (p *Provider) History(ctx context.Context, ref string, days int) (keyprovider.History, error) {
+	return p.client.History(ctx, ref, days)
 }
 
 // UpdateLimits re-applies limits to an existing key, and to the allowance held
@@ -79,11 +79,6 @@ func userBudget(w keyprovider.QuotaWindow) *UserBudget {
 // TotalSpend reports the key's cumulative spend counter.
 func (p *Provider) TotalSpend(ctx context.Context, ref string) (float64, error) {
 	return p.client.KeySpend(ctx, ref)
-}
-
-// ModelUsage reports what a key has consumed, per model.
-func (p *Provider) ModelUsage(ctx context.Context, ref string, days int) ([]keyprovider.ModelUsage, error) {
-	return p.client.ModelUsage(ctx, ref, days)
 }
 
 // ListModels reports the models the gateway serves.

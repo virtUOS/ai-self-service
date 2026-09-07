@@ -35,7 +35,7 @@ func TestKeyHashIsSHA256(t *testing.T) {
 // Raw spend rows must aggregate into per-day totals. LiteLLM's own daily
 // aggregation reports spend only and drops token counts, so it cannot be used.
 func TestUsageAggregatesRowsPerDay(t *testing.T) {
-	// Dates are relative to today, not fixed: Usage drops anything older than
+	// Dates are relative to today, not fixed: History drops anything older than
 	// the window it is asked for, so hardcoded days eventually fall outside it
 	// and the test starts failing on a date that has nothing to do with the
 	// code. Two days back and four days back sit inside any window worth
@@ -55,10 +55,11 @@ func TestUsageAggregatesRowsPerDay(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := NewClient(srv.URL, "mk").Usage(context.Background(), "sk-whatever", 30)
+	h, err := NewClient(srv.URL, "mk").History(context.Background(), "sk-whatever", 30)
 	if err != nil {
 		t.Fatal(err)
 	}
+	got := h.Days
 	if len(got) != 2 {
 		t.Fatalf("got %d days, want 2 (two rows share a day)", len(got))
 	}
@@ -77,18 +78,18 @@ func TestUsageEmptyIsNotAnError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := NewClient(srv.URL, "mk").Usage(context.Background(), "sk-x", 30)
+	h, err := NewClient(srv.URL, "mk").History(context.Background(), "sk-x", 30)
 	if err != nil {
 		t.Fatalf("empty log returned error: %v", err)
 	}
-	if len(got) != 0 {
-		t.Errorf("got %d days, want none", len(got))
+	if len(h.Days) != 0 {
+		t.Errorf("got %d days, want none", len(h.Days))
 	}
 }
 
 // Rows without usable token counts must not become phantom zero-token days.
 func TestUsageSkipsRowsWithoutTokens(t *testing.T) {
-	// Relative to today, not fixed: Usage drops anything older than the window
+	// Relative to today, not fixed: History drops anything older than the window
 	// it is asked for, so hardcoded dates eventually fall outside it and the
 	// test fails on a date that has nothing to do with the code.
 	now := time.Now().UTC()
@@ -103,10 +104,11 @@ func TestUsageSkipsRowsWithoutTokens(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := NewClient(srv.URL, "mk").Usage(context.Background(), "sk-x", 30)
+	h, err := NewClient(srv.URL, "mk").History(context.Background(), "sk-x", 30)
 	if err != nil {
 		t.Fatal(err)
 	}
+	got := h.Days
 	if len(got) != 1 || got[0].Day != used.Format("2006-01-02") {
 		t.Errorf("got %+v, want only the day with tokens", got)
 	}

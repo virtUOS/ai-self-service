@@ -37,36 +37,40 @@ func keyHash(key string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Usage returns per-day token totals for a key, oldest first.
+// History returns what a key consumed over the last days days: per-day token
+// totals and a per-model breakdown, both from a single read of the log.
 //
-// It reads the raw per-request log and aggregates here. LiteLLM will aggregate
-// by day itself when given start_date/end_date, but that response reports
-// spend only and drops token counts entirely — and local models are priced so
-// that spend is always zero, so it carries no usable signal.
-func (c *Client) Usage(ctx context.Context, key string, days int) ([]keyprovider.DailyUsage, error) {
-	q := url.Values{}
-	q.Set("api_key", keyHash(key))
-
-	resp, err := c.do(ctx, http.MethodGet, "/spend/logs?"+q.Encode(), nil)
+// The log is fetched once because it cannot be narrowed server-side: LiteLLM
+// ignores page_size, limit and size on this route, and passing
+// start_date/end_date switches the response to an aggregated shape that
+// reports spend only and drops token counts entirely — and local models are
+// priced so that spend is always zero, so it carries no usable signal. The
+// window is therefore bounded here, over rows already in hand.
+func (c *Client) History(ctx context.Context, key string, days int) (keyprovider.History, error) {
+	rows, err := c.spendLog(ctx, key)
 	if err != nil {
-		return nil, err
+		return keyprovider.History{}, err
 	}
-	defer resp.Body.Close()
+	cutoff := dayCutoff(days)
+	return keyprovider.History{
+		Days:   dailyFromRows(rows, cutoff),
+		Models: modelsFromRows(rows, cutoff),
+	}, nil
+}
 
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("LiteLLM /spend/logs returned %d: %s", resp.StatusCode, b)
-	}
+// dayCutoff is the earliest UTC date to count, as a YYYY-MM-DD prefix.
+//
+// A date-string compare is the right granularity here: the chart and the
+// per-model table are both bucketed by UTC day, so a row either belongs to a
+// counted day or it does not. spentSince in windows.go is the other case — it
+// bounds an exact window start, so it parses the timestamp instead.
+func dayCutoff(days int) string {
+	return time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
+}
 
-	var rows []spendRow
-	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
-		return nil, fmt.Errorf("decode spend log: %w", err)
-	}
-
-	// Bound the window here rather than in the query: start_date/end_date
-	// switch the endpoint to its aggregated shape, which has no token counts.
-	cutoff := time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
-
+// dailyFromRows sums tokens per UTC day for rows at or after cutoff, oldest
+// day first.
+func dailyFromRows(rows []spendRow, cutoff string) []keyprovider.DailyUsage {
 	totals := make(map[string]int64)
 	for _, r := range rows {
 		if r.TotalTokens <= 0 || len(r.StartTime) < 10 {
@@ -84,7 +88,39 @@ func (c *Client) Usage(ctx context.Context, key string, days int) ([]keyprovider
 		out = append(out, keyprovider.DailyUsage{Day: day, Tokens: tokens})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Day < out[j].Day })
-	return out, nil
+	return out
+}
+
+// modelsFromRows sums per-model totals for rows at or after cutoff, largest
+// total first.
+func modelsFromRows(rows []spendRow, cutoff string) []keyprovider.ModelUsage {
+	totals := make(map[string]*keyprovider.ModelUsage)
+	for _, r := range rows {
+		if r.TotalTokens <= 0 || len(r.StartTime) < 10 || r.StartTime[:10] < cutoff {
+			continue
+		}
+		m, ok := totals[r.Model]
+		if !ok {
+			m = &keyprovider.ModelUsage{Model: r.Model}
+			totals[r.Model] = m
+		}
+		m.Requests++
+		m.PromptTokens += r.PromptTokens
+		m.CompletionTokens += r.CompletionTokens
+		m.TotalTokens += r.TotalTokens
+	}
+
+	out := make([]keyprovider.ModelUsage, 0, len(totals))
+	for _, m := range totals {
+		out = append(out, *m)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].TotalTokens != out[j].TotalTokens {
+			return out[i].TotalTokens > out[j].TotalTokens
+		}
+		return out[i].Model < out[j].Model
+	})
+	return out
 }
 
 type keyInfoResponse struct {
@@ -147,44 +183,6 @@ func (c *Client) KeySpend(ctx context.Context, key string) (float64, error) {
 		return 0, err
 	}
 	return info.Info.Spend, nil
-}
-
-// ModelUsage sums the per-request log per model over the last days,
-// largest total first. Same source and same window bound as Usage.
-func (c *Client) ModelUsage(ctx context.Context, key string, days int) ([]keyprovider.ModelUsage, error) {
-	rows, err := c.spendLog(ctx, key)
-	if err != nil {
-		return nil, err
-	}
-	cutoff := time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
-
-	totals := make(map[string]*keyprovider.ModelUsage)
-	for _, r := range rows {
-		if r.TotalTokens <= 0 || len(r.StartTime) < 10 || r.StartTime[:10] < cutoff {
-			continue
-		}
-		m, ok := totals[r.Model]
-		if !ok {
-			m = &keyprovider.ModelUsage{Model: r.Model}
-			totals[r.Model] = m
-		}
-		m.Requests++
-		m.PromptTokens += r.PromptTokens
-		m.CompletionTokens += r.CompletionTokens
-		m.TotalTokens += r.TotalTokens
-	}
-
-	out := make([]keyprovider.ModelUsage, 0, len(totals))
-	for _, m := range totals {
-		out = append(out, *m)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].TotalTokens != out[j].TotalTokens {
-			return out[i].TotalTokens > out[j].TotalTokens
-		}
-		return out[i].Model < out[j].Model
-	})
-	return out, nil
 }
 
 // UpdateKeyLimits pushes a profile's limits onto a key that already exists.

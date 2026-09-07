@@ -131,22 +131,29 @@ type ModelUsage struct {
 	TotalTokens      int64
 }
 
+// History is what a key consumed over a window, in the two shapes the
+// dashboard draws: a per-day series and a per-model breakdown. They are one
+// value because they come from one read of the same log.
+type History struct {
+	// Days holds per-day token totals, oldest first. Days with no traffic are
+	// omitted rather than reported as zero.
+	Days []DailyUsage
+	// Models holds per-model totals, largest TotalTokens first.
+	Models []ModelUsage
+}
+
 // UsageReporter is implemented by providers that can report what a key has
 // consumed. Separate from Provider because not every gateway records usage,
 // and reporting is not needed to issue or revoke keys.
 type UsageReporter interface {
-	// Usage returns per-day token totals for the key, oldest first, covering
-	// the given number of days back from today. Days with no traffic are
-	// omitted rather than reported as zero.
+	// History returns what the key consumed over the last days days: per-day
+	// totals oldest first and per-model totals largest first, both from one
+	// read of the per-request log.
 	//
 	// An empty result does not mean no usage: a gateway may record spend
 	// without keeping a per-request log. Callers should fall back to
 	// TotalSpend before concluding a key is unused.
-	Usage(ctx context.Context, ref string, days int) ([]DailyUsage, error)
-
-	// ModelUsage returns per-model totals over the given number of days,
-	// largest TotalTokens first. Empty when there is no per-request log.
-	ModelUsage(ctx context.Context, ref string, days int) ([]ModelUsage, error)
+	History(ctx context.Context, ref string, days int) (History, error)
 
 	// TotalSpend is the key's cumulative spend counter, which the gateway
 	// keeps whether or not per-request logging is on.

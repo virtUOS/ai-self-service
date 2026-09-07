@@ -26,10 +26,11 @@ func TestModelUsageAggregatesPerModel(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := NewClient(srv.URL, "mk").ModelUsage(context.Background(), "sk-x", 30)
+	h, err := NewClient(srv.URL, "mk").History(context.Background(), "sk-x", 30)
 	if err != nil {
 		t.Fatal(err)
 	}
+	got := h.Models
 	if len(got) != 2 {
 		t.Fatalf("got %d models, want 2: %+v", len(got), got)
 	}
