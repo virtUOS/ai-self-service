@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.6.0` |
+| Latest release | `v0.6.1` |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -51,7 +51,7 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-230 tests. `go test ./...` needs nothing external; the one skip is a manual
+232 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -237,6 +237,16 @@ and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
 needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
+
+### Released as v0.6.1 (2026-09-07)
+
+The first real requests against v0.6.0 in production showed three things on
+the usage card. The per-model table named the deployment (`openai/Qwen/…`)
+rather than the model users pick (`Qwen/…`); it now reads the log's
+`model_group`. Two requests cost a few millionths of a dollar against a $1
+hourly allowance, so the card said `$0.0000 of $1.00` and **0% used** —
+arithmetically right, but read as "nothing counted". A touched window now
+says `<$0.0001` and **<1%**; an untouched one still says 0%. No schema change.
 
 ### Released as v0.6.0 (2026-09-07)
 
