@@ -20,8 +20,11 @@ import (
 // Only the fields the portal aggregates are declared; the row carries plenty
 // more (latency, cache hits, the request body) that nothing here needs.
 type spendRow struct {
-	APIKey           string  `json:"api_key"`
-	Model            string  `json:"model"`
+	APIKey string `json:"api_key"`
+	Model  string `json:"model"`
+	// ModelGroup is the public model name a request was made with; Model is
+	// the deployment it was routed to, with its provider prefix.
+	ModelGroup       string  `json:"model_group"`
 	PromptTokens     int64   `json:"prompt_tokens"`
 	CompletionTokens int64   `json:"completion_tokens"`
 	TotalTokens      int64   `json:"total_tokens"`
@@ -99,10 +102,16 @@ func modelsFromRows(rows []spendRow, cutoff string) []keyprovider.ModelUsage {
 		if r.TotalTokens <= 0 || len(r.StartTime) < 10 || r.StartTime[:10] < cutoff {
 			continue
 		}
-		m, ok := totals[r.Model]
+		// Label by the public name the request was made with, not the
+		// deployment it was routed to: users know "Qwen/…", not "openai/Qwen/…".
+		name := r.ModelGroup
+		if name == "" {
+			name = r.Model
+		}
+		m, ok := totals[name]
 		if !ok {
-			m = &keyprovider.ModelUsage{Model: r.Model}
-			totals[r.Model] = m
+			m = &keyprovider.ModelUsage{Model: name}
+			totals[name] = m
 		}
 		m.Requests++
 		m.PromptTokens += r.PromptTokens

@@ -134,11 +134,11 @@
            for the widest would promise headroom the user does not have. */}}
       {{range .Usage.Windows}}
         <p style="margin-bottom:.35rem">
-          <strong>{{.Pct}}%</strong> {{T $.Lang "dash.quota.used"}}
+          <strong>{{fmtPct .Used .Pct}}</strong> {{T $.Lang "dash.quota.used"}}
           <span class="text-muted">· {{.Label}}</span>
         </p>
         <div class="quota-bar" role="img"
-             aria-label="{{.Pct}}% {{T $.Lang "dash.quota.used"}}">
+             aria-label="{{fmtPct .Used .Pct}} {{T $.Lang "dash.quota.used"}}">
           <div class="quota-fill{{if ge .Pct 90}} quota-full{{end}}"
                style="width:{{.Pct}}%"></div>
         </div>
@@ -154,10 +154,10 @@
            each window cannot be summed. One bar for the window that binds.
            Both figures are spend, straight from the gateway. */}}
       <p style="margin-bottom:.35rem">
-        <strong>{{.Usage.QuotaPct}}%</strong> {{T .Lang "dash.quota.used"}}
+        <strong>{{fmtPct .Usage.Used .Usage.QuotaPct}}</strong> {{T .Lang "dash.quota.used"}}
       </p>
       <div class="quota-bar" role="img"
-           aria-label="{{.Usage.QuotaPct}}% {{T .Lang "dash.quota.used"}}">
+           aria-label="{{fmtPct .Usage.Used .Usage.QuotaPct}} {{T .Lang "dash.quota.used"}}">
         <div class="quota-fill{{if ge .Usage.QuotaPct 90}} quota-full{{end}}"
              style="width:{{.Usage.QuotaPct}}%"></div>
       </div>

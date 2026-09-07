@@ -16,11 +16,29 @@ func FormatBudget(amount float64, unit string) string {
 	if amount > 0 && s == "0.00" {
 		s = strconv.FormatFloat(amount, 'f', 4, 64)
 	}
+	// A single request costs a few millionths at typical prices, so even
+	// four decimals show zeros. Say "less than" rather than "nothing".
+	prefix := ""
+	if amount > 0 && s == "0.0000" {
+		prefix, s = "<", "0.0001"
+	}
 	if unit == "" {
-		return s
+		return prefix + s
 	}
 	if r := []rune(unit); len(r) == 1 && !unicode.IsLetter(r[0]) {
-		return unit + s
+		return prefix + unit + s
 	}
-	return s + " " + unit
+	return prefix + s + " " + unit
+}
+
+// FormatPct renders a window's consumption as a whole-number percentage.
+//
+// An hourly allowance is large next to one request, so early use rounds to
+// 0%; that reads as "nothing spent" when something was. Say "<1%" instead,
+// so the figure only ever reads 0% for a window that is genuinely untouched.
+func FormatPct(used float64, pct int) string {
+	if used > 0 && pct == 0 {
+		return "<1%"
+	}
+	return strconv.Itoa(pct) + "%"
 }
