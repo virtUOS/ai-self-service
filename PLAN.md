@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.6.1` |
+| Latest release | `v0.6.2` |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -51,7 +51,7 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-232 tests. `go test ./...` needs nothing external; the one skip is a manual
+236 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -237,6 +237,15 @@ and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
 needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
+
+### Released as v0.6.2 (2026-09-07)
+
+The usage chart drew only days with traffic, scaled to the busiest, so one
+day of use was always a single full block. It now spans the whole history
+window with empty days as gaps, so position says when. The window is
+`USAGE_HISTORY_DAYS` (default 30, previously a constant); bars are per day up
+to two months, per ISO week up to two years, per month beyond, with labels
+thinned on wide windows. No schema change.
 
 ### Released as v0.6.1 (2026-09-07)
 
