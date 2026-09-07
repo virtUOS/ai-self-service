@@ -81,3 +81,34 @@ func TestPricingListsUnpricedModels(t *testing.T) {
 		t.Errorf("Unpriced = %v, want [free]", got.Unpriced)
 	}
 }
+
+// The log's "model" is the deployment name with its provider prefix
+// ("openai/Qwen/…"); "model_group" is the public name users pick from the
+// dashboard's model list. The table must show the name they know.
+func TestModelUsageLabelsRowsByPublicModelName(t *testing.T) {
+	now := time.Now().UTC()
+	rows := []spendRow{
+		{Model: "openai/Qwen/Qwen3.8-27B-FP8", ModelGroup: "Qwen/Qwen3.8-27B-FP8", TotalTokens: 10, StartTime: now.Format(time.RFC3339)},
+		{Model: "openai/Qwen/Qwen3.8-27B-FP8", ModelGroup: "Qwen/Qwen3.8-27B-FP8", TotalTokens: 5, StartTime: now.Format(time.RFC3339)},
+		// An older gateway may log no group; the deployment name still labels the row.
+		{Model: "local/embed", TotalTokens: 3, StartTime: now.Format(time.RFC3339)},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(rows)
+	}))
+	defer srv.Close()
+
+	got, err := NewClient(srv.URL, "mk").History(context.Background(), "sk-x", 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Models) != 2 {
+		t.Fatalf("got %d models, want 2: %+v", len(got.Models), got.Models)
+	}
+	if got.Models[0].Model != "Qwen/Qwen3.8-27B-FP8" || got.Models[0].TotalTokens != 15 {
+		t.Errorf("first = %+v, want the public name with both rows summed", got.Models[0])
+	}
+	if got.Models[1].Model != "local/embed" {
+		t.Errorf("second = %+v, want the deployment name as fallback", got.Models[1])
+	}
+}

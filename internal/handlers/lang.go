@@ -60,6 +60,9 @@ func langFuncs() template.FuncMap {
 		},
 		// fmtBudget renders a quota amount with the deployment's unit label.
 		"fmtBudget": FormatBudget,
+		// fmtPct renders a window's percentage, "<1%" for a touched window
+		// that rounds to zero.
+		"fmtPct": FormatPct,
 	}
 }
 
