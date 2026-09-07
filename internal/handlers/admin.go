@@ -475,6 +475,10 @@ func parseQuotaWindows(form url.Values) ([]database.ProfileQuota, error) {
 		if raw == "" {
 			continue
 		}
+		// A German-locale browser submits a decimal number as "0,10" from a
+		// number input, and ParseFloat rejects that — the admin would see
+		// "invalid quota window" for an amount they typed correctly.
+		raw = strings.ReplaceAll(raw, ",", ".")
 		amount, err := strconv.ParseFloat(raw, 64)
 		if err != nil || math.IsNaN(amount) || math.IsInf(amount, 0) {
 			return nil, fmt.Errorf("invalid quota amount %q", raw)
@@ -519,7 +523,7 @@ func checkWindowsBind(qs []database.ProfileQuota) error {
 			}
 			// a is the shorter window; it must not allow more than b.
 			if periodHours[a.Period] < periodHours[b.Period] && a.Budget > b.Budget {
-				return fmt.Errorf("%s allowance (%v) exceeds the longer %s allowance (%v)",
+				return fmt.Errorf("%s allowance (%g) exceeds the longer %s allowance (%g)",
 					a.Period, a.Budget, b.Period, b.Budget)
 			}
 		}

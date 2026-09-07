@@ -145,3 +145,23 @@ func TestParseQuotaWindowsRejectsInfiniteAmount(t *testing.T) {
 		t.Error("an infinite amount was accepted")
 	}
 }
+
+// A German-locale browser renders and submits a number input's value with a
+// comma for the decimal point. Rejecting "0,25" would tell the admin their
+// amount was invalid when the browser, not the admin, chose the separator.
+func TestParseQuotaWindowsAcceptsCommaDecimal(t *testing.T) {
+	form := url.Values{
+		"quota_budget": {"0,25"},
+		"quota_period": {"24h"},
+	}
+	got, err := parseQuotaWindows(form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d windows, want 1", len(got))
+	}
+	if got[0].Budget != 0.25 {
+		t.Errorf("budget = %v, want 0.25", got[0].Budget)
+	}
+}
