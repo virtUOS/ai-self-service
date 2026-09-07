@@ -245,7 +245,7 @@ func TestDeleteKeyRevokesUpstream(t *testing.T) {
 	}
 }
 
-// The profile's quota must reach the provider as a token allowance.
+// The profile's quota must reach the provider as a spend budget.
 func TestGenerateKeyPassesQuotaToProvider(t *testing.T) {
 	ui, fake, store, user := newTestUI(t, "kf7")
 	ctx := context.Background()

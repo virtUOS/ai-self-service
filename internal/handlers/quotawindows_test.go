@@ -42,8 +42,9 @@ func TestUserUsageReportsEveryWindow(t *testing.T) {
 }
 
 // The headline figure must name the window that binds — the one that will
-// reject the next request — not the widest. Showing 1M remaining while an
-// hourly cap is nearly spent tells the user they have room they do not have.
+// reject the next request — not the widest. Reporting the monthly window's
+// ample headroom while an hourly cap is nearly spent tells the user they have
+// room they do not have.
 func TestUserUsageHeadlineFollowsTheBindingWindow(t *testing.T) {
 	fake := keyprovider.NewFake()
 	fake.WindowsByRef = map[string][]keyprovider.WindowUsage{

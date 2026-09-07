@@ -163,7 +163,7 @@ func TestProfileQuotaFieldsPersist(t *testing.T) {
 }
 
 // Profiles created before this migration must keep working, with the new
-// columns defaulting to "unset" rather than imposing a zero-token quota.
+// columns defaulting to "unset" rather than imposing a zero budget.
 func TestExistingProfilesGetSafeDefaults(t *testing.T) {
 	s := migratedStore(t, "pq2")
 	ctx := context.Background()

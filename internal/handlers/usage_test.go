@@ -185,9 +185,9 @@ func TestUserUsageReportsPercentOfBudget(t *testing.T) {
 	}
 }
 
-// An unlimited profile has no allowance to report against, and must not be
-// shown as though its quota were exhausted.
-func TestUserUsageUnlimitedHasNoRemaining(t *testing.T) {
+// An unlimited profile has no allowance to report against, so it must report
+// no quota at all rather than one that looks exhausted.
+func TestUserUsageUnlimitedReportsNoQuota(t *testing.T) {
 	fake := keyprovider.NewFake()
 	fake.QuotaByRef = map[string]keyprovider.Quota{
 		"k": {Used: 0.05, Limit: 0},

@@ -37,7 +37,7 @@ func init() {
 			`ALTER TABLE profile_quotas DROP COLUMN budget`,
 		} {
 			if _, err := db.ExecContext(ctx, stmt); err != nil {
-				return err
+				return fmt.Errorf("revert budgets to token quotas: %w", err)
 			}
 		}
 		return nil

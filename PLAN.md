@@ -247,7 +247,8 @@ shows the amounts beside it; the remaining-tokens figure is gone because it
 was only a guess. The token chart stays and gained a per-model table. Schema
 change: migration `20240007` (`profile_quotas.tokens` → `budget`), so the
 upgrade needs the image and a migration run; the down migration converts back
-at the nominal rate.
+at the nominal rate. That conversion truncates to whole tokens, so a rollback
+loses precision on any budget the nominal rate cannot express exactly.
 
 ### Released as v0.5.2 (2026-09-01)
 
