@@ -238,6 +238,17 @@ needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and cr
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
 
+### Quotas as budgets (2026-09-07)
+
+Quotas are stored and shown as spend, not tokens, because LiteLLM enforces
+spend and the token conversion stopped being exact once models could be priced
+differently. The dashboard leads with the percentage of each window used and
+shows the amounts beside it; the remaining-tokens figure is gone because it
+was only a guess. The token chart stays and gained a per-model table. Schema
+change: migration `20240007` (`profile_quotas.tokens` → `budget`), so the
+upgrade needs the image and a migration run; the down migration converts back
+at the nominal rate.
+
 ### Released as v0.5.2 (2026-09-01)
 
 The dashboard drew every usage bar from the current key's spend log, including

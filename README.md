@@ -13,7 +13,7 @@ A self-service web portal that lets users generate, manage, and renew their own 
 ## Features
 
 - **Self-service key management** — generate, extend, regenerate, and delete LiteLLM API keys
-- **Profile system** — per-user key validity, fair-use token quotas, model restrictions and TPM/RPM limits
+- **Profile system** — per-user key validity, fair-use spend quotas, model restrictions and TPM/RPM limits
 - **Usage reporting** — users see what their key has consumed, per day and against their quota
 - **Model discovery** — the dashboard lists the models a key may use, click to copy the exact name
 - **Expiry notifications** — users are warned before their key expires, in the
@@ -44,6 +44,7 @@ Copy `.env.example` to `.env` and fill in the values:
 | `COOKIE_SECURE`      | no       | `false`     | Set `true` when serving over HTTPS                                 |
 | `SESSION_DURATION`   | no       | `24h`       | How long a login session lasts                                     |
 | `KEY_DURATION_DAYS`  | no       | `90`        | Default key validity; profiles may override it                     |
+| `BUDGET_UNIT`        | no       | `$`         | Unit label for quota amounts; use a word such as `credits` when model prices are nominal |
 | `SMTP_HOST`          | no       | —           | `host:port` of a mail relay; unset disables expiry emails          |
 | `SMTP_FROM`          | no       | `noreply@uni-osnabrueck.de` | Sender address for expiry emails                   |
 | `SMTP_USERNAME`      | no       | —           | Only if the relay requires authentication                          |
@@ -110,13 +111,13 @@ Profile fields:
 | ---------------- | ------------------------------------------------------------------------ |
 | Models           | Comma-separated list of allowed model names (empty = all models)          |
 | Key validity     | How long a generated key lasts, in days (blank = `KEY_DURATION_DAYS`)     |
-| Usage limit      | Fair-use allowance in **tokens** per period (blank = unlimited)           |
+| Usage limit      | Spend allowance per period, in `BUDGET_UNIT` (blank = unlimited); several windows may apply at once |
 | Limit resets     | `hourly`, `daily`, `weekly` or `monthly`                                  |
 | TPM limit        | Maximum tokens per minute — burst control, complements the usage limit    |
 | RPM limit        | Maximum requests per minute                                               |
 
 Different cohorts get different profiles: students might get 30-day keys with a
-1M-token daily allowance, lecturers 365-day keys with no quota.
+$1.00 daily allowance, lecturers 365-day keys with no quota.
 
 ### How extending works
 
@@ -131,14 +132,21 @@ without needing to be regenerated.
 
 ### How usage limits work
 
-Admins configure quotas in **tokens**; LiteLLM enforces spend. The portal
-converts using a nominal per-token price (`internal/litellm/quota.go`), so a
-1,000,000-token daily allowance becomes a $0.10 cap that resets every 24h.
+Admins configure quotas as **spend budgets** per period, in the unit LiteLLM
+prices its models in (`BUDGET_UNIT` labels them on the page; default `$`).
+LiteLLM enforces spend directly, so the figure an admin enters is the figure
+the gateway enforces, whatever mix of models a key uses. A model priced at `0`
+or `null` accrues no spend, so a budget never binds on it; the server warns
+about such models at startup.
+
+Quotas used to be stored in tokens and converted at one nominal price. That
+was exact only while every model cost the same per token. Migration `20240007`
+converts existing token quotas at that nominal rate (0.0000001 per token) so
+enforced caps keep their size; deployments that priced models differently
+should review profile budgets after upgrading.
+
 Requests fail with HTTP 429 once the allowance is spent and resume when the
 period resets.
-
-This requires every model in LiteLLM to carry that same nominal price. A model
-priced at `0` or `null` accrues no spend, so a quota over it never triggers.
 
 **One period per profile — a portal limit, not a gateway one.** A profile
 exposes a single allowance and period, so it cannot combine caps the way
@@ -177,9 +185,12 @@ granularity:
 
 - **Per day, over 30 days** — read from LiteLLM's per-request spend log,
   filtered by the key's SHA-256 and aggregated by the portal.
+- **Per model, over 30 days** — the same log summed by model, with the
+  prompt/completion split.
 - **Against the quota** — read from the key's own spend counter, which is what
-  the gateway enforces against. It resets on the budget period, so it need not
-  agree with the 30-day chart above it.
+  the gateway enforces against. Shown as a percentage of the budget with the
+  amounts beside it. It resets on the budget period, so it need not agree with
+  the 30-day chart above it.
 
 Usage belongs to a key, not a person: regenerating a key starts the history
 over, and the card says so.
@@ -187,8 +198,8 @@ over, and the card says so.
 Two gateway-side settings affect this:
 
 - `disable_spend_logs: true` switches off the per-request log. The portal then
-  falls back to the key's cumulative total and hides the chart, rather than
-  reporting no usage at all.
+  falls back to the key's cumulative spend and hides the chart and the
+  per-model table.
 - `maximum_spend_logs_retention_period` must be at least as long as the charted
   window (30 days), or users silently see less history than the page offers.
 

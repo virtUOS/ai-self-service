@@ -18,6 +18,8 @@ import (
 // Admins reason in tokens; the provider adapter converts using the nominal
 // per-token price. Storing dollars would bake today's price into every profile
 // and silently change every quota if that price were ever adjusted.
+//
+// Superseded by 20240007, which stores budgets after all: see that file.
 func init() {
 	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
 		for _, stmt := range []string{
