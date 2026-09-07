@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.5.2` |
+| Latest release | `v0.6.0` |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -51,7 +51,7 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-228 tests. `go test ./...` needs nothing external; the one skip is a manual
+230 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -167,7 +167,7 @@ documentation correction that unblocked them (#24), quota validation and a
 profile-name quoting fix (#27). Testing runs all of it; `v0.4.0` is warranted
 when someone wants a tagged build, since the schema changed.
 
-### Issue #26 — fixed, unreleased
+### Issue #26 — fixed
 
 A user pointed out that **regenerating a key resets the quota**, so anyone at
 their limit could simply issue a new key and carry on. That came from a
@@ -237,6 +237,12 @@ and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
 needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
+
+### Released as v0.6.0 (2026-09-07)
+
+Quotas as budgets, below. Schema change (migration `20240007`), so the upgrade
+is the image plus the migration it runs at startup; back up `data.db` before
+deploying, since the down migration truncates.
 
 ### Quotas as budgets (2026-09-07)
 
