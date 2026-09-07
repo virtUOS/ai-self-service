@@ -51,6 +51,11 @@ type Config struct {
 	CookieSecure    bool
 	SessionDuration time.Duration
 	KeyDurationDays int
+
+	// BudgetUnit labels quota amounts on the dashboard and admin page. It is
+	// the currency LiteLLM prices models in, or a word like "credits" when the
+	// prices are nominal and should not read as money.
+	BudgetUnit string
 }
 
 func Load() (*Config, error) {
@@ -73,6 +78,7 @@ func Load() (*Config, error) {
 		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
 
 		ListenAddr: envOr("LISTEN_ADDR", ":8080"),
+		BudgetUnit: envOr("BUDGET_UNIT", "$"),
 	}
 
 	cfg.AdminRole = strings.TrimSpace(os.Getenv("ADMIN_ROLE"))

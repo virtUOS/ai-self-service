@@ -61,6 +61,8 @@ func langFuncs() template.FuncMap {
 			}
 			return b.String()
 		},
+		// fmtBudget renders a quota amount with the deployment's unit label.
+		"fmtBudget": FormatBudget,
 	}
 }
 
