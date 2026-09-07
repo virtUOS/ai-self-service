@@ -45,6 +45,7 @@ Copy `.env.example` to `.env` and fill in the values:
 | `SESSION_DURATION`   | no       | `24h`       | How long a login session lasts                                     |
 | `KEY_DURATION_DAYS`  | no       | `90`        | Default key validity; profiles may override it                     |
 | `BUDGET_UNIT`        | no       | `$`         | Unit label for quota amounts; use a word such as `credits` when model prices are nominal |
+| `USAGE_HISTORY_DAYS` | no       | `30`        | How far back the usage chart and per-model table reach; the gateway's spend-log retention must cover it |
 | `SMTP_HOST`          | no       | —           | `host:port` of a mail relay; unset disables expiry emails          |
 | `SMTP_FROM`          | no       | `noreply@uni-osnabrueck.de` | Sender address for expiry emails                   |
 | `SMTP_USERNAME`      | no       | —           | Only if the relay requires authentication                          |
@@ -179,10 +180,15 @@ the previous one.
 The dashboard shows what a key has consumed, from two sources with different
 granularity:
 
-- **Per day, over 30 days** — read from LiteLLM's per-request spend log,
-  filtered by the key's SHA-256 and aggregated by the portal.
-- **Per model, over 30 days** — the same log summed by model, with the
-  prompt/completion split.
+- **Over the history window** (`USAGE_HISTORY_DAYS`, default 30) — read from
+  LiteLLM's per-request spend log, filtered by the key's SHA-256 and
+  aggregated by the portal. The chart spans the whole window, empty days
+  included, so a bar's position says when the key was used. Windows up to
+  two months draw a bar per day; up to two years, per ISO week (Monday
+  first); beyond that, per calendar month. Labels are thinned on wide
+  windows; every bar names its date on hover.
+- **Per model, over the same window** — the same log summed by model, with
+  the prompt/completion split.
 - **Against the quota** — read from the key's own spend counter, which is what
   the gateway enforces against. Shown as a percentage of the budget with the
   amounts beside it. It resets on the budget period, so it need not agree with
@@ -196,8 +202,10 @@ Two gateway-side settings affect this:
 - `disable_spend_logs: true` switches off the per-request log. The portal then
   falls back to the key's cumulative spend and hides the chart and the
   per-model table.
-- `maximum_spend_logs_retention_period` must be at least as long as the charted
-  window (30 days), or users silently see less history than the page offers.
+- `maximum_spend_logs_retention_period` must be at least as long as
+  `USAGE_HISTORY_DAYS`, or users silently see less history than the page
+  offers. A long window also means a larger log download per dashboard
+  load, since the route cannot be narrowed server-side.
 
 Passing `start_date`/`end_date` to `/spend/logs` returns a **different shape** —
 daily aggregates carrying spend but no token counts. Since local models are

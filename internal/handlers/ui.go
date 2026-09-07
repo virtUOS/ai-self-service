@@ -40,9 +40,13 @@ func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager,
 	// when the provider cannot.
 	lister, _ := keys.(keyprovider.ModelLister)
 	reporter, _ := keys.(keyprovider.UsageReporter)
+	usage := newUsageCache(reporter)
+	if cfg.UsageHistoryDays > 0 {
+		usage.windowDays = cfg.UsageHistoryDays
+	}
 	return &UI{cfg: cfg, store: store, sessions: sessions, oidc: oidc, keys: keys,
 		tmpl: tmpl, flash: newKeyFlash(), csrf: csrf,
-		models: newModelCache(lister), usage: newUsageCache(reporter)}
+		models: newModelCache(lister), usage: usage}
 }
 
 func (u *UI) requireSession(r *http.Request) (*session.SessionUser, error) {
@@ -520,7 +524,11 @@ func (u *UI) keyDuration(p *database.Profile) int {
 type usageReport struct {
 	Days  []keyprovider.DailyUsage
 	Total int64
-	// Peak is the busiest day's total, used to scale the bars. Zero when there
+	// Bars is Days spread over the whole reporting window, one column per
+	// day, week or month depending on the window's length, empty buckets
+	// included — so the chart says when a key was used, not just how much.
+	Bars []usageBar
+	// Peak is the busiest bar's total, used to scale the bars. Zero when there
 	// is no traffic, and callers must not divide by it unchecked.
 	Peak int64
 	// Models is what each model consumed over the same window as Days, from
@@ -594,8 +602,13 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 	rep.Models = u.usage.Models(ctx, k.LiteLLMKey)
 	for _, d := range days {
 		rep.Total += d.Tokens
-		if d.Tokens > rep.Peak {
-			rep.Peak = d.Tokens
+	}
+	if len(days) > 0 {
+		rep.Bars = usageBars(days, u.usage.windowDays, time.Now())
+		for _, b := range rep.Bars {
+			if b.Tokens > rep.Peak {
+				rep.Peak = b.Tokens
+			}
 		}
 	}
 	if q, err := u.usage.Quota(ctx, k.LiteLLMKey, ownerID); err == nil && q.Limit > 0 {
