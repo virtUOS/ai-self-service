@@ -19,7 +19,7 @@ func TestMigrationCarriesExistingQuota(t *testing.T) {
 	if err := s.CreateProfile(ctx, p); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Tokens: 1_500_000, Period: "24h"}}); err != nil {
+	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Budget: 0.15, Period: "24h"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -30,8 +30,8 @@ func TestMigrationCarriesExistingQuota(t *testing.T) {
 	if len(got.Quotas) != 1 {
 		t.Fatalf("got %d windows, want 1", len(got.Quotas))
 	}
-	if got.Quotas[0].Tokens != 1_500_000 || got.Quotas[0].Period != "24h" {
-		t.Errorf("window = %+v, want 1.5M/24h", got.Quotas[0])
+	if got.Quotas[0].Budget != 0.15 || got.Quotas[0].Period != "24h" {
+		t.Errorf("window = %+v, want 0.15/24h", got.Quotas[0])
 	}
 }
 
@@ -48,8 +48,8 @@ func TestProfileHoldsSeveralWindows(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{
-		{Tokens: 100_000, Period: "24h"},
-		{Tokens: 1_000_000, Period: "30d"},
+		{Budget: 0.01, Period: "24h"},
+		{Budget: 0.1, Period: "30d"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -74,13 +74,13 @@ func TestSetProfileQuotasReplaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{
-		{Tokens: 100_000, Period: "24h"},
-		{Tokens: 1_000_000, Period: "30d"},
+		{Budget: 0.01, Period: "24h"},
+		{Budget: 0.1, Period: "30d"},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// Drop back to one window.
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Tokens: 50_000, Period: "1h"}}); err != nil {
+	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Budget: 0.005, Period: "1h"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -104,7 +104,7 @@ func TestSetProfileQuotasClears(t *testing.T) {
 	if err := s.CreateProfile(ctx, p); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Tokens: 1, Period: "1h"}}); err != nil {
+	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Budget: 0.0000001, Period: "1h"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetProfileQuotas(ctx, p.ID, nil); err != nil {

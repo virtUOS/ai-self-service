@@ -33,13 +33,17 @@ type Profile struct {
 }
 
 // ProfileQuota is one allowance window on a profile.
+//
+// Budget is spend per period in the unit the gateway prices models in, not a
+// token count: LiteLLM enforces spend, and with models priced differently a
+// token figure could not be exact.
 type ProfileQuota struct {
 	bun.BaseModel `bun:"table:profile_quotas"`
 
-	ID        int64  `bun:"id,pk,autoincrement"`
-	ProfileID int64  `bun:"profile_id,notnull"`
-	Tokens    int64  `bun:"tokens,notnull"`
-	Period    string `bun:"period,notnull"` // "1h" | "24h" | "7d" | "30d"
+	ID        int64   `bun:"id,pk,autoincrement"`
+	ProfileID int64   `bun:"profile_id,notnull"`
+	Budget    float64 `bun:"budget,notnull"`
+	Period    string  `bun:"period,notnull"` // "1h" | "24h" | "7d" | "30d"
 }
 
 type User struct {
