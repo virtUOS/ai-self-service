@@ -27,7 +27,7 @@ func TestWindowsFetchesTheSpendLogOnce(t *testing.T) {
 		case "/spend/logs":
 			atomic.AddInt64(&logFetches, 1)
 			json.NewEncoder(w).Encode([]spendRow{
-				{APIKey: "h", TotalTokens: 100, StartTime: now.Add(-30 * time.Minute).Format(time.RFC3339)},
+				{APIKey: "h", TotalTokens: 100, Spend: 0.00001, StartTime: now.Add(-30 * time.Minute).Format(time.RFC3339)},
 			})
 		case "/key/info":
 			fmt.Fprintf(w, `{"info":{"budget_limits":[
@@ -62,9 +62,9 @@ func TestWindowsCountPerWindowFromOneFetch(t *testing.T) {
 	now := time.Now().UTC()
 	rows := []spendRow{
 		// Inside the hour, so it counts towards every window.
-		{APIKey: "h", TotalTokens: 100, StartTime: now.Add(-10 * time.Minute).Format(time.RFC3339)},
+		{APIKey: "h", TotalTokens: 100, Spend: 0.00001, StartTime: now.Add(-10 * time.Minute).Format(time.RFC3339)},
 		// Hours ago: outside the 1h window, inside the wider ones.
-		{APIKey: "h", TotalTokens: 500, StartTime: now.Add(-5 * time.Hour).Format(time.RFC3339)},
+		{APIKey: "h", TotalTokens: 500, Spend: 0.00005, StartTime: now.Add(-5 * time.Hour).Format(time.RFC3339)},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -92,11 +92,11 @@ func TestWindowsCountPerWindowFromOneFetch(t *testing.T) {
 	for _, w := range got {
 		by[w.Period] = w
 	}
-	if by["1h"].UsedTokens != 100 {
-		t.Errorf("1h window counted %d, want only the recent 100", by["1h"].UsedTokens)
+	if !nearly(by["1h"].Used, 0.00001) {
+		t.Errorf("1h window counted %v, want only the recent 0.00001", by["1h"].Used)
 	}
-	if by["24h"].UsedTokens != 600 {
-		t.Errorf("24h window counted %d, want both rows", by["24h"].UsedTokens)
+	if !nearly(by["24h"].Used, 0.00006) {
+		t.Errorf("24h window counted %v, want both rows (0.00006)", by["24h"].Used)
 	}
 }
 
@@ -132,8 +132,8 @@ func TestWindowsTrustsZeroOnAnUnusedKey(t *testing.T) {
 	if !got[0].UsedKnown {
 		t.Error("an unused key's zero was reported as unknown, so the bars stay hidden")
 	}
-	if got[0].UsedTokens != 0 {
-		t.Errorf("used = %d, want 0", got[0].UsedTokens)
+	if got[0].Used != 0 {
+		t.Errorf("used = %v, want 0", got[0].Used)
 	}
 }
 

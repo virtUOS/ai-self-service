@@ -56,9 +56,9 @@ func TestCreateKeyPutsWidestWindowOnTheOwner(t *testing.T) {
 		Owner:   "someone@uni-osnabrueck.de",
 		OwnerID: "oidc-sub-123",
 		Limits: keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{
-			{Tokens: 1_000, Period: "1h"},
-			{Tokens: 1_000_000, Period: "30d"},
-			{Tokens: 10_000, Period: "7d"},
+			{Budget: 0.0001, Period: "1h"},
+			{Budget: 0.1, Period: "30d"},
+			{Budget: 0.001, Period: "7d"},
 		}},
 	})
 	if err != nil {
@@ -76,7 +76,7 @@ func TestCreateKeyPutsWidestWindowOnTheOwner(t *testing.T) {
 	if user["budget_duration"] != "30d" {
 		t.Errorf("owner budget window = %v, want 30d (the widest)", user["budget_duration"])
 	}
-	if user["max_budget"] != TokensToBudget(1_000_000) {
+	if user["max_budget"] != 0.1 {
 		t.Errorf("owner budget = %v, want the 30d allowance", user["max_budget"])
 	}
 
@@ -115,7 +115,7 @@ func TestCreateKeyUpsertsOwnerBeforeIssuingKey(t *testing.T) {
 
 	_, err := NewProvider(NewClient(srv.URL, "mk")).CreateKey(context.Background(), keyprovider.KeyRequest{
 		Alias: "a", Owner: "a", OwnerID: "sub-1",
-		Limits: keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{{Tokens: 100, Period: "30d"}}},
+		Limits: keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{{Budget: 0.00001, Period: "30d"}}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ func TestCreateKeySingleWindowGoesToTheOwner(t *testing.T) {
 
 	_, err := NewProvider(NewClient(g.srv.URL, "mk")).CreateKey(context.Background(), keyprovider.KeyRequest{
 		Alias: "a", Owner: "a", OwnerID: "sub-1",
-		Limits: keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{{Tokens: 500_000, Period: "7d"}}},
+		Limits: keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{{Budget: 0.05, Period: "7d"}}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -186,8 +186,8 @@ func TestQuotaPrefersTheOwnerAllowance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.UsedTokens != BudgetToTokens(0.05) {
-		t.Errorf("used = %d, want the owner's spend carried across the rotation", q.UsedTokens)
+	if q.Used != 0.05 {
+		t.Errorf("used = %v, want the owner's spend carried across the rotation", q.Used)
 	}
 	for _, p := range asked {
 		if p == "/key/info" {
@@ -213,8 +213,8 @@ func TestQuotaFallsBackToTheKeyForUntrackedOwners(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.UsedTokens != BudgetToTokens(0.03) {
-		t.Errorf("used = %d, want the key's own figure as a fallback", q.UsedTokens)
+	if q.Used != 0.03 {
+		t.Errorf("used = %v, want the key's own figure as a fallback", q.Used)
 	}
 }
 
@@ -224,19 +224,19 @@ func TestUpdateLimitsAppliesBothHalves(t *testing.T) {
 
 	err := NewProvider(NewClient(g.srv.URL, "mk")).UpdateLimits(context.Background(), "sk-1", "sub-1",
 		keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{
-			{Tokens: 1_000, Period: "1h"},
-			{Tokens: 2_000_000, Period: "30d"},
+			{Budget: 0.0001, Period: "1h"},
+			{Budget: 0.2, Period: "30d"},
 		}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(g.userBodies) != 1 || g.userBodies[0]["max_budget"] != TokensToBudget(2_000_000) {
+	if len(g.userBodies) != 1 || g.userBodies[0]["max_budget"] != 0.2 {
 		t.Errorf("owner budget not re-applied: %v", g.userBodies)
 	}
 	if len(g.keyBodies) != 1 {
 		t.Fatalf("made %d key calls, want one", len(g.keyBodies))
 	}
-	if g.keyBodies[0]["max_budget"] != TokensToBudget(1_000) {
+	if g.keyBodies[0]["max_budget"] != 0.0001 {
 		t.Errorf("key kept %v, want only the 1h burst window",
 			g.keyBodies[0]["max_budget"])
 	}

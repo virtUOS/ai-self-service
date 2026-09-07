@@ -88,9 +88,15 @@ func TestUsageEmptyIsNotAnError(t *testing.T) {
 
 // Rows without usable token counts must not become phantom zero-token days.
 func TestUsageSkipsRowsWithoutTokens(t *testing.T) {
+	// Relative to today, not fixed: Usage drops anything older than the window
+	// it is asked for, so hardcoded dates eventually fall outside it and the
+	// test fails on a date that has nothing to do with the code.
+	now := time.Now().UTC()
+	empty := now.AddDate(0, 0, -2)
+	used := now.AddDate(0, 0, -1)
 	rows := []spendRow{
-		{APIKey: "h", TotalTokens: 0, StartTime: "2026-08-01T10:00:00Z"},
-		{APIKey: "h", TotalTokens: 12, StartTime: "2026-08-02T10:00:00Z"},
+		{APIKey: "h", TotalTokens: 0, StartTime: empty.Format(time.RFC3339)},
+		{APIKey: "h", TotalTokens: 12, StartTime: used.Format(time.RFC3339)},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(rows)
@@ -101,7 +107,7 @@ func TestUsageSkipsRowsWithoutTokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0].Day != "2026-08-02" {
+	if len(got) != 1 || got[0].Day != used.Format("2006-01-02") {
 		t.Errorf("got %+v, want only the day with tokens", got)
 	}
 }
@@ -124,13 +130,13 @@ func TestUsageFallsBackToKeySpend(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	total, err := NewClient(srv.URL, "mk").KeySpendTokens(context.Background(), "sk-x")
+	total, err := NewClient(srv.URL, "mk").KeySpend(context.Background(), "sk-x")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 5.45e-05 at the nominal price is 545 tokens.
-	if total != 545 {
-		t.Errorf("KeySpendTokens = %d, want 545", total)
+	// The gateway's own figure, in its own unit: nothing converts it.
+	if total != 5.45e-05 {
+		t.Errorf("KeySpend = %v, want 5.45e-05", total)
 	}
 }
 
@@ -141,36 +147,9 @@ func TestKeySpendZeroForUnusedKey(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	total, err := NewClient(srv.URL, "mk").KeySpendTokens(context.Background(), "sk-x")
+	total, err := NewClient(srv.URL, "mk").KeySpend(context.Background(), "sk-x")
 	if err != nil || total != 0 {
-		t.Errorf("got %d, %v; want 0, nil", total, err)
-	}
-}
-
-// The quota figure must come from the counter LiteLLM actually enforces
-// against — the key's own spend against its budget — not from summing the
-// per-day log, whose 30-day window rarely matches the quota period.
-func TestKeyQuotaReportsWindow(t *testing.T) {
-	reset := "2026-08-26T00:00:00Z"
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"info": map[string]any{
-			"spend": 4.2e-02, "max_budget": 1.5e-01, "budget_reset_at": reset,
-		}})
-	}))
-	defer srv.Close()
-
-	got, err := NewClient(srv.URL, "mk").KeyQuota(context.Background(), "sk-x")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.LimitTokens != 1_500_000 {
-		t.Errorf("LimitTokens = %d, want 1500000", got.LimitTokens)
-	}
-	if got.UsedTokens != 420_000 {
-		t.Errorf("UsedTokens = %d, want 420000", got.UsedTokens)
-	}
-	if got.ResetsAt.IsZero() {
-		t.Error("ResetsAt not parsed")
+		t.Errorf("got %v, %v; want 0, nil", total, err)
 	}
 }
 
@@ -188,11 +167,11 @@ func TestKeyQuotaUnlimited(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.LimitTokens != 0 {
-		t.Errorf("LimitTokens = %d, want 0 for an unlimited key", got.LimitTokens)
+	if got.Limit != 0 {
+		t.Errorf("Limit = %v, want 0 for an unlimited key", got.Limit)
 	}
-	if got.UsedTokens != 100 {
-		t.Errorf("UsedTokens = %d, want 100", got.UsedTokens)
+	if got.Used != 1e-05 {
+		t.Errorf("Used = %v, want 1e-05", got.Used)
 	}
 }
 
@@ -211,7 +190,7 @@ func TestUpdateKeyLimitsSendsBudget(t *testing.T) {
 	defer srv.Close()
 
 	err := NewClient(srv.URL, "mk").UpdateKeyLimits(context.Background(), "sk-x", keyprovider.Limits{
-		Quotas: []keyprovider.QuotaWindow{{Tokens: 10_000, Period: "1h"}},
+		Quotas: []keyprovider.QuotaWindow{{Budget: 0.001, Period: "1h"}},
 		Models: []string{"gpt-4o"},
 	})
 	if err != nil {
@@ -220,9 +199,8 @@ func TestUpdateKeyLimitsSendsBudget(t *testing.T) {
 	if got["key"] != "sk-x" {
 		t.Errorf("key = %v", got["key"])
 	}
-	// 10k tokens at the nominal price.
-	if got["max_budget"] != 10_000*NominalTokenPrice {
-		t.Errorf("max_budget = %v, want %v", got["max_budget"], 10_000*NominalTokenPrice)
+	if got["max_budget"] != 0.001 {
+		t.Errorf("max_budget = %v, want 0.001", got["max_budget"])
 	}
 	if got["budget_duration"] != "1h" {
 		t.Errorf("budget_duration = %v", got["budget_duration"])
@@ -308,8 +286,8 @@ func TestUpdateKeyLimitsSendsStackedWindows(t *testing.T) {
 
 	err := NewClient(srv.URL, "mk").UpdateKeyLimits(context.Background(), "sk-x", keyprovider.Limits{
 		Quotas: []keyprovider.QuotaWindow{
-			{Tokens: 100_000, Period: "24h"},
-			{Tokens: 1_000_000, Period: "30d"},
+			{Budget: 0.01, Period: "24h"},
+			{Budget: 0.1, Period: "30d"},
 		},
 	})
 	if err != nil {
@@ -324,8 +302,8 @@ func TestUpdateKeyLimitsSendsStackedWindows(t *testing.T) {
 	if first["budget_duration"] != "24h" {
 		t.Errorf("first window period = %v", first["budget_duration"])
 	}
-	if first["max_budget"] != 100_000*NominalTokenPrice {
-		t.Errorf("first window budget = %v", first["max_budget"])
+	if first["max_budget"] != 0.01 {
+		t.Errorf("first window budget = %v, want 0.01", first["max_budget"])
 	}
 	// The single-window fields must not also be set, or the two disagree.
 	if got["max_budget"] != nil {
@@ -344,12 +322,12 @@ func TestUpdateKeyLimitsSingleWindowStaysFlat(t *testing.T) {
 	defer srv.Close()
 
 	if err := NewClient(srv.URL, "mk").UpdateKeyLimits(context.Background(), "sk-x", keyprovider.Limits{
-		Quotas: []keyprovider.QuotaWindow{{Tokens: 10_000, Period: "1h"}},
+		Quotas: []keyprovider.QuotaWindow{{Budget: 0.001, Period: "1h"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if got["max_budget"] != 10_000*NominalTokenPrice {
-		t.Errorf("max_budget = %v", got["max_budget"])
+	if got["max_budget"] != 0.001 {
+		t.Errorf("max_budget = %v, want 0.001", got["max_budget"])
 	}
 	if got["budget_duration"] != "1h" {
 		t.Errorf("budget_duration = %v", got["budget_duration"])

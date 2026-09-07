@@ -25,7 +25,7 @@ func TestUpsertUserFallsBackToUpdateOnConflict(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", &UserBudget{Tokens: 1000, Period: "30d"})
+	err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", &UserBudget{Budget: 0.0001, Period: "30d"})
 	if err != nil {
 		t.Fatalf("upsert failed on an existing user: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestUpsertUserCreatesWhenAbsent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", &UserBudget{Tokens: 1000, Period: "30d"}); err != nil {
+	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", &UserBudget{Budget: 0.0001, Period: "30d"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(paths) != 1 || paths[0] != "/user/new" {
@@ -62,11 +62,11 @@ func TestUpsertUserSendsSingleWindowAsSpend(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", &UserBudget{Tokens: 1_000_000, Period: "30d"}); err != nil {
+	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", &UserBudget{Budget: 0.1, Period: "30d"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := body["max_budget"]; got != TokensToBudget(1_000_000) {
-		t.Errorf("max_budget = %v, want %v", got, TokensToBudget(1_000_000))
+	if got := body["max_budget"]; got != 0.1 {
+		t.Errorf("max_budget = %v, want 0.1", got)
 	}
 	if got := body["budget_duration"]; got != "30d" {
 		t.Errorf("budget_duration = %v, want 30d", got)
@@ -115,11 +115,11 @@ func TestUserQuotaReportsSpendAgainstBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.UsedTokens != BudgetToTokens(0.02) {
-		t.Errorf("used = %d, want %d", q.UsedTokens, BudgetToTokens(0.02))
+	if q.Used != 0.02 {
+		t.Errorf("used = %v, want 0.02", q.Used)
 	}
-	if q.LimitTokens != BudgetToTokens(0.1) {
-		t.Errorf("limit = %d, want %d", q.LimitTokens, BudgetToTokens(0.1))
+	if q.Limit != 0.1 {
+		t.Errorf("limit = %v, want 0.1", q.Limit)
 	}
 	if q.ResetsAt.IsZero() {
 		t.Error("reset time not reported")
@@ -139,7 +139,7 @@ func TestUserQuotaTreatsMissingUserAsNoUsage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("missing user reported as an error: %v", err)
 	}
-	if q.LimitTokens != 0 || q.UsedTokens != 0 {
+	if q.Limit != 0 || q.Used != 0 {
 		t.Errorf("got %+v, want an empty quota", q)
 	}
 }
