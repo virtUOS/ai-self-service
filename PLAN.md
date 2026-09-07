@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.6.2` |
+| Latest release | `v0.6.3` |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -51,7 +51,7 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-236 tests. `go test ./...` needs nothing external; the one skip is a manual
+237 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -237,6 +237,14 @@ and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
 needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
+
+### Released as v0.6.3 (2026-09-07)
+
+Testing is being retired in favour of production. With `SUCCESSOR_URL` set
+the dashboard opens with a banner sending users to that address and warning
+that keys issued here will be revoked, on `SUCCESSOR_KEYS_REVOKED_ON` if a
+date is given. Only testing sets it; production runs the same code with the
+banner off and was not redeployed for this release.
 
 ### Released as v0.6.2 (2026-09-07)
 
