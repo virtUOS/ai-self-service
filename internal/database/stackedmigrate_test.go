@@ -22,7 +22,7 @@ func TestMigrationDropsSingleQuotaColumns(t *testing.T) {
 	}
 
 	// The replacement table is there and usable.
-	if err := s.ExecRaw(ctx, `SELECT profile_id, tokens, period FROM profile_quotas`); err != nil {
+	if err := s.ExecRaw(ctx, `SELECT profile_id, budget, period FROM profile_quotas`); err != nil {
 		t.Errorf("profile_quotas not usable: %v", err)
 	}
 }
@@ -37,7 +37,7 @@ func TestDeletingProfileRemovesItsQuotas(t *testing.T) {
 	if err := s.CreateProfile(ctx, p); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Tokens: 1000, Period: "1h"}}); err != nil {
+	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Budget: 0.0001, Period: "1h"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteProfile(ctx, p.ID); err != nil {

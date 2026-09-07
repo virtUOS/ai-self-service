@@ -18,11 +18,15 @@ import (
 // spendRow is one request in LiteLLM's spend log.
 //
 // Only the fields the portal aggregates are declared; the row carries plenty
-// more (model, latency, prompt/completion split) that nothing here needs.
+// more (latency, cache hits, the request body) that nothing here needs.
 type spendRow struct {
-	APIKey      string `json:"api_key"`
-	TotalTokens int64  `json:"total_tokens"`
-	StartTime   string `json:"startTime"`
+	APIKey           string  `json:"api_key"`
+	Model            string  `json:"model"`
+	PromptTokens     int64   `json:"prompt_tokens"`
+	CompletionTokens int64   `json:"completion_tokens"`
+	TotalTokens      int64   `json:"total_tokens"`
+	Spend            float64 `json:"spend"`
+	StartTime        string  `json:"startTime"`
 }
 
 // keyHash is how LiteLLM identifies a key in its spend log: the SHA-256 of the
@@ -33,36 +37,40 @@ func keyHash(key string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Usage returns per-day token totals for a key, oldest first.
+// History returns what a key consumed over the last days days: per-day token
+// totals and a per-model breakdown, both from a single read of the log.
 //
-// It reads the raw per-request log and aggregates here. LiteLLM will aggregate
-// by day itself when given start_date/end_date, but that response reports
-// spend only and drops token counts entirely — and local models are priced so
-// that spend is always zero, so it carries no usable signal.
-func (c *Client) Usage(ctx context.Context, key string, days int) ([]keyprovider.DailyUsage, error) {
-	q := url.Values{}
-	q.Set("api_key", keyHash(key))
-
-	resp, err := c.do(ctx, http.MethodGet, "/spend/logs?"+q.Encode(), nil)
+// The log is fetched once because it cannot be narrowed server-side: LiteLLM
+// ignores page_size, limit and size on this route, and passing
+// start_date/end_date switches the response to an aggregated shape that
+// reports spend only and drops token counts entirely — and local models are
+// priced so that spend is always zero, so it carries no usable signal. The
+// window is therefore bounded here, over rows already in hand.
+func (c *Client) History(ctx context.Context, key string, days int) (keyprovider.History, error) {
+	rows, err := c.spendLog(ctx, key)
 	if err != nil {
-		return nil, err
+		return keyprovider.History{}, err
 	}
-	defer resp.Body.Close()
+	cutoff := dayCutoff(days)
+	return keyprovider.History{
+		Days:   dailyFromRows(rows, cutoff),
+		Models: modelsFromRows(rows, cutoff),
+	}, nil
+}
 
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("LiteLLM /spend/logs returned %d: %s", resp.StatusCode, b)
-	}
+// dayCutoff is the earliest UTC date to count, as a YYYY-MM-DD prefix.
+//
+// A date-string compare is the right granularity here: the chart and the
+// per-model table are both bucketed by UTC day, so a row either belongs to a
+// counted day or it does not. spentSince in windows.go is the other case — it
+// bounds an exact window start, so it parses the timestamp instead.
+func dayCutoff(days int) string {
+	return time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
+}
 
-	var rows []spendRow
-	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
-		return nil, fmt.Errorf("decode spend log: %w", err)
-	}
-
-	// Bound the window here rather than in the query: start_date/end_date
-	// switch the endpoint to its aggregated shape, which has no token counts.
-	cutoff := time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
-
+// dailyFromRows sums tokens per UTC day for rows at or after cutoff, oldest
+// day first.
+func dailyFromRows(rows []spendRow, cutoff string) []keyprovider.DailyUsage {
 	totals := make(map[string]int64)
 	for _, r := range rows {
 		if r.TotalTokens <= 0 || len(r.StartTime) < 10 {
@@ -80,7 +88,39 @@ func (c *Client) Usage(ctx context.Context, key string, days int) ([]keyprovider
 		out = append(out, keyprovider.DailyUsage{Day: day, Tokens: tokens})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Day < out[j].Day })
-	return out, nil
+	return out
+}
+
+// modelsFromRows sums per-model totals for rows at or after cutoff, largest
+// total first.
+func modelsFromRows(rows []spendRow, cutoff string) []keyprovider.ModelUsage {
+	totals := make(map[string]*keyprovider.ModelUsage)
+	for _, r := range rows {
+		if r.TotalTokens <= 0 || len(r.StartTime) < 10 || r.StartTime[:10] < cutoff {
+			continue
+		}
+		m, ok := totals[r.Model]
+		if !ok {
+			m = &keyprovider.ModelUsage{Model: r.Model}
+			totals[r.Model] = m
+		}
+		m.Requests++
+		m.PromptTokens += r.PromptTokens
+		m.CompletionTokens += r.CompletionTokens
+		m.TotalTokens += r.TotalTokens
+	}
+
+	out := make([]keyprovider.ModelUsage, 0, len(totals))
+	for _, m := range totals {
+		out = append(out, *m)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].TotalTokens != out[j].TotalTokens {
+			return out[i].TotalTokens > out[j].TotalTokens
+		}
+		return out[i].Model < out[j].Model
+	})
+	return out
 }
 
 type keyInfoResponse struct {
@@ -114,22 +154,17 @@ func (c *Client) keyInfo(ctx context.Context, key string) (keyInfoResponse, erro
 	return info, nil
 }
 
-// KeyQuota reports consumption against the key's enforced budget.
-//
-// Both figures come from the key itself rather than the per-request log: this
-// is the counter LiteLLM actually enforces against, and it resets on the
-// budget period, which rarely matches the 30-day window the log is charted
-// over. Summing the log would give a number that disagrees with the limit
-// users actually hit.
+// KeyQuota reports spend against the key's enforced budget, both read from
+// the key itself: that is the counter LiteLLM enforces against, and it resets
+// on the budget period rather than the 30-day window the log is charted over.
 func (c *Client) KeyQuota(ctx context.Context, key string) (keyprovider.Quota, error) {
 	info, err := c.keyInfo(ctx, key)
 	if err != nil {
 		return keyprovider.Quota{}, err
 	}
-
-	q := keyprovider.Quota{UsedTokens: c.BudgetToTokens(info.Info.Spend)}
+	q := keyprovider.Quota{Used: info.Info.Spend}
 	if info.Info.MaxBudget != nil {
-		q.LimitTokens = c.BudgetToTokens(*info.Info.MaxBudget)
+		q.Limit = *info.Info.MaxBudget
 	}
 	if info.Info.BudgetResetAt != nil {
 		if t, err := time.Parse(time.RFC3339, *info.Info.BudgetResetAt); err == nil {
@@ -139,20 +174,15 @@ func (c *Client) KeyQuota(ctx context.Context, key string) (keyprovider.Quota, e
 	return q, nil
 }
 
-// KeySpendTokens is the cumulative token usage recorded on the key itself,
-// derived from the spend LiteLLM tracks per key.
-//
-// This is the fallback for when per-request spend logging is switched off.
-// It was disabled on this deployment to bound a LiteLLM memory leak
-// (BerriAI/litellm#12685), and the portal cannot assume it is ever on: the
-// key's own spend counter keeps working either way. The cost is granularity —
-// one cumulative figure for the key's lifetime, with no per-day breakdown.
-func (c *Client) KeySpendTokens(ctx context.Context, key string) (int64, error) {
+// KeySpend is the cumulative spend recorded on the key itself. It is the
+// fallback for when per-request spend logging is switched off: the key's
+// counter keeps working either way, at the cost of any per-day breakdown.
+func (c *Client) KeySpend(ctx context.Context, key string) (float64, error) {
 	info, err := c.keyInfo(ctx, key)
 	if err != nil {
 		return 0, err
 	}
-	return c.BudgetToTokens(info.Info.Spend), nil
+	return info.Info.Spend, nil
 }
 
 // UpdateKeyLimits pushes a profile's limits onto a key that already exists.
@@ -195,7 +225,7 @@ func (c *Client) UpdateKeyLimits(ctx context.Context, key string, l keyprovider.
 		for _, w := range windows {
 			limits = append(limits, map[string]any{
 				"budget_duration": w.Period,
-				"max_budget":      c.TokensToBudget(w.Tokens),
+				"max_budget":      w.Budget,
 			})
 		}
 		payload["budget_limits"] = limits
@@ -203,7 +233,7 @@ func (c *Client) UpdateKeyLimits(ctx context.Context, key string, l keyprovider.
 		payload["budget_duration"] = nil
 	case len(windows) == 1:
 		// One window: the plain pair already works, so leave it alone.
-		payload["max_budget"] = c.TokensToBudget(windows[0].Tokens)
+		payload["max_budget"] = windows[0].Budget
 		payload["budget_duration"] = windows[0].Period
 		payload["budget_limits"] = nil
 	default:
@@ -231,11 +261,11 @@ func (c *Client) UpdateKeyLimits(ctx context.Context, key string, l keyprovider.
 }
 
 // effectiveWindows drops windows that are not actually limits, so a blank row
-// left in the admin form does not become a zero-token quota upstream.
+// left in the admin form does not become a zero-budget quota upstream.
 func effectiveWindows(l keyprovider.Limits) []keyprovider.QuotaWindow {
 	out := make([]keyprovider.QuotaWindow, 0, len(l.Quotas))
 	for _, q := range l.Quotas {
-		if q.Tokens > 0 && q.Period != "" {
+		if q.Budget > 0 && q.Period != "" {
 			out = append(out, q)
 		}
 	}

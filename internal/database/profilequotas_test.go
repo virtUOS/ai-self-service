@@ -15,8 +15,8 @@ func seedProfileWithQuotas(t *testing.T, s *Store, name string, isDefault bool) 
 		t.Fatal(err)
 	}
 	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{
-		{Tokens: 1_000, Period: "1h"},
-		{Tokens: 1_000_000, Period: "30d"},
+		{Budget: 0.0001, Period: "1h"},
+		{Budget: 0.1, Period: "30d"},
 	}); err != nil {
 		t.Fatal(err)
 	}

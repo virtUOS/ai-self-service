@@ -7,25 +7,24 @@ import (
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
 
-// testProvider is a provider whose client has never refreshed its pricing, so
-// conversions use the nominal rate — which is what these assertions expect.
+// testProvider is a provider pointed at nothing: toKeyParams never calls out.
 func testProvider() *Provider { return NewProvider(NewClient("http://127.0.0.1:1", "mk")) }
 
-// The adapter owns the token->spend translation; these assertions moved here
+// The adapter passes the budget straight through; these assertions moved here
 // from the handlers when the interface was introduced.
-func TestToKeyParamsConvertsQuota(t *testing.T) {
+func TestToKeyParamsPassesQuotaThrough(t *testing.T) {
 	params := testProvider().toKeyParams(keyprovider.KeyRequest{
 		Owner:     "s@uni-osnabrueck.de",
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 		Limits: keyprovider.Limits{
-			Quotas: []keyprovider.QuotaWindow{{Tokens: 1_000_000, Period: "24h"}},
+			Quotas: []keyprovider.QuotaWindow{{Budget: 0.1, Period: "24h"}},
 		},
 	})
 	if params.MaxBudget == nil {
 		t.Fatal("quota produced no max_budget")
 	}
 	if diff := *params.MaxBudget - 0.1; diff > 1e-9 || diff < -1e-9 {
-		t.Errorf("max_budget = %v, want 0.1 for 1M tokens", *params.MaxBudget)
+		t.Errorf("max_budget = %v, want 0.1", *params.MaxBudget)
 	}
 	if params.BudgetDuration == nil || *params.BudgetDuration != "24h" {
 		t.Errorf("budget_duration = %v, want 24h", params.BudgetDuration)
@@ -42,11 +41,11 @@ func TestToKeyParamsNoQuota(t *testing.T) {
 	}
 }
 
-// Tokens without a period is not an enforceable window.
+// A budget without a period is not an enforceable window.
 func TestToKeyParamsIgnoresIncompleteQuota(t *testing.T) {
 	params := testProvider().toKeyParams(keyprovider.KeyRequest{
 		Limits: keyprovider.Limits{
-			Quotas: []keyprovider.QuotaWindow{{Tokens: 500_000}},
+			Quotas: []keyprovider.QuotaWindow{{Budget: 0.05}},
 		},
 	})
 	if params.MaxBudget != nil {

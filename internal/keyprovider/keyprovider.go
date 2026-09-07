@@ -71,21 +71,23 @@ type EmbeddingLister interface {
 	EmbeddingModels(ctx context.Context) (map[string]bool, error)
 }
 
-// QuotaWindow is one allowance and the period it resets on.
+// QuotaWindow is one allowance and the period it resets on. Budget is spend,
+// not tokens: LiteLLM enforces spend, and with models priced differently a
+// token figure would not be exact.
 type QuotaWindow struct {
-	Tokens int64
-	Period string // "1h" | "24h" | "7d" | "30d"
+	Budget float64 // spend allowed per period, in the gateway's pricing unit
+	Period string  // "1h" | "24h" | "7d" | "30d"
 }
 
 // Quota is a key's consumption against the allowance the gateway enforces.
 // It is reported separately from usage because it resets on the budget period,
 // which need not match the window usage is reported over.
 type Quota struct {
-	// UsedTokens is consumption in the current window.
-	UsedTokens int64
-	// LimitTokens is the allowance. Zero means the key is unlimited, which is
+	// Used is spend in the current window.
+	Used float64
+	// Limit is the allowance. Zero means the key is unlimited, which is
 	// different from an allowance that has been fully consumed.
-	LimitTokens int64
+	Limit float64
 	// ResetsAt is when the window rolls over. Zero when unknown or unlimited.
 	ResetsAt time.Time
 }
@@ -99,15 +101,14 @@ type Quota struct {
 type WindowUsage struct {
 	// Period is the window this covers ("1h" | "24h" | "7d" | "30d").
 	Period string
-	// UsedTokens is consumption since the window last reset. It is derived
-	// from the spend log rather than read from the gateway, which keeps a
-	// per-window counter but does not expose it.
-	UsedTokens int64
-	// LimitTokens is the allowance for this window.
-	LimitTokens int64
+	// Used is consumption since the window last reset, as spend summed from
+	// the log.
+	Used float64
+	// Limit is the allowance for this window.
+	Limit float64
 	// ResetsAt is when this window rolls over.
 	ResetsAt time.Time
-	// UsedKnown reports whether UsedTokens is a real figure. Spend logging can
+	// UsedKnown reports whether Used is a real figure. Spend logging can
 	// be switched off, and a bar drawn from a silent zero would claim a full
 	// allowance the user may not have.
 	UsedKnown bool
@@ -121,23 +122,42 @@ type DailyUsage struct {
 	Tokens int64
 }
 
+// ModelUsage is one model's share of a key's consumption.
+type ModelUsage struct {
+	Model            string
+	Requests         int64
+	PromptTokens     int64
+	CompletionTokens int64
+	TotalTokens      int64
+}
+
+// History is what a key consumed over a window, in the two shapes the
+// dashboard draws: a per-day series and a per-model breakdown. They are one
+// value because they come from one read of the same log.
+type History struct {
+	// Days holds per-day token totals, oldest first. Days with no traffic are
+	// omitted rather than reported as zero.
+	Days []DailyUsage
+	// Models holds per-model totals, largest TotalTokens first.
+	Models []ModelUsage
+}
+
 // UsageReporter is implemented by providers that can report what a key has
 // consumed. Separate from Provider because not every gateway records usage,
 // and reporting is not needed to issue or revoke keys.
 type UsageReporter interface {
-	// Usage returns per-day token totals for the key, oldest first, covering
-	// the given number of days back from today. Days with no traffic are
-	// omitted rather than reported as zero.
+	// History returns what the key consumed over the last days days: per-day
+	// totals oldest first and per-model totals largest first, both from one
+	// read of the per-request log.
 	//
 	// An empty result does not mean no usage: a gateway may record spend
 	// without keeping a per-request log. Callers should fall back to
-	// TotalUsage before concluding a key is unused.
-	Usage(ctx context.Context, ref string, days int) ([]DailyUsage, error)
+	// TotalSpend before concluding a key is unused.
+	History(ctx context.Context, ref string, days int) (History, error)
 
-	// TotalUsage is the key's cumulative token count. It is the coarse figure
-	// that survives when per-request logging is unavailable, so it is reported
-	// separately rather than derived from Usage.
-	TotalUsage(ctx context.Context, ref string) (int64, error)
+	// TotalSpend is the key's cumulative spend counter, which the gateway
+	// keeps whether or not per-request logging is on.
+	TotalSpend(ctx context.Context, ref string) (float64, error)
 
 	// Windows reports consumption against every quota window that applies to
 	// the key and its owner, tightest period first.

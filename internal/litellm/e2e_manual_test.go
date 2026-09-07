@@ -21,8 +21,8 @@ func TestE2EOwnerQuotaSurvivesRotation(t *testing.T) {
 	owner := "zz-probe-e2e-issue26"
 
 	limits := keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{
-		{Tokens: 1_000, Period: "1h"},
-		{Tokens: 1_000_000, Period: "30d"},
+		{Budget: 0.0001, Period: "1h"},
+		{Budget: 0.1, Period: "30d"},
 	}}
 	req := keyprovider.KeyRequest{
 		Alias: owner + "-1", Owner: owner, OwnerID: owner, Limits: limits,
@@ -40,9 +40,9 @@ func TestE2EOwnerQuotaSurvivesRotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("quota via first key: %v", err)
 	}
-	t.Logf("via key 1: limit=%d used=%d", q1.LimitTokens, q1.UsedTokens)
-	if q1.LimitTokens != 1_000_000 {
-		t.Errorf("limit = %d, want the 30d allowance on the owner", q1.LimitTokens)
+	t.Logf("via key 1: limit=%v used=%v", q1.Limit, q1.Used)
+	if q1.Limit != 0.1 {
+		t.Errorf("limit = %v, want the 30d allowance on the owner", q1.Limit)
 	}
 
 	// The rotation issue #26 reported.
@@ -57,12 +57,12 @@ func TestE2EOwnerQuotaSurvivesRotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("quota via replacement key: %v", err)
 	}
-	t.Logf("via key 2: limit=%d used=%d", q2.LimitTokens, q2.UsedTokens)
+	t.Logf("via key 2: limit=%v used=%v", q2.Limit, q2.Used)
 
-	if q2.LimitTokens != q1.LimitTokens {
-		t.Errorf("allowance changed across rotation: %d then %d", q1.LimitTokens, q2.LimitTokens)
+	if q2.Limit != q1.Limit {
+		t.Errorf("allowance changed across rotation: %v then %v", q1.Limit, q2.Limit)
 	}
-	if q2.UsedTokens != q1.UsedTokens {
-		t.Errorf("spend reset across rotation: %d then %d", q1.UsedTokens, q2.UsedTokens)
+	if q2.Used != q1.Used {
+		t.Errorf("spend reset across rotation: %v then %v", q1.Used, q2.Used)
 	}
 }

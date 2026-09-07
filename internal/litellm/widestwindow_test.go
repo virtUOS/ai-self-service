@@ -51,7 +51,7 @@ func TestWidestWindowPicksLongestPeriod(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			in := make([]keyprovider.QuotaWindow, 0, len(tc.in))
 			for i, p := range tc.in {
-				in = append(in, keyprovider.QuotaWindow{Tokens: int64(i + 1), Period: p})
+				in = append(in, keyprovider.QuotaWindow{Budget: float64(i+1) * 0.001, Period: p})
 			}
 
 			widest, rest := WidestWindow(in)
@@ -69,17 +69,17 @@ func TestWidestWindowPicksLongestPeriod(t *testing.T) {
 // to the user or to the key, exactly once.
 func TestWidestWindowKeepsEveryWindow(t *testing.T) {
 	in := []keyprovider.QuotaWindow{
-		{Tokens: 1000, Period: "1h"},
-		{Tokens: 10000, Period: "7d"},
-		{Tokens: 1000000, Period: "30d"},
+		{Budget: 0.0001, Period: "1h"},
+		{Budget: 0.001, Period: "7d"},
+		{Budget: 0.1, Period: "30d"},
 	}
 
 	widest, rest := WidestWindow(in)
 	if len(rest)+1 != len(in) {
 		t.Fatalf("got %d windows back, want %d", len(rest)+1, len(in))
 	}
-	if widest.Tokens != 1000000 {
-		t.Errorf("widest carries %d tokens, want the 30d allowance", widest.Tokens)
+	if widest.Budget != 0.1 {
+		t.Errorf("widest carries %v, want the 30d allowance", widest.Budget)
 	}
 	for _, w := range rest {
 		if w.Period == widest.Period {

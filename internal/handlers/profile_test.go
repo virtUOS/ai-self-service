@@ -40,24 +40,24 @@ func TestDashboardQuotaRendering(t *testing.T) {
 		{nil, nil},
 		{&database.Profile{}, []quotaLine{}},
 		{
-			&database.Profile{Quotas: []database.ProfileQuota{{Tokens: 1_500_000, Period: "24h"}}},
-			[]quotaLine{{Tokens: "1.5M", Period: "per day"}},
+			&database.Profile{Quotas: []database.ProfileQuota{{Budget: 0.15, Period: "24h"}}},
+			[]quotaLine{{Budget: "$0.15", Period: "per day"}},
 		},
 		{
 			&database.Profile{Quotas: []database.ProfileQuota{
-				{Tokens: 100_000, Period: "24h"},
-				{Tokens: 1_000_000, Period: "30d"},
+				{Budget: 0.01, Period: "24h"},
+				{Budget: 0.1, Period: "30d"},
 			}},
 			[]quotaLine{
-				{Tokens: "100k", Period: "per day"},
-				{Tokens: "1M", Period: "per month"},
+				{Budget: "$0.01", Period: "per day"},
+				{Budget: "$0.10", Period: "per month"},
 			},
 		},
-		// Tokens without a period is not an enforceable window.
-		{&database.Profile{Quotas: []database.ProfileQuota{{Tokens: 1000}}}, []quotaLine{}},
+		// A budget without a period is not an enforceable window.
+		{&database.Profile{Quotas: []database.ProfileQuota{{Budget: 0.1}}}, []quotaLine{}},
 	}
 	for _, c := range cases {
-		got := profileQuotaLines(c.profile, i18n.EN)
+		got := profileQuotaLines(c.profile, i18n.EN, "$")
 		if len(got) != len(c.want) {
 			t.Errorf("profileQuotaLines(%v) = %+v, want %+v", c.profile, got, c.want)
 			continue
@@ -77,7 +77,7 @@ func TestProfileLimits(t *testing.T) {
 		Models:   []string{"Qwen/Qwen3.8-27B-FP8"},
 		TPMLimit: &tpm,
 		Quotas: []database.ProfileQuota{
-			{Tokens: 1_000_000, Period: "24h"},
+			{Budget: 0.1, Period: "24h"},
 		},
 	}
 	got := profileLimits(p)
@@ -87,8 +87,8 @@ func TestProfileLimits(t *testing.T) {
 	if got.TokensPerMinute == nil || *got.TokensPerMinute != 1000 {
 		t.Errorf("TokensPerMinute = %v", got.TokensPerMinute)
 	}
-	if len(got.Quotas) != 1 || got.Quotas[0].Tokens != 1_000_000 || got.Quotas[0].Period != "24h" {
-		t.Errorf("quotas = %+v, want one window of 1M/24h", got.Quotas)
+	if len(got.Quotas) != 1 || got.Quotas[0].Budget != 0.1 || got.Quotas[0].Period != "24h" {
+		t.Errorf("quotas = %+v, want one window of 0.1/24h", got.Quotas)
 	}
 }
 

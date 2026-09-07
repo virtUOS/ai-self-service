@@ -15,7 +15,6 @@ import (
 	"github.com/virtuos/ai-self-service/internal/database"
 	"github.com/virtuos/ai-self-service/internal/i18n"
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
-	"github.com/virtuos/ai-self-service/internal/litellm"
 	"github.com/virtuos/ai-self-service/internal/metrics"
 	oidcpkg "github.com/virtuos/ai-self-service/internal/oidc"
 	"github.com/virtuos/ai-self-service/internal/session"
@@ -78,7 +77,10 @@ type dashboardData struct {
 	ExpiryUrgent  bool
 	ProfileName   string
 	Quotas        []quotaLine
-	Models        []string
+	// BudgetUnit labels every spend figure on the page, so a deployment that
+	// bills in credits rather than dollars reads correctly.
+	BudgetUnit string
+	Models     []string
 	// EmbeddingModels are the ones among Models that take /embeddings and an
 	// "input" body rather than /chat/completions and "messages".
 	EmbeddingModels map[string]bool
@@ -150,7 +152,8 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		ExpiresInDays:   daysUntilExpiry(apiKey),
 		ExpiryUrgent:    isExpiryUrgent(apiKey),
 		ProfileName:     profileName(profile),
-		Quotas:          profileQuotaLines(profile, lang),
+		Quotas:          profileQuotaLines(profile, lang, u.cfg.BudgetUnit),
+		BudgetUnit:      u.cfg.BudgetUnit,
 		Models:          u.userModels(r.Context(), profile),
 		EmbeddingModels: u.models.Embeddings(r.Context()),
 		Usage:           u.userUsage(r.Context(), apiKey, su.User.OIDCSub, lang),
@@ -462,7 +465,7 @@ func profileName(p *database.Profile) string {
 
 // quotaLine is one allowance window as the dashboard shows it.
 type quotaLine struct {
-	Tokens string
+	Budget string // pre-formatted, with the deployment's unit
 	Period string
 }
 
@@ -471,17 +474,17 @@ type quotaLine struct {
 //
 // The period is translated rather than shown as the raw "24h": the account
 // card is prose, and an untranslated unit reads badly beside German text.
-func profileQuotaLines(p *database.Profile, lang i18n.Lang) []quotaLine {
+func profileQuotaLines(p *database.Profile, lang i18n.Lang, unit string) []quotaLine {
 	if p == nil {
 		return nil
 	}
 	out := make([]quotaLine, 0, len(p.Quotas))
 	for _, q := range p.Quotas {
-		if q.Tokens <= 0 || q.Period == "" {
+		if q.Budget <= 0 || q.Period == "" {
 			continue
 		}
 		out = append(out, quotaLine{
-			Tokens: litellm.FormatTokens(q.Tokens),
+			Budget: FormatBudget(q.Budget, unit),
 			Period: periodLabel(q.Period, lang),
 		})
 	}
@@ -520,23 +523,30 @@ type usageReport struct {
 	// Peak is the busiest day's total, used to scale the bars. Zero when there
 	// is no traffic, and callers must not divide by it unchecked.
 	Peak int64
+	// Models is what each model consumed over the same window as Days, from
+	// the same per-request log. Empty when the gateway keeps none.
+	Models []keyprovider.ModelUsage
 	// TotalOnly marks a report with a real total but no per-day breakdown,
 	// which is what a gateway with per-request logging switched off can give.
 	// The card then shows the figure without a chart, rather than implying the
 	// key was never used.
 	TotalOnly bool
+	// TotalSpend is the key's cumulative spend, shown when TotalOnly. Tokens
+	// cannot be reported then: without a per-request log there is nothing to
+	// count, only the spend counter the gateway keeps regardless.
+	TotalSpend float64
 
 	// HasQuota is set when the key has an enforced allowance. Profiles may
 	// leave it unset, and an unlimited key must not read as an exhausted one.
 	HasQuota bool
-	// Used, Remaining and QuotaPct describe the current quota window. They
-	// come from the key's own counter, which is what the gateway enforces
+	// Used, Limit and QuotaPct describe the current quota window as spend.
+	// They come from the key's own counter, which is what the gateway enforces
 	// against, so they can disagree with the 30-day chart above — the window
 	// resets on the budget period, not on a rolling month.
-	Used      int64
-	Remaining int64
-	QuotaPct  int
-	ResetsAt  time.Time
+	Used     float64
+	Limit    float64
+	QuotaPct int
+	ResetsAt time.Time
 
 	// Windows is one entry per quota window, tightest first, so the card can
 	// show what each allowance has left. A profile can hold several at once
@@ -551,18 +561,17 @@ type usageReport struct {
 
 // quotaWindowView is one quota window as the dashboard renders it.
 //
-// Label and LimitText are pre-formatted here rather than in the template, the
-// way the account card does it: the period has to be translated, and a
-// template function would have to carry the language through a range.
+// Label is pre-formatted here rather than in the template, the way the account
+// card does it: the period has to be translated, and a template function would
+// have to carry the language through a range. Used and Limit stay numbers, so
+// the template formats them with the page's own budget unit.
 type quotaWindowView struct {
-	Period    string
-	Label     string
-	LimitText string
-	Used      int64
-	Limit     int64
-	Remaining int64
-	Pct       int
-	ResetsAt  time.Time
+	Period   string
+	Label    string
+	Used     float64
+	Limit    float64
+	Pct      int
+	ResetsAt time.Time
 }
 
 // userUsage summarises what the user has consumed.
@@ -582,19 +591,17 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 
 	var rep usageReport
 	rep.Days = days
+	rep.Models = u.usage.Models(ctx, k.LiteLLMKey)
 	for _, d := range days {
 		rep.Total += d.Tokens
 		if d.Tokens > rep.Peak {
 			rep.Peak = d.Tokens
 		}
 	}
-	if q, err := u.usage.Quota(ctx, k.LiteLLMKey, ownerID); err == nil && q.LimitTokens > 0 {
+	if q, err := u.usage.Quota(ctx, k.LiteLLMKey, ownerID); err == nil && q.Limit > 0 {
 		rep.HasQuota = true
-		rep.Used, rep.ResetsAt = q.UsedTokens, q.ResetsAt
-		if rep.Remaining = q.LimitTokens - q.UsedTokens; rep.Remaining < 0 {
-			rep.Remaining = 0
-		}
-		rep.QuotaPct = quotaPct(q.UsedTokens, q.LimitTokens)
+		rep.Used, rep.Limit, rep.ResetsAt = q.Used, q.Limit, q.ResetsAt
+		rep.QuotaPct = quotaPct(q.Used, q.Limit)
 	}
 
 	rep.Windows = u.quotaWindows(ctx, k.LiteLLMKey, ownerID, lang)
@@ -604,7 +611,7 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 	// first, and the loosest reads as more headroom than they have.
 	if b := bindingWindow(rep.Windows); b != nil {
 		rep.HasQuota = true
-		rep.Used, rep.Remaining = b.Used, b.Remaining
+		rep.Used, rep.Limit = b.Used, b.Limit
 		rep.QuotaPct, rep.ResetsAt = b.Pct, b.ResetsAt
 	}
 
@@ -615,8 +622,8 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 	// No per-day rows. That may mean an unused key, or a gateway that records
 	// spend without keeping a per-request log — the two are indistinguishable
 	// here, so ask for the cumulative figure before reporting nothing.
-	if total := u.usage.Total(ctx, k.LiteLLMKey); total > 0 {
-		rep.Total, rep.TotalOnly = total, true
+	if total := u.usage.TotalSpend(ctx, k.LiteLLMKey); total > 0 {
+		rep.TotalSpend, rep.TotalOnly = total, true
 	}
 	return rep
 }
@@ -659,7 +666,7 @@ func profileLimits(p *database.Profile) keyprovider.Limits {
 	}
 	windows := make([]keyprovider.QuotaWindow, 0, len(p.Quotas))
 	for _, q := range p.Quotas {
-		windows = append(windows, keyprovider.QuotaWindow{Tokens: q.Tokens, Period: q.Period})
+		windows = append(windows, keyprovider.QuotaWindow{Budget: q.Budget, Period: q.Period})
 	}
 	return keyprovider.Limits{
 		Models:            p.Models,
@@ -693,13 +700,16 @@ func (u *UI) syncKeyLimits(ctx context.Context, k *database.APIKey, p *database.
 
 // quotaPct is consumption as a percentage of an allowance, clamped to 100 so
 // an over-spent window renders as full rather than overflowing its bar.
-func quotaPct(used, limit int64) int {
+func quotaPct(used, limit float64) int {
 	if limit <= 0 {
 		return 0
 	}
-	pct := int(used * 100 / limit)
+	pct := int(used / limit * 100)
 	if pct > 100 {
 		return 100
+	}
+	if pct < 0 {
+		return 0
 	}
 	return pct
 }
@@ -723,7 +733,7 @@ func (u *UI) quotaWindows(ctx context.Context, ref, ownerID string, lang i18n.La
 
 	out := make([]quotaWindowView, 0, len(windows))
 	for _, w := range windows {
-		if w.LimitTokens <= 0 {
+		if w.Limit <= 0 {
 			continue
 		}
 		if !w.UsedKnown {
@@ -731,19 +741,13 @@ func (u *UI) quotaWindows(ctx context.Context, ref, ownerID string, lang i18n.La
 			// would imply this one is fine. Fall back rather than mislead.
 			return nil
 		}
-		remaining := w.LimitTokens - w.UsedTokens
-		if remaining < 0 {
-			remaining = 0
-		}
 		out = append(out, quotaWindowView{
-			Period:    w.Period,
-			Label:     periodLabel(w.Period, lang),
-			LimitText: litellm.FormatTokens(w.LimitTokens),
-			Used:      w.UsedTokens,
-			Limit:     w.LimitTokens,
-			Remaining: remaining,
-			Pct:       quotaPct(w.UsedTokens, w.LimitTokens),
-			ResetsAt:  w.ResetsAt,
+			Period:   w.Period,
+			Label:    periodLabel(w.Period, lang),
+			Used:     w.Used,
+			Limit:    w.Limit,
+			Pct:      quotaPct(w.Used, w.Limit),
+			ResetsAt: w.ResetsAt,
 		})
 	}
 	return out

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -53,7 +54,6 @@ func formatPeriod(p string) string {
 // Tests use it too, so a helper added here cannot be missed there.
 func parseAdminTemplate() *template.Template {
 	funcs := langFuncs()
-	funcs["fmtTokens"] = litellm.FormatTokens
 	funcs["fmtPeriod"] = formatPeriod
 	return template.Must(template.New("admin.html").
 		Funcs(funcs).
@@ -193,6 +193,8 @@ type adminData struct {
 	Audit          []database.AuditEvent
 	Flash          string
 	CSRFToken      string
+	// BudgetUnit labels quota amounts
+	BudgetUnit string
 }
 
 // Panel renders the admin page with profile and user lists.
@@ -249,6 +251,7 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 		Audit:           audit,
 		Flash:           flash,
 		CSRFToken:       a.csrf.Token(w, r),
+		BudgetUnit:      a.cfg.BudgetUnit,
 	}); err != nil {
 		slog.Error("admin template", "err", err)
 	}
@@ -455,20 +458,32 @@ func parseNonNegativeInt64(s string) int64 {
 
 // parseQuotaWindows reads the repeating quota rows the profile form posts.
 //
-// Rows are paired by position: quota_tokens[i] with quota_period[i]. A row
-// with no token count is how an admin removes a window, so it is dropped
-// rather than stored — a zero-token quota would read upstream as an allowance
-// of nothing, blocking every request.
+// Rows are paired by position: quota_budget[i] with quota_period[i]. A blank
+// amount is how an admin removes a window, so it is dropped rather than
+// stored — a zero budget would read upstream as an allowance of nothing,
+// blocking every request. Anything else that is not a positive number is a
+// mistake and is rejected rather than silently dropped.
 func parseQuotaWindows(form url.Values) ([]database.ProfileQuota, error) {
-	tokens := form["quota_tokens"]
+	amounts := form["quota_budget"]
 	periods := form["quota_period"]
 
-	out := make([]database.ProfileQuota, 0, len(tokens))
-	seen := make(map[string]bool, len(tokens))
+	out := make([]database.ProfileQuota, 0, len(amounts))
+	seen := make(map[string]bool, len(amounts))
 
-	for i, raw := range tokens {
-		n := parseNonNegativeInt64(strings.TrimSpace(raw))
-		if n <= 0 {
+	for i, raw := range amounts {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		// A German-locale browser submits a decimal number as "0,10" from a
+		// number input, and ParseFloat rejects that — the admin would see
+		// "invalid quota window" for an amount they typed correctly.
+		raw = strings.ReplaceAll(raw, ",", ".")
+		amount, err := strconv.ParseFloat(raw, 64)
+		if err != nil || math.IsNaN(amount) || math.IsInf(amount, 0) {
+			return nil, fmt.Errorf("invalid quota amount %q", raw)
+		}
+		if amount <= 0 {
 			continue
 		}
 		period := ""
@@ -482,7 +497,7 @@ func parseQuotaWindows(form url.Values) ([]database.ProfileQuota, error) {
 			return nil, fmt.Errorf("duplicate quota period %q", period)
 		}
 		seen[period] = true
-		out = append(out, database.ProfileQuota{Tokens: n, Period: period})
+		out = append(out, database.ProfileQuota{Budget: amount, Period: period})
 	}
 
 	if err := checkWindowsBind(out); err != nil {
@@ -507,9 +522,9 @@ func checkWindowsBind(qs []database.ProfileQuota) error {
 				continue
 			}
 			// a is the shorter window; it must not allow more than b.
-			if periodHours[a.Period] < periodHours[b.Period] && a.Tokens > b.Tokens {
-				return fmt.Errorf("%s allowance (%d) exceeds the longer %s allowance (%d)",
-					a.Period, a.Tokens, b.Period, b.Tokens)
+			if periodHours[a.Period] < periodHours[b.Period] && a.Budget > b.Budget {
+				return fmt.Errorf("%s allowance (%g) exceeds the longer %s allowance (%g)",
+					a.Period, a.Budget, b.Period, b.Budget)
 			}
 		}
 	}

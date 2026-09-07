@@ -124,23 +124,20 @@ func (c *Client) spendLog(ctx context.Context, key string) ([]spendRow, error) {
 	return rows, nil
 }
 
-// spentSince sums the tokens consumed at or after start, from an already
+// spentSince sums the spend recorded at or after start, from an already
 // fetched log.
-func spentSince(rows []spendRow, start time.Time) int64 {
-	var tokens int64
+func spentSince(rows []spendRow, start time.Time) float64 {
+	var spend float64
 	for _, r := range rows {
-		if r.TotalTokens <= 0 {
-			continue
-		}
 		t, err := time.Parse(time.RFC3339, r.StartTime)
 		if err != nil {
 			continue
 		}
 		if !t.Before(start) {
-			tokens += r.TotalTokens
+			spend += r.Spend
 		}
 	}
-	return tokens
+	return spend
 }
 
 // Windows reports consumption against every quota window applying to a key and
@@ -191,15 +188,15 @@ func (p *Provider) Windows(ctx context.Context, ref, ownerID string) ([]keyprovi
 			continue
 		}
 		u := keyprovider.WindowUsage{
-			Period:      w.BudgetDuration,
-			LimitTokens: p.client.BudgetToTokens(w.MaxBudget),
+			Period: w.BudgetDuration,
+			Limit:  w.MaxBudget,
 		}
 		if w.ResetAt != nil {
 			if t, err := time.Parse(time.RFC3339, *w.ResetAt); err == nil {
 				u.ResetsAt = t
 				// The window opened one period before it next resets.
 				if d := periodDuration(w.BudgetDuration); d > 0 {
-					u.UsedTokens = spentSince(rows, t.Add(-d))
+					u.Used = spentSince(rows, t.Add(-d))
 					u.UsedKnown = known
 				}
 			}
@@ -208,7 +205,7 @@ func (p *Provider) Windows(ctx context.Context, ref, ownerID string) ([]keyprovi
 		// Prefer it over anything derived from the key's log, and trust it
 		// even when logging is off: the gateway maintains it regardless.
 		if w.HasSpend {
-			u.UsedTokens = p.client.BudgetToTokens(w.Spend)
+			u.Used = w.Spend
 			u.UsedKnown = true
 		}
 		out = append(out, u)

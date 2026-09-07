@@ -9,9 +9,9 @@ import (
 
 // Provider adapts the LiteLLM client to keyprovider.Provider.
 //
-// This is where LiteLLM's vocabulary is translated into the application's. In
-// particular a token quota becomes a spend cap over a reset window, because
-// LiteLLM enforces budgets in currency and has no native token quota.
+// This is where LiteLLM's vocabulary is translated into the application's. A
+// quota window is already a spend cap over a reset period, which is what
+// LiteLLM enforces, so the budget goes upstream unchanged.
 type Provider struct {
 	client *Client
 }
@@ -26,9 +26,9 @@ var (
 	_ keyprovider.UsageReporter   = (*Provider)(nil)
 )
 
-// Usage reports what a key has consumed, per day.
-func (p *Provider) Usage(ctx context.Context, ref string, days int) ([]keyprovider.DailyUsage, error) {
-	return p.client.Usage(ctx, ref, days)
+// History reports what a key has consumed, per day and per model.
+func (p *Provider) History(ctx context.Context, ref string, days int) (keyprovider.History, error) {
+	return p.client.History(ctx, ref, days)
 }
 
 // UpdateLimits re-applies limits to an existing key, and to the allowance held
@@ -60,7 +60,7 @@ func (p *Provider) Quota(ctx context.Context, ref, ownerID string) (keyprovider.
 		if err != nil {
 			return keyprovider.Quota{}, err
 		}
-		if q.LimitTokens > 0 {
+		if q.Limit > 0 {
 			return q, nil
 		}
 	}
@@ -70,15 +70,15 @@ func (p *Provider) Quota(ctx context.Context, ref, ownerID string) (keyprovider.
 // userBudget is the allowance to hold against the person, or nil when the
 // profile sets no quota at all.
 func userBudget(w keyprovider.QuotaWindow) *UserBudget {
-	if w.Tokens <= 0 || w.Period == "" {
+	if w.Budget <= 0 || w.Period == "" {
 		return nil
 	}
-	return &UserBudget{Tokens: w.Tokens, Period: w.Period}
+	return &UserBudget{Budget: w.Budget, Period: w.Period}
 }
 
-// TotalUsage reports the key's cumulative token count.
-func (p *Provider) TotalUsage(ctx context.Context, ref string) (int64, error) {
-	return p.client.KeySpendTokens(ctx, ref)
+// TotalSpend reports the key's cumulative spend counter.
+func (p *Provider) TotalSpend(ctx context.Context, ref string) (float64, error) {
+	return p.client.KeySpend(ctx, ref)
 }
 
 // ListModels reports the models the gateway serves.
@@ -143,16 +143,14 @@ func (p *Provider) toKeyParams(req keyprovider.KeyRequest) KeyParams {
 		Metadata: map[string]any{"user_email": req.Owner},
 	}
 
-	// A token allowance is expressed upstream as a spend cap that resets each
-	// period. Priced identically for input and output, so the conversion is
-	// exact regardless of how the tokens are actually used.
+	// The allowance is already a spend cap, so it goes to the gateway as is.
 	//
 	// Several windows go as budget_limits, which the gateway enforces
 	// independently; a single one keeps the flat pair it has always used.
 	switch windows := effectiveWindows(req.Limits); len(windows) {
 	case 0:
 	case 1:
-		budget := p.client.TokensToBudget(windows[0].Tokens)
+		budget := windows[0].Budget
 		period := windows[0].Period
 		params.MaxBudget = &budget
 		params.BudgetDuration = &period
@@ -161,7 +159,7 @@ func (p *Provider) toKeyParams(req keyprovider.KeyRequest) KeyParams {
 		for _, w := range windows {
 			limits = append(limits, BudgetWindow{
 				BudgetDuration: w.Period,
-				MaxBudget:      p.client.TokensToBudget(w.Tokens),
+				MaxBudget:      w.Budget,
 			})
 		}
 		params.BudgetLimits = limits

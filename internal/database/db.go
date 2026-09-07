@@ -128,7 +128,7 @@ func (s *Store) SetProfileQuotas(ctx context.Context, profileID int64, quotas []
 		}
 		rows := make([]ProfileQuota, 0, len(quotas))
 		for _, q := range quotas {
-			if q.Tokens <= 0 || q.Period == "" {
+			if q.Budget <= 0 || q.Period == "" {
 				continue
 			}
 			q.ID, q.ProfileID = 0, profileID

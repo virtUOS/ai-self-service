@@ -50,13 +50,16 @@
       {{if .Quotas}}
       <dt>{{T .Lang "dash.usagelimit"}} <button type="button" class="help" data-help="{{T .Lang "dash.usagelimit.help"}}">?</button></dt>
       <dd>
-        {{range $i, $q := .Quotas}}{{if $i}}<br>{{end}}{{$q.Tokens}} {{T $.Lang "dash.tokens"}} {{$q.Period}}{{end}}
+        {{range $i, $q := .Quotas}}{{if $i}}<br>{{end}}{{$q.Budget}} {{$q.Period}}{{end}}
       </dd>
       {{end}}
     </dl>
     {{if .Quotas}}
     <p class="text-muted" style="margin-top:.75rem;font-size:.85rem">
       {{T .Lang "dash.usagelimit.note"}}
+    </p>
+    <p class="text-muted" style="margin-top:.35rem;font-size:.85rem">
+      {{T .Lang "dash.quota.costnote"}}
     </p>
     {{end}}
   </div>
@@ -131,39 +134,36 @@
            for the widest would promise headroom the user does not have. */}}
       {{range .Usage.Windows}}
         <p style="margin-bottom:.35rem">
-          <strong>{{thousands .Remaining}}</strong> {{T $.Lang "dash.tokens"}}
-          <span class="text-muted">{{T $.Lang "dash.quota.remaining"}}</span>
-          <span class="text-muted">· {{.LimitText}} {{.Label}}</span>
+          <strong>{{.Pct}}%</strong> {{T $.Lang "dash.quota.used"}}
+          <span class="text-muted">· {{.Label}}</span>
         </p>
         <div class="quota-bar" role="img"
-             aria-label="{{thousands .Used}} {{T $.Lang "dash.quota.of"}} {{thousands .Limit}} {{T $.Lang "dash.tokens"}} {{T $.Lang "dash.quota.used"}}">
+             aria-label="{{.Pct}}% {{T $.Lang "dash.quota.used"}}">
           <div class="quota-fill{{if ge .Pct 90}} quota-full{{end}}"
                style="width:{{.Pct}}%"></div>
         </div>
         <p class="text-muted" style="font-size:.85rem;margin-bottom:1rem">
-          {{thousands .Used}} {{T $.Lang "dash.quota.of"}}
-          {{thousands .Limit}} {{T $.Lang "dash.tokens"}}
-          {{T $.Lang "dash.quota.used"}}{{if not .ResetsAt.IsZero}} ·
+          {{fmtBudget .Used $.BudgetUnit}} {{T $.Lang "dash.quota.of"}}
+          {{fmtBudget .Limit $.BudgetUnit}}{{if not .ResetsAt.IsZero}} ·
           {{T $.Lang "dash.quota.resets"}}
           <span class="reset-at" data-reset="{{.ResetsAt.Format "2006-01-02T15:04:05Z"}}"></span>{{end}}
         </p>
       {{end}}
     {{else if .Usage.HasQuota}}
       {{/* No per-window figures — spend logging is off, so consumption inside
-           each window cannot be summed. One bar for the window that binds. */}}
-      <p style="margin-bottom:.5rem">
-        <strong>{{thousands .Usage.Remaining}}</strong> {{T .Lang "dash.tokens"}}
-        <span class="text-muted">{{T .Lang "dash.quota.remaining"}}</span>
+           each window cannot be summed. One bar for the window that binds.
+           Both figures are spend, straight from the gateway. */}}
+      <p style="margin-bottom:.35rem">
+        <strong>{{.Usage.QuotaPct}}%</strong> {{T .Lang "dash.quota.used"}}
       </p>
       <div class="quota-bar" role="img"
-           aria-label="{{thousands .Usage.Used}} {{T .Lang "dash.quota.used"}}">
+           aria-label="{{.Usage.QuotaPct}}% {{T .Lang "dash.quota.used"}}">
         <div class="quota-fill{{if ge .Usage.QuotaPct 90}} quota-full{{end}}"
              style="width:{{.Usage.QuotaPct}}%"></div>
       </div>
       <p class="text-muted" style="font-size:.85rem;margin-bottom:1rem">
-        {{thousands .Usage.Used}} {{T .Lang "dash.quota.of"}}
-        {{thousands (add .Usage.Used .Usage.Remaining)}} {{T .Lang "dash.tokens"}}
-        {{T .Lang "dash.quota.used"}}{{if not .Usage.ResetsAt.IsZero}} ·
+        {{fmtBudget .Usage.Used .BudgetUnit}} {{T .Lang "dash.quota.of"}}
+        {{fmtBudget .Usage.Limit .BudgetUnit}}{{if not .Usage.ResetsAt.IsZero}} ·
         {{T .Lang "dash.quota.resets"}}
         <span class="reset-at" data-reset="{{.Usage.ResetsAt.Format "2006-01-02T15:04:05Z"}}"></span>{{end}}
       </p>
@@ -175,7 +175,7 @@
 
     {{if .Usage.TotalOnly}}
       <p style="margin-bottom:.5rem">
-        <strong>{{thousands .Usage.Total}}</strong> {{T .Lang "dash.tokens"}}
+        <strong>{{fmtBudget .Usage.TotalSpend .BudgetUnit}}</strong>
         <span class="text-muted">({{T .Lang "dash.usagestats.total"}})</span>
       </p>
       <p class="text-muted" style="font-size:.85rem">
@@ -194,6 +194,33 @@
         </div>
         {{end}}
       </div>
+      {{if .Usage.Models}}
+      <h3 class="usage-models-title">{{T .Lang "dash.usagestats.bymodel"}}</h3>
+      <div class="table-wrap">
+        <table class="usage-models">
+          <thead>
+            <tr>
+              <th>{{T .Lang "dash.col.model"}}</th>
+              <th>{{T .Lang "dash.col.requests"}}</th>
+              <th>{{T .Lang "dash.col.input"}}</th>
+              <th>{{T .Lang "dash.col.output"}}</th>
+              <th>{{T .Lang "dash.col.total"}}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Usage.Models}}
+            <tr>
+              <td>{{if .Model}}<code>{{.Model}}</code>{{else}}<em class="text-faint">{{T $.Lang "dash.col.model.unknown"}}</em>{{end}}</td>
+              <td>{{thousands .Requests}}</td>
+              <td>{{thousands .PromptTokens}}</td>
+              <td>{{thousands .CompletionTokens}}</td>
+              <td>{{thousands .TotalTokens}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{end}}
     {{else}}
       <p class="text-muted">{{T .Lang "dash.usagestats.none"}}</p>
     {{end}}

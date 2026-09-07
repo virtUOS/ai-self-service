@@ -82,6 +82,7 @@ func TestDashboardRendersUsage(t *testing.T) {
 		APIKey:     &database.APIKey{KeyPrefix: "sk-abc", ExpiresAt: time.Now().Add(24 * time.Hour)},
 		APIBaseURL: "https://gw/v1",
 		CSRFToken:  "TOK",
+		BudgetUnit: "$",
 	}
 
 	withUsage := base
@@ -126,17 +127,17 @@ func TestDashboardRendersUsage(t *testing.T) {
 func TestUserUsageFallsBackToTotal(t *testing.T) {
 	fake := keyprovider.NewFake()
 	fake.UsageByRef = nil // logging disabled: no per-day rows
-	fake.TotalByRef = map[string]int64{"sk-live": 545}
+	fake.TotalByRef = map[string]float64{"sk-live": 0.0123}
 
 	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN)
-	if got.Total != 545 {
-		t.Errorf("Total = %d, want 545 from the key's own spend", got.Total)
+	if !got.TotalOnly {
+		t.Error("TotalOnly should mark that no per-day breakdown is available")
+	}
+	if got.TotalSpend != 0.0123 {
+		t.Errorf("TotalSpend = %v, want 0.0123 from the key's own spend", got.TotalSpend)
 	}
 	if len(got.Days) != 0 {
 		t.Errorf("no per-day rows expected, got %d", len(got.Days))
-	}
-	if !got.TotalOnly {
-		t.Error("TotalOnly should mark that no per-day breakdown is available")
 	}
 }
 
@@ -147,7 +148,7 @@ func TestUserUsagePrefersPerDayRows(t *testing.T) {
 	fake.UsageByRef = map[string][]keyprovider.DailyUsage{
 		"sk-live": {{Day: "2026-08-01", Tokens: 100}},
 	}
-	fake.TotalByRef = map[string]int64{"sk-live": 999999}
+	fake.TotalByRef = map[string]float64{"sk-live": 9.99}
 
 	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN)
 	if got.Total != 100 {
@@ -158,16 +159,17 @@ func TestUserUsagePrefersPerDayRows(t *testing.T) {
 	}
 }
 
-// Users need to know what is left, not only what they have spent. The figures
-// come from the key's enforced budget so they match the limit users actually
-// hit, rather than a 30-day sum that need not align with the quota period.
-func TestUserUsageReportsRemaining(t *testing.T) {
+// Users need to know how much of their allowance is gone, not only what they
+// have spent. The figures come from the key's enforced budget so they match
+// the limit users actually hit, rather than a 30-day sum that need not align
+// with the quota period.
+func TestUserUsageReportsPercentOfBudget(t *testing.T) {
 	fake := keyprovider.NewFake()
 	fake.UsageByRef = map[string][]keyprovider.DailyUsage{
 		"k": {{Day: "2026-08-25", Tokens: 420_000}},
 	}
 	fake.QuotaByRef = map[string]keyprovider.Quota{
-		"k": {UsedTokens: 420_000, LimitTokens: 1_500_000,
+		"k": {Used: 0.042, Limit: 0.15,
 			ResetsAt: time.Now().Add(6 * time.Hour)},
 	}
 
@@ -175,27 +177,69 @@ func TestUserUsageReportsRemaining(t *testing.T) {
 	if !got.HasQuota {
 		t.Fatal("HasQuota should be set when the key has a budget")
 	}
-	if got.Remaining != 1_080_000 {
-		t.Errorf("Remaining = %d, want 1080000", got.Remaining)
-	}
 	if got.QuotaPct != 28 {
-		t.Errorf("QuotaPct = %d, want 28 (420k of 1.5M)", got.QuotaPct)
+		t.Errorf("QuotaPct = %d, want 28 (0.042 of 0.15)", got.QuotaPct)
+	}
+	if got.Used != 0.042 || got.Limit != 0.15 {
+		t.Errorf("Used/Limit = %v/%v, want 0.042/0.15", got.Used, got.Limit)
 	}
 }
 
-// An unlimited profile has nothing remaining to report, and must not be shown
-// as though its quota were exhausted.
-func TestUserUsageUnlimitedHasNoRemaining(t *testing.T) {
+// An unlimited profile has no allowance to report against, so it must report
+// no quota at all rather than one that looks exhausted.
+func TestUserUsageUnlimitedReportsNoQuota(t *testing.T) {
 	fake := keyprovider.NewFake()
 	fake.QuotaByRef = map[string]keyprovider.Quota{
-		"k": {UsedTokens: 545, LimitTokens: 0},
+		"k": {Used: 0.05, Limit: 0},
 	}
 	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"}, "", i18n.EN)
 	if got.HasQuota {
 		t.Error("HasQuota should be false for an unlimited key")
 	}
-	if got.Remaining != 0 || got.QuotaPct != 0 {
-		t.Errorf("unlimited key reported remaining=%d pct=%d", got.Remaining, got.QuotaPct)
+	if got.QuotaPct != 0 {
+		t.Errorf("unlimited key reported pct=%d", got.QuotaPct)
+	}
+}
+
+// The usage card lists what each model consumed, from the same log as the
+// chart, so a researcher can see where their tokens went.
+func TestUserUsageReportsModels(t *testing.T) {
+	fake := keyprovider.NewFake()
+	fake.UsageByRef = map[string][]keyprovider.DailyUsage{"k": {{Day: "2026-08-25", Tokens: 10}}}
+	fake.ModelUsageByRef = map[string][]keyprovider.ModelUsage{
+		"k": {{Model: "qwen", Requests: 2, PromptTokens: 7, CompletionTokens: 3, TotalTokens: 10}},
+	}
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"}, "", i18n.EN)
+	if len(got.Models) != 1 || got.Models[0].Model != "qwen" || got.Models[0].TotalTokens != 10 {
+		t.Errorf("Models = %+v, want the qwen row", got.Models)
+	}
+}
+
+// The gateway logs some requests without a model name. A blank cell reads as
+// a rendering fault, so the table says so in the reader's language instead.
+func TestDashboardNamesAnUnknownModel(t *testing.T) {
+	var buf bytes.Buffer
+	if err := parseDashboardTemplate().Execute(&buf, dashboardData{
+		Lang:       i18n.EN,
+		User:       &database.User{Name: "T", Email: "t@example.com"},
+		APIKey:     &database.APIKey{KeyPrefix: "sk-a", ExpiresAt: time.Now().Add(24 * time.Hour)},
+		CSRFToken:  "TOK",
+		BudgetUnit: "$",
+		Usage: usageReport{
+			Days:   []keyprovider.DailyUsage{{Day: "2026-08-25", Tokens: 10}},
+			Total:  10,
+			Peak:   10,
+			Models: []keyprovider.ModelUsage{{Model: "", Requests: 1, TotalTokens: 10}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "unknown") {
+		t.Error("a row with no model name should say so rather than render blank")
+	}
+	if strings.Contains(out, "<td><code></code></td>") {
+		t.Error("a row with no model name rendered an empty code cell")
 	}
 }
 
@@ -212,7 +256,7 @@ func TestQuotaResetIsRenderedRelative(t *testing.T) {
 			APIKey:    &database.APIKey{KeyPrefix: "sk-a", ExpiresAt: time.Now().Add(24 * time.Hour)},
 			CSRFToken: "TOK",
 			Usage: usageReport{
-				HasQuota: true, Used: 8_622, Remaining: 1_378, QuotaPct: 86,
+				HasQuota: true, Used: 0.086, Limit: 0.1, QuotaPct: 86,
 				ResetsAt: reset,
 			},
 		}); err != nil {

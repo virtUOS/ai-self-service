@@ -44,10 +44,10 @@ func TestOwnerWindowUsesOwnerSpendNotTheKeyLog(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var owner *struct{ Used, Limit int64 }
+	var owner *struct{ Used, Limit float64 }
 	for _, w := range got {
 		if w.Period == "7d" {
-			owner = &struct{ Used, Limit int64 }{w.UsedTokens, w.LimitTokens}
+			owner = &struct{ Used, Limit float64 }{w.Used, w.Limit}
 		}
 	}
 	if owner == nil {
@@ -56,9 +56,9 @@ func TestOwnerWindowUsesOwnerSpendNotTheKeyLog(t *testing.T) {
 	if owner.Used == 0 {
 		t.Error("owner window shows 0 used after a rotation; its spend survives the key")
 	}
-	// $10 of a $25 allowance, so 40% of the window's tokens.
-	if want := owner.Limit * 10 / 25; owner.Used != want {
-		t.Errorf("owner used = %d, want %d (spend $10 of $25)", owner.Used, want)
+	// The owner's own counter: $10 against a $25 allowance, passed through.
+	if owner.Used != 10 || owner.Limit != 25 {
+		t.Errorf("owner window = %v of %v, want 10 of 25", owner.Used, owner.Limit)
 	}
 }
 
@@ -89,8 +89,8 @@ func TestKeyWindowsStillUseTheKeyLog(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, w := range got {
-		if w.Period == "1h" && w.UsedTokens != 0 {
-			t.Errorf("1h window = %d used, want 0: a new key really has spent nothing", w.UsedTokens)
+		if w.Period == "1h" && w.Used != 0 {
+			t.Errorf("1h window = %v used, want 0: a new key really has spent nothing", w.Used)
 		}
 	}
 }

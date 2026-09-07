@@ -245,7 +245,7 @@ func TestDeleteKeyRevokesUpstream(t *testing.T) {
 	}
 }
 
-// The profile's quota must reach the provider as a token allowance.
+// The profile's quota must reach the provider as a spend budget.
 func TestGenerateKeyPassesQuotaToProvider(t *testing.T) {
 	ui, fake, store, user := newTestUI(t, "kf7")
 	ctx := context.Background()
@@ -255,7 +255,7 @@ func TestGenerateKeyPassesQuotaToProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.SetProfileQuotas(ctx, p.ID, []database.ProfileQuota{
-		{Tokens: 1_000_000, Period: "24h"},
+		{Budget: 0.1, Period: "24h"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +268,7 @@ func TestGenerateKeyPassesQuotaToProvider(t *testing.T) {
 		t.Fatal("no key created")
 	}
 	got := fake.Created[0].Limits
-	if len(got.Quotas) != 1 || got.Quotas[0].Tokens != 1_000_000 || got.Quotas[0].Period != "24h" {
-		t.Errorf("limits = %+v, want one window of 1000000/24h", got.Quotas)
+	if len(got.Quotas) != 1 || got.Quotas[0].Budget != 0.1 || got.Quotas[0].Period != "24h" {
+		t.Errorf("limits = %+v, want one window of 0.1/24h", got.Quotas)
 	}
 }

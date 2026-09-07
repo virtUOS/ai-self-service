@@ -91,24 +91,15 @@ func main() {
 	gateway := litellm.NewClient(cfg.LiteLLMBaseURL, cfg.LiteLLMMasterKey)
 	keys := litellm.NewProvider(gateway)
 
-	// Token quotas are converted to spend caps at the price the gateway
-	// charges. Read it now rather than trusting a constant to have been kept
-	// in step, and say so when models disagree: LiteLLM enforces one cap per
-	// key whatever model a request names, so a dearer model draws the
-	// allowance down faster and the token figure stops being exact.
-	//
-	// A failure here is not fatal. The conversion falls back to the nominal
-	// rate, which is what the deployment is expected to use, and the portal is
-	// more useful with an approximate quota than not starting at all.
-	if err := gateway.RefreshPricing(ctx); err != nil {
-		slog.Warn("could not read model pricing; quotas use the nominal rate", "err", err)
-	} else if p := gateway.CurrentPricing(); !p.Uniform {
-		for _, o := range p.Outliers {
-			slog.Warn("model priced differently from the rest; token quotas are approximate",
-				"model", o.Model, "input_cost_per_token", o.Input, "output_cost_per_token", o.Output)
+	// A model priced at zero accrues no spend, so a budget over it never
+	// binds. Say so at startup; nothing else about prices needs checking now
+	// that quotas are budgets and differing prices are the expected state.
+	if p, err := gateway.Pricing(ctx); err != nil {
+		slog.Warn("could not read model pricing", "err", err)
+	} else {
+		for _, m := range p.Unpriced {
+			slog.Warn("model is unpriced; quotas do not bind on it", "model", m)
 		}
-		slog.Warn("converting token quotas at the dearest rate so caps are not overshot",
-			"token_price", p.TokenPrice)
 	}
 
 	ui := handlers.NewUI(cfg, store, sessions, oidcProvider, keys, csrf)

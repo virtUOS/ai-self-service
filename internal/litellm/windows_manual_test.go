@@ -27,12 +27,12 @@ func TestE2EWindowsReportRealUsage(t *testing.T) {
 		t.Fatal("no windows reported for a key that should have them")
 	}
 	for _, w := range windows {
-		t.Logf("%-4s used=%-10d limit=%-10d known=%v resets=%s",
-			w.Period, w.UsedTokens, w.LimitTokens, w.UsedKnown, w.ResetsAt.Format("2006-01-02T15:04Z"))
-		if w.LimitTokens <= 0 {
+		t.Logf("%-4s used=%-10v limit=%-10v known=%v resets=%s",
+			w.Period, w.Used, w.Limit, w.UsedKnown, w.ResetsAt.Format("2006-01-02T15:04Z"))
+		if w.Limit <= 0 {
 			t.Errorf("%s window has no limit", w.Period)
 		}
-		if w.UsedTokens > w.LimitTokens {
+		if w.Used > w.Limit {
 			t.Logf("  note: %s window is over its allowance", w.Period)
 		}
 	}

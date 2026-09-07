@@ -128,7 +128,7 @@ func TestProfileQuotaFieldsPersist(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{
-		{Tokens: 1_000_000, Period: "24h"},
+		{Budget: 0.1, Period: "24h"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestProfileQuotaFieldsPersist(t *testing.T) {
 	if got.KeyDurationDays != 30 {
 		t.Fatalf("after create: days=%d", got.KeyDurationDays)
 	}
-	if len(got.Quotas) != 1 || got.Quotas[0].Tokens != 1_000_000 || got.Quotas[0].Period != "24h" {
+	if len(got.Quotas) != 1 || got.Quotas[0].Budget != 0.1 || got.Quotas[0].Period != "24h" {
 		t.Fatalf("after create: quotas=%+v", got.Quotas)
 	}
 
@@ -149,7 +149,7 @@ func TestProfileQuotaFieldsPersist(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{
-		{Tokens: 5_000_000, Period: "30d"},
+		{Budget: 0.5, Period: "30d"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -157,13 +157,13 @@ func TestProfileQuotaFieldsPersist(t *testing.T) {
 	if got.KeyDurationDays != 365 {
 		t.Fatalf("after update: days=%d", got.KeyDurationDays)
 	}
-	if len(got.Quotas) != 1 || got.Quotas[0].Tokens != 5_000_000 || got.Quotas[0].Period != "30d" {
+	if len(got.Quotas) != 1 || got.Quotas[0].Budget != 0.5 || got.Quotas[0].Period != "30d" {
 		t.Fatalf("after update: quotas=%+v", got.Quotas)
 	}
 }
 
 // Profiles created before this migration must keep working, with the new
-// columns defaulting to "unset" rather than imposing a zero-token quota.
+// columns defaulting to "unset" rather than imposing a zero budget.
 func TestExistingProfilesGetSafeDefaults(t *testing.T) {
 	s := migratedStore(t, "pq2")
 	ctx := context.Background()

@@ -22,8 +22,8 @@ func TestUserUsageReportsEveryWindow(t *testing.T) {
 	fake := keyprovider.NewFake()
 	fake.WindowsByRef = map[string][]keyprovider.WindowUsage{
 		"sk-live": {
-			{Period: "1h", UsedTokens: 800, LimitTokens: 1_000, UsedKnown: true},
-			{Period: "30d", UsedTokens: 9_590, LimitTokens: 1_000_000, UsedKnown: true},
+			{Period: "1h", Used: 0.8, Limit: 1.0, UsedKnown: true},
+			{Period: "30d", Used: 0.00959, Limit: 1.0, UsedKnown: true},
 		},
 	}
 
@@ -36,23 +36,21 @@ func TestUserUsageReportsEveryWindow(t *testing.T) {
 	if got.Windows[0].Pct != 80 {
 		t.Errorf("1h window at %d%%, want 80", got.Windows[0].Pct)
 	}
-	if got.Windows[0].Remaining != 200 {
-		t.Errorf("1h remaining = %d, want 200", got.Windows[0].Remaining)
-	}
-	if got.Windows[0].Label == "" || got.Windows[0].LimitText == "" {
+	if got.Windows[0].Label == "" {
 		t.Error("window is missing its formatted label")
 	}
 }
 
 // The headline figure must name the window that binds — the one that will
-// reject the next request — not the widest. Showing 1M remaining while an
-// hourly cap is nearly spent tells the user they have room they do not have.
+// reject the next request — not the widest. Reporting the monthly window's
+// ample headroom while an hourly cap is nearly spent tells the user they have
+// room they do not have.
 func TestUserUsageHeadlineFollowsTheBindingWindow(t *testing.T) {
 	fake := keyprovider.NewFake()
 	fake.WindowsByRef = map[string][]keyprovider.WindowUsage{
 		"sk-live": {
-			{Period: "1h", UsedTokens: 950, LimitTokens: 1_000, UsedKnown: true},
-			{Period: "30d", UsedTokens: 9_590, LimitTokens: 1_000_000, UsedKnown: true},
+			{Period: "1h", Used: 0.00095, Limit: 0.001, UsedKnown: true},
+			{Period: "30d", Used: 0.00959, Limit: 1.0, UsedKnown: true},
 		},
 	}
 
@@ -61,9 +59,6 @@ func TestUserUsageHeadlineFollowsTheBindingWindow(t *testing.T) {
 
 	if got.QuotaPct != 95 {
 		t.Errorf("headline at %d%%, want the 95%% hourly window", got.QuotaPct)
-	}
-	if got.Remaining != 50 {
-		t.Errorf("headline remaining = %d, want the hourly window's 50", got.Remaining)
 	}
 }
 
@@ -74,12 +69,12 @@ func TestUserUsageFallsBackWhenWindowSpendUnknown(t *testing.T) {
 	fake := keyprovider.NewFake()
 	fake.WindowsByRef = map[string][]keyprovider.WindowUsage{
 		"sk-live": {
-			{Period: "1h", LimitTokens: 1_000, UsedKnown: false},
-			{Period: "30d", UsedTokens: 9_590, LimitTokens: 1_000_000, UsedKnown: true},
+			{Period: "1h", Limit: 0.001, UsedKnown: false},
+			{Period: "30d", Used: 0.00959, Limit: 1.0, UsedKnown: true},
 		},
 	}
 	fake.QuotaByRef = map[string]keyprovider.Quota{
-		"sk-live": {UsedTokens: 9_590, LimitTokens: 1_000_000},
+		"sk-live": {Used: 0.00959, Limit: 1.0},
 	}
 
 	got := windowsUI(fake).userUsage(context.Background(),
@@ -91,8 +86,8 @@ func TestUserUsageFallsBackWhenWindowSpendUnknown(t *testing.T) {
 	if !got.HasQuota {
 		t.Error("fell back to no quota at all rather than the single bar")
 	}
-	if got.Used != 9_590 {
-		t.Errorf("fallback bar shows %d used, want the gateway figure", got.Used)
+	if got.Used != 0.00959 {
+		t.Errorf("fallback bar shows %v used, want the gateway figure", got.Used)
 	}
 }
 
@@ -101,7 +96,7 @@ func TestUserUsageSurvivesWindowError(t *testing.T) {
 	fake := keyprovider.NewFake()
 	fake.WindowsErr = errors.New("gateway down")
 	fake.QuotaByRef = map[string]keyprovider.Quota{
-		"sk-live": {UsedTokens: 10, LimitTokens: 100},
+		"sk-live": {Used: 0.01, Limit: 0.1},
 	}
 
 	got := windowsUI(fake).userUsage(context.Background(),
@@ -117,8 +112,8 @@ func TestUserUsageSurvivesWindowError(t *testing.T) {
 
 // An over-spent window renders as full rather than overflowing its bar.
 func TestQuotaPctClampsAtFull(t *testing.T) {
-	if got := quotaPct(150, 100); got != 100 {
-		t.Errorf("quotaPct(150,100) = %d, want 100", got)
+	if got := quotaPct(2.0, 1.0); got != 100 {
+		t.Errorf("quotaPct(2,1) = %d, want 100", got)
 	}
 	if got := quotaPct(10, 0); got != 0 {
 		t.Errorf("quotaPct with no limit = %d, want 0", got)
@@ -146,7 +141,7 @@ func TestUserUsageKeepsWindowResetTimes(t *testing.T) {
 	reset := time.Now().Add(30 * time.Minute).UTC()
 	fake := keyprovider.NewFake()
 	fake.WindowsByRef = map[string][]keyprovider.WindowUsage{
-		"sk-live": {{Period: "1h", UsedTokens: 1, LimitTokens: 10, ResetsAt: reset, UsedKnown: true}},
+		"sk-live": {{Period: "1h", Used: 0.1, Limit: 1.0, ResetsAt: reset, UsedKnown: true}},
 	}
 
 	got := windowsUI(fake).userUsage(context.Background(),
