@@ -46,8 +46,7 @@ Copy `.env.example` to `.env` and fill in the values:
 | `KEY_DURATION_DAYS`  | no       | `90`        | Default key validity; profiles may override it                     |
 | `BUDGET_UNIT`        | no       | `$`         | Unit label for quota amounts; use a word such as `credits` when model prices are nominal |
 | `USAGE_HISTORY_DAYS` | no       | `30`        | How far back the usage chart and per-model table reach; the gateway's spend-log retention must cover it |
-| `SUCCESSOR_URL`      | no       |             | Set on a portal being retired: the dashboard shows a banner sending users to this address and warning that keys issued here will be revoked. Keys can no longer be created or extended here, only deleted |
-| `SUCCESSOR_KEYS_REVOKED_ON` | no |            | Date named in that banner, shown as given (e.g. `2026-10-01`); empty leaves the date out |
+| `SUCCESSOR_URL`      | no       |             | Set on a portal being retired: the dashboard shows a banner sending users to this address. Keys can no longer be created or extended here, only deleted; existing keys expire on their own |
 | `SMTP_HOST`          | no       | —           | `host:port` of a mail relay; unset disables expiry emails          |
 | `SMTP_FROM`          | no       | `noreply@uni-osnabrueck.de` | Sender address for expiry emails                   |
 | `SMTP_USERNAME`      | no       | —           | Only if the relay requires authentication                          |

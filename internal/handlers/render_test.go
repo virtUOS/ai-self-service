@@ -48,8 +48,9 @@ func TestDashboardTemplateRenders(t *testing.T) {
 	}
 }
 
-// A portal being retired tells users where to go instead, and that keys
-// issued here will stop working. Nothing of the sort appears otherwise.
+// A portal being retired tells users where to go instead. Its keys are not
+// revoked; they run out on their own, so the banner names no date and makes
+// no threat. Nothing of the sort appears otherwise.
 func TestDashboardShowsSuccessorBanner(t *testing.T) {
 	base := dashboardData{
 		Lang:      i18n.EN,
@@ -66,7 +67,7 @@ func TestDashboardShowsSuccessorBanner(t *testing.T) {
 	}
 
 	out := render(base)
-	if strings.Contains(out, "will be revoked") {
+	if strings.Contains(out, "only for testing") {
 		t.Error("banner shown with no successor configured")
 	}
 
@@ -74,16 +75,14 @@ func TestDashboardShowsSuccessorBanner(t *testing.T) {
 	with.SuccessorURL = "https://ai-keys.example.edu"
 	out = render(with)
 	for _, want := range []string{
-		`href="https://ai-keys.example.edu"`, "only for testing", "Keys issued here will be revoked.",
+		`href="https://ai-keys.example.edu"`, "only for testing", "create your key on the new portal",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("banner is missing %q", want)
 		}
 	}
-
-	with.SuccessorKeysRevokedOn = "2026-10-01"
-	if out = render(with); !strings.Contains(out, "will be revoked on 2026-10-01.") {
-		t.Error("banner does not name the revocation date")
+	if strings.Contains(out, "revoked") {
+		t.Error("banner threatens revocation; keys expire on their own")
 	}
 }
 
