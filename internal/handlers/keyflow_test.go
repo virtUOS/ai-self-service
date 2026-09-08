@@ -272,3 +272,39 @@ func TestGenerateKeyPassesQuotaToProvider(t *testing.T) {
 		t.Errorf("limits = %+v, want one window of 0.1/24h", got.Quotas)
 	}
 }
+
+// A portal being retired must not hand out or prolong keys, even to a
+// request that skips the hidden buttons. Deleting stays allowed so users
+// can clean up before the cut-off.
+func TestRetiredPortalRefusesGenerateAndExtend(t *testing.T) {
+	ui, fake, store, user := newTestUI(t, "kf-retired")
+
+	// Issue a key while the portal is still open, so extend has something
+	// to act on and delete has something to remove.
+	post(t, ui, ui.GenerateKey, "/key/generate")
+	before, _ := store.GetAPIKeyByUser(context.Background(), user.ID)
+
+	ui.cfg.SuccessorURL = "https://ai-keys.example.edu"
+
+	if rec := post(t, ui, ui.GenerateKey, "/key/generate"); rec.Code != http.StatusForbidden {
+		t.Errorf("generate on a retired portal returned %d, want 403", rec.Code)
+	}
+	if len(fake.Created) != 1 {
+		t.Errorf("provider created %d keys, want 1", len(fake.Created))
+	}
+
+	if rec := post(t, ui, ui.ExtendKey, "/key/extend"); rec.Code != http.StatusForbidden {
+		t.Errorf("extend on a retired portal returned %d, want 403", rec.Code)
+	}
+	after, _ := store.GetAPIKeyByUser(context.Background(), user.ID)
+	if !after.ExpiresAt.Equal(before.ExpiresAt) {
+		t.Errorf("expiry moved from %v to %v", before.ExpiresAt, after.ExpiresAt)
+	}
+
+	if rec := post(t, ui, ui.DeleteKey, "/key/delete"); rec.Code != http.StatusFound {
+		t.Errorf("delete on a retired portal returned %d, want 302", rec.Code)
+	}
+	if fake.LiveCount() != 0 {
+		t.Errorf("delete left %d keys live", fake.LiveCount())
+	}
+}
