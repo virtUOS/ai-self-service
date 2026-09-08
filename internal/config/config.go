@@ -59,10 +59,8 @@ type Config struct {
 
 	// SuccessorURL, when set, marks this portal as being retired: the
 	// dashboard tells users to create their key at that address instead and
-	// that keys issued here will be revoked. SuccessorKeysRevokedOn is the
-	// date to name for that, shown as given; empty leaves the date out.
-	SuccessorURL           string
-	SuccessorKeysRevokedOn string
+	// no longer issues or extends keys. Existing keys run out on their own.
+	SuccessorURL string
 
 	// BudgetUnit labels quota amounts on the dashboard and admin page. It is
 	// the currency LiteLLM prices models in, or a word like "credits" when the
@@ -92,8 +90,7 @@ func Load() (*Config, error) {
 		ListenAddr: envOr("LISTEN_ADDR", ":8080"),
 		BudgetUnit: envOr("BUDGET_UNIT", "$"),
 
-		SuccessorURL:           strings.TrimSpace(os.Getenv("SUCCESSOR_URL")),
-		SuccessorKeysRevokedOn: strings.TrimSpace(os.Getenv("SUCCESSOR_KEYS_REVOKED_ON")),
+		SuccessorURL: strings.TrimSpace(os.Getenv("SUCCESSOR_URL")),
 	}
 
 	cfg.AdminRole = strings.TrimSpace(os.Getenv("ADMIN_ROLE"))
