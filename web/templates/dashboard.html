@@ -106,6 +106,8 @@
       </dl>
 
       <div class="btn-row">
+        {{/* A retired portal only lets users clean up; the successor issues keys now. */}}
+        {{if not .SuccessorURL}}
         <form method="POST" action="/key/extend">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button type="submit" class="btn btn-secondary">{{T .Lang "dash.extend"}} ({{T .Lang "dash.extend.until"}} {{.ExtendUntil}})</button>
@@ -115,6 +117,7 @@
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button type="submit" class="btn btn-secondary">{{T .Lang "dash.regenerate"}}</button>
         </form>
+        {{end}}
         <form method="POST" action="/key/delete"
               onsubmit="return confirm({{T .Lang "dash.confirm.delete"}})">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -125,10 +128,12 @@
     {{else}}
 
       <p class="text-muted" style="margin-bottom:1.25rem">{{T .Lang "dash.nokey"}}</p>
+      {{if not .SuccessorURL}}
       <form method="POST" action="/key/generate">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button type="submit" class="btn btn-primary">{{T .Lang "dash.generate"}}</button>
       </form>
+      {{end}}
 
     {{end}}
   </div>

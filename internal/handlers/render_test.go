@@ -87,6 +87,48 @@ func TestDashboardShowsSuccessorBanner(t *testing.T) {
 	}
 }
 
+// A retired portal offers no way to create or prolong a key: the successor
+// does that now. Deleting stays so users can clean up before the cut-off.
+func TestRetiredPortalHidesGenerateAndExtend(t *testing.T) {
+	render := func(d dashboardData) string {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := parseDashboardTemplate().Execute(&buf, d); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+	base := dashboardData{
+		Lang:        i18n.EN,
+		User:        &database.User{Name: "T", Email: "t@example.com"},
+		CSRFToken:   "TOK",
+		ExtendUntil: "2026-12-01",
+	}
+
+	withKey := base
+	withKey.APIKey = &database.APIKey{KeyPrefix: "sk-abc", ExpiresAt: time.Now().Add(24 * time.Hour)}
+	if out := render(withKey); !strings.Contains(out, `action="/key/extend"`) || !strings.Contains(out, `action="/key/generate"`) {
+		t.Fatal("open portal is missing the extend or regenerate form")
+	}
+
+	withKey.SuccessorURL = "https://ai-keys.example.edu"
+	out := render(withKey)
+	for _, gone := range []string{`action="/key/extend"`, `action="/key/generate"`} {
+		if strings.Contains(out, gone) {
+			t.Errorf("retired portal still offers %s", gone)
+		}
+	}
+	if !strings.Contains(out, `action="/key/delete"`) {
+		t.Error("retired portal lost the delete form")
+	}
+
+	noKey := base
+	noKey.SuccessorURL = "https://ai-keys.example.edu"
+	if out := render(noKey); strings.Contains(out, `action="/key/generate"`) {
+		t.Error("retired portal offers to generate a key to a user without one")
+	}
+}
+
 // The no-key branch renders a different form set; it must be covered too.
 func TestDashboardTemplateNoKeyBranch(t *testing.T) {
 	tmpl := parseDashboardTemplate()

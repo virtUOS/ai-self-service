@@ -302,11 +302,26 @@ func sanitiseAlias(name string) string {
 	return strings.Trim(b.String(), "-")
 }
 
+// refuseIfRetired rejects key issuance on a portal that has a successor.
+// The dashboard hides the buttons, but a saved form or a scripted request
+// would still reach the handlers; the ban has to hold here too. Deleting
+// is not refused, so users can clean up before their keys are revoked.
+func (u *UI) refuseIfRetired(w http.ResponseWriter) bool {
+	if u.cfg.SuccessorURL == "" {
+		return false
+	}
+	http.Error(w, "This portal no longer issues or extends keys; use "+u.cfg.SuccessorURL, http.StatusForbidden)
+	return true
+}
+
 // GenerateKey creates a new LiteLLM key for the user, replacing any existing one.
 func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	su, err := u.requireSession(r)
 	if err != nil {
 		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	if u.refuseIfRetired(w) {
 		return
 	}
 
@@ -394,6 +409,9 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 	su, err := u.requireSession(r)
 	if err != nil {
 		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	if u.refuseIfRetired(w) {
 		return
 	}
 
