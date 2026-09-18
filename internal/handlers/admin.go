@@ -188,6 +188,11 @@ type adminData struct {
 	CSRFToken      string
 	// BudgetUnit labels quota amounts
 	BudgetUnit string
+	// Admins are the rows of the Admins tab. AdminRoleName is non-empty when
+	// ADMIN_ROLE is configured, so the tab can say that role holders are
+	// admins too without being able to list them.
+	Admins        []adminRow
+	AdminRoleName string
 }
 
 // Panel renders the admin page with profile and user lists.
@@ -232,6 +237,10 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("list audit events", "err", err)
 	}
+	grants, err := a.store.ListAdminGrants(r.Context())
+	if err != nil {
+		slog.Error("list admin grants", "err", err)
+	}
 	flash := r.URL.Query().Get("flash")
 	if err := a.tmpl.Execute(w, adminData{
 		Lang:            i18n.FromRequest(r),
@@ -245,6 +254,8 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 		Flash:           flash,
 		CSRFToken:       a.csrf.Token(w, r),
 		BudgetUnit:      a.cfg.BudgetUnit,
+		Admins:          adminRows(a.cfg, grants, a.actorEmail(r)),
+		AdminRoleName:   a.cfg.AdminRole,
 	}); err != nil {
 		slog.Error("admin template", "err", err)
 	}

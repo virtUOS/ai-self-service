@@ -183,3 +183,48 @@ func TestRevokeAdminHandlerRemovesAndAudits(t *testing.T) {
 		t.Errorf("audit = %+v, want an %s event", events, database.AuditAdminRevoked)
 	}
 }
+
+// Config-derived admins must render without a remove button: the button would
+// not work, since the env list outranks the table.
+func TestAdminRowsMarkConfigEntriesUnremovable(t *testing.T) {
+	cfg := &config.Config{AdminIDs: []string{"fixed@uni-osnabrueck.de"}}
+	grants := []database.AdminGrant{{Email: "granted@uni-osnabrueck.de"}}
+
+	rows := adminRows(cfg, grants, actingAdminEmail)
+
+	var fixed, granted *adminRow
+	for i := range rows {
+		switch rows[i].Email {
+		case "fixed@uni-osnabrueck.de":
+			fixed = &rows[i]
+		case "granted@uni-osnabrueck.de":
+			granted = &rows[i]
+		}
+	}
+	if fixed == nil || granted == nil {
+		t.Fatalf("rows = %+v, want both the config entry and the grant", rows)
+	}
+	if fixed.Removable {
+		t.Error("a config entry was marked removable")
+	}
+	if !granted.Removable {
+		t.Error("a grant was not marked removable")
+	}
+}
+
+// The acting admin's own row must not offer a remove button either.
+func TestAdminRowsMarkSelf(t *testing.T) {
+	grants := []database.AdminGrant{{Email: actingAdminEmail}}
+
+	rows := adminRows(&config.Config{}, grants, actingAdminEmail)
+
+	if len(rows) != 1 {
+		t.Fatalf("rows = %+v, want one", rows)
+	}
+	if !rows[0].IsSelf {
+		t.Error("the acting admin's row was not marked as self")
+	}
+	if rows[0].Removable {
+		t.Error("the acting admin's own row offered a remove button")
+	}
+}

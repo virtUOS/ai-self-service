@@ -170,9 +170,9 @@ func TestAdminTemplateRenders(t *testing.T) {
 	}
 	out := buf.String()
 	// language switcher + create form + user profile form + one delete form
-	// (the default profile hides its own delete)
-	if n := strings.Count(out, `name="csrf_token" value="TOK456"`); n != 4 {
-		t.Errorf("csrf fields rendered = %d, want 4", n)
+	// (the default profile hides its own delete) + the Admins tab's grant form
+	if n := strings.Count(out, `name="csrf_token" value="TOK456"`); n != 5 {
+		t.Errorf("csrf fields rendered = %d, want 5", n)
 	}
 	// Quotas must render as spend in the deployment's own unit.
 	// Several windows must all appear, not just the first.
@@ -191,6 +191,53 @@ func TestAdminTemplateRenders(t *testing.T) {
 // Tooltips explain jargon like TPM to admins who do not know it. Assert they
 // render with real text, since Go's contextual escaping would mangle a badly
 // quoted attribute rather than fail loudly.
+// The Admins tab interpolates the configured role name into a translated
+// sentence via {{printf (T .Lang "admin.admins.role") .AdminRoleName}} — a
+// template construct not used anywhere else in this repo. Prove it actually
+// renders, in both the branch that shows a role name and the branch that
+// omits the whole paragraph because none is configured.
+func TestAdminTemplateRendersAdminsTab(t *testing.T) {
+	tmpl := parseAdminTemplate()
+
+	render := func(d adminData) string {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, d); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+
+	withRole := render(adminData{
+		Lang:      i18n.EN,
+		Profiles:  []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
+		CSRFToken: "TOK",
+		Admins: []adminRow{
+			{Email: "fixed@uni-osnabrueck.de", Source: "config", Removable: false},
+			{Email: "granted@uni-osnabrueck.de", Source: "granted", Removable: true},
+		},
+		AdminRoleName: "ai-self-service-admin",
+	})
+	if !strings.Contains(withRole, "ai-self-service-admin") {
+		t.Error("role name not interpolated into the sentence")
+	}
+	if !strings.Contains(withRole, "fixed@uni-osnabrueck.de") || !strings.Contains(withRole, "granted@uni-osnabrueck.de") {
+		t.Error("admin rows not rendered")
+	}
+
+	withoutRole := render(adminData{
+		Lang:      i18n.EN,
+		Profiles:  []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
+		CSRFToken: "TOK",
+	})
+	if strings.Contains(withoutRole, "is an admin as well") {
+		t.Error("role sentence rendered with no role configured")
+	}
+	if !strings.Contains(withoutRole, "No admin rights granted here.") {
+		t.Error("empty-admins fallback row did not render")
+	}
+}
+
 func TestAdminTooltipsRender(t *testing.T) {
 	tmpl := parseAdminTemplate()
 	var buf bytes.Buffer
@@ -326,6 +373,11 @@ func TestAdminPageFullyGerman(t *testing.T) {
 		Profiles:        []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
 		Users:           []userRow{{User: database.User{ID: 2, Name: "U", Email: "u@x.de"}}},
 		CSRFToken:       "T",
+		Admins: []adminRow{
+			{Email: "fixed@uni-osnabrueck.de", Source: "config", Removable: false},
+			{Email: "granted@uni-osnabrueck.de", Source: "granted", Removable: true},
+		},
+		AdminRoleName: "ai-self-service-admin",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -342,13 +394,18 @@ func TestAdminPageFullyGerman(t *testing.T) {
 		">Audit log<",
 		"Allowed models",
 		"Usage limit (cost)",
+		"is an admin as well",
+		"from configuration",
+		"granted here",
+		"Email address",
+		"Make admin",
 	} {
 		if strings.Contains(out, english) {
 			t.Errorf("untranslated on the German page: %q", english)
 		}
 	}
 	// And confirm the German actually rendered.
-	for _, german := range []string{"Benutzende", "Audit-Log", "Token pro Minute"} {
+	for _, german := range []string{"Benutzende", "Audit-Log", "Token pro Minute", "Administrator", "aus der Konfiguration"} {
 		if !strings.Contains(out, german) {
 			t.Errorf("expected German text %q missing", german)
 		}

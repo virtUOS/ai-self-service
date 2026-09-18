@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
@@ -54,4 +55,42 @@ func resolveAdmin(ctx context.Context, cfg *config.Config, store *database.Store
 		return adminSourceGrant, sub != ""
 	}
 	return adminSourceNone, false
+}
+
+// adminRow is one line of the Admins tab.
+type adminRow struct {
+	Email     string
+	Source    string // "role", "config" or "granted"
+	Removable bool
+	IsSelf    bool
+}
+
+// adminRows lists every admin the panel can show, marking which ones it may
+// remove.
+//
+// Entries from ADMIN_IDS are shown but never removable: the list outranks the
+// table, so a remove button on one would silently do nothing. The acting
+// admin's own row is not removable either — see Admin.RevokeAdmin.
+//
+// ADMIN_ROLE cannot be enumerated: role membership lives in the IdP and this
+// process only ever sees the token of whoever is currently signed in. The
+// template says so rather than implying the list is complete.
+func adminRows(cfg *config.Config, grants []database.AdminGrant, actor string) []adminRow {
+	rows := make([]adminRow, 0, len(cfg.AdminIDs)+len(grants))
+	for _, id := range cfg.AdminIDs {
+		rows = append(rows, adminRow{
+			Email:  id,
+			Source: "config",
+			IsSelf: strings.EqualFold(id, actor),
+		})
+	}
+	for _, g := range grants {
+		rows = append(rows, adminRow{
+			Email:     g.Email,
+			Source:    "granted",
+			Removable: !strings.EqualFold(g.Email, actor),
+			IsSelf:    strings.EqualFold(g.Email, actor),
+		})
+	}
+	return rows
 }
