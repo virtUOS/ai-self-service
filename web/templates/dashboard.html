@@ -55,7 +55,13 @@
     <dl class="info-grid">
       <dt>{{T .Lang "dash.name"}}</dt>  <dd>{{.User.Name}}</dd>
       <dt>{{T .Lang "dash.email"}}</dt> <dd>{{.User.Email}}</dd>
-      {{if .ProfileName}}<dt>{{T .Lang "dash.profile"}} <button type="button" class="help" data-help="{{T .Lang "dash.profile.help"}}">?</button></dt> <dd>{{.ProfileName}}</dd>{{end}}
+      {{if .ProfileName}}<dt>{{T .Lang "dash.profile"}} <button type="button" class="help" data-help="{{T .Lang "dash.profile.help"}}">?</button></dt> <dd>{{.ProfileName}}
+        {{if .ProfileUntil}}
+        <p class="text-muted" style="font-size:.85rem;margin-top:.25rem">
+          {{printf (T .Lang "dash.profile.until") .ProfileUntil}}
+        </p>
+        {{end}}
+      </dd>{{end}}
       {{if .Quotas}}
       <dt>{{T .Lang "dash.usagelimit"}} <button type="button" class="help" data-help="{{T .Lang "dash.usagelimit.help"}}">?</button></dt>
       <dd>

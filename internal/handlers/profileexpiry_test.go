@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/virtuos/ai-self-service/internal/database"
 )
 
 // postToUser attaches userID as the chi URL param SetUserProfile reads, since
@@ -113,5 +114,51 @@ func TestSetUserProfileRejectsAMalformedDate(t *testing.T) {
 	}
 	if got.ProfileExpiresAt != nil {
 		t.Errorf("deadline = %v, want nil for an unparseable date", got.ProfileExpiresAt)
+	}
+}
+
+// A limit that drops silently is a support ticket: while a deadline is set the
+// dashboard has to say so.
+func TestDashboardShowsTheDeadline(t *testing.T) {
+	ui, _, store, user := newTestUI(t, "pexpd1")
+	ctx := context.Background()
+
+	p := &database.Profile{Name: "thesis project"}
+	if err := store.CreateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Date(2026, 10, 4, 23, 59, 59, 0, time.UTC)
+	if err := store.SetUserProfileUntil(ctx, user.ID, &p.ID, &deadline, nil, false); err != nil {
+		t.Fatal(err)
+	}
+
+	body := getPage(t, ui, ui.Dashboard, "/").Body.String()
+
+	if !strings.Contains(body, "2026-10-04") {
+		t.Error("the dashboard does not show the deadline")
+	}
+}
+
+// A permanent assignment must say nothing, rather than showing an empty date.
+//
+// The dashboard's Extend button already renders the word "until" (and German
+// "bis") unconditionally, so a bare substring check for those words would fail
+// for the wrong reason. Assert on the exact deadline sentence fragment instead.
+func TestDashboardSaysNothingWithoutADeadline(t *testing.T) {
+	ui, _, store, user := newTestUI(t, "pexpd2")
+	ctx := context.Background()
+
+	p := &database.Profile{Name: "standard"}
+	if err := store.CreateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetUserProfile(ctx, user.ID, &p.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	body := getPage(t, ui, ui.Dashboard, "/").Body.String()
+
+	if strings.Contains(body, "This profile applies until") || strings.Contains(body, "Dieses Profil gilt bis") {
+		t.Error("the dashboard mentions a deadline for a permanent assignment")
 	}
 }
