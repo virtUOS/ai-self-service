@@ -21,6 +21,9 @@ A self-service web portal that lets users generate, manage, and renew their own 
 - **OIDC authentication** — login, logout, and back-channel logout support
 - **SQLite storage** — single file, no separate database server
 - **Admin panel** — manage profiles and assign them to users
+- **Admin rights from the panel** — admins can grant and withdraw the admin
+  panel for other users without a redeploy; `ADMIN_IDS` still always grants and
+  cannot be removed there, so a lockout is always recoverable
 - **Local development** — Keycloak or a faster OIDC mock, both in `dev/`
 
 ## Configuration
@@ -36,8 +39,8 @@ Copy `.env.example` to `.env` and fill in the values:
 | `OIDC_CLIENT_SECRET` | yes      | —           | OIDC client secret                                                 |
 | `OIDC_REDIRECT_URL`  | yes      | —           | Callback URL (must match OIDC client config)                       |
 | `FRONTEND_URL`       | yes      | —           | Public base URL of this app (shown to users as the API base URL)   |
-| `ADMIN_ROLE`         | no       | —           | IdP role that grants the admin panel; supersedes `ADMIN_IDS`       |
-| `ADMIN_IDS`          | no       | —           | Comma-separated admins, each an OIDC subject **or** an email       |
+| `ADMIN_ROLE`         | no       | —           | IdP role that grants the admin panel; supersedes `ADMIN_IDS` and grants made in the panel |
+| `ADMIN_IDS`          | no       | —           | Comma-separated admins, each an OIDC subject **or** an email. Always grant, and cannot be removed from the panel — this is the recovery path if the last admin is removed |
 | `ADMIN_EMAILS`       | no       | —           | Deprecated alias for `ADMIN_IDS`; still read, email entries only   |
 | `DB_PATH`            | no       | `./data.db` | Path to the SQLite database file                                   |
 | `LISTEN_ADDR`        | no       | `:8080`     | Address and port to listen on                                      |
