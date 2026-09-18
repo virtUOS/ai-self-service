@@ -242,6 +242,14 @@ func (s *Store) DeleteProfile(ctx context.Context, id int64) error {
 			Where("profile_id = ?", id).Exec(ctx); err != nil {
 			return fmt.Errorf("delete profile quotas: %w", err)
 		}
+		// A user due to land on this profile would otherwise keep a dangling
+		// reference. They fall back to the default, which is what an unset
+		// destination has always meant. The deadline itself stays.
+		if _, err := tx.NewUpdate().Model((*User)(nil)).
+			Set("profile_after_expiry = NULL").
+			Where("profile_after_expiry = ?", id).Exec(ctx); err != nil {
+			return fmt.Errorf("clear pending profile destinations: %w", err)
+		}
 		_, err := tx.NewDelete().Model((*Profile)(nil)).Where("id = ?", id).Exec(ctx)
 		return err
 	})
@@ -338,6 +346,64 @@ func (s *Store) SetUserProfile(ctx context.Context, userID int64, profileID *int
 		Set("updated_at = ?", time.Now()).
 		Where("id = ?", userID).
 		Exec(ctx)
+	return err
+}
+
+// SetUserProfileUntil assigns a profile, optionally with a deadline.
+//
+// A nil expiresAt makes the assignment permanent and clears any deadline that
+// was set, so an admin can take a deadline off by clearing the date field. A
+// nil afterExpiry means the user falls back to the default profile when the
+// deadline passes — it is resolved then rather than now, so the row does not
+// go stale if the default changes in between.
+func (s *Store) SetUserProfileUntil(ctx context.Context, userID int64, profileID *int64,
+	expiresAt *time.Time, afterExpiry *int64, revokeKey bool) error {
+
+	// A deadline is what makes the other two fields meaningful; without one
+	// they would sit in the row describing an expiry that never comes.
+	if expiresAt == nil {
+		afterExpiry, revokeKey = nil, false
+	}
+	_, err := s.db.NewUpdate().Model((*User)(nil)).
+		Set("profile_id = ?", profileID).
+		Set("profile_expires_at = ?", expiresAt).
+		Set("profile_after_expiry = ?", afterExpiry).
+		Set("revoke_key_at_expiry = ?", revokeKey).
+		Set("updated_at = ?", time.Now()).
+		Where("id = ?", userID).Exec(ctx)
+	return err
+}
+
+// UsersWithPassedDeadline returns users whose assignment has run out.
+//
+// Takes the time rather than reading the clock so a test can place a deadline
+// either side of it without sleeping.
+func (s *Store) UsersWithPassedDeadline(ctx context.Context, now time.Time) ([]User, error) {
+	var users []User
+	err := s.db.NewSelect().Model(&users).
+		Where("profile_expires_at IS NOT NULL AND profile_expires_at <= ?", now).
+		OrderExpr("id ASC").Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+// ApplyProfileExpiry moves a user to their post-deadline profile and clears the
+// deadline.
+//
+// One transaction: a user left with a passed deadline and the old profile still
+// attached would be reverted again on the next run, and a user whose deadline
+// was cleared without the profile moving would keep the elevated limits for
+// good. A nil newProfileID means the default profile.
+func (s *Store) ApplyProfileExpiry(ctx context.Context, userID int64, newProfileID *int64) error {
+	_, err := s.db.NewUpdate().Model((*User)(nil)).
+		Set("profile_id = ?", newProfileID).
+		Set("profile_expires_at = NULL").
+		Set("profile_after_expiry = NULL").
+		Set("revoke_key_at_expiry = ?", false).
+		Set("updated_at = ?", time.Now()).
+		Where("id = ?", userID).Exec(ctx)
 	return err
 }
 

@@ -14,6 +14,9 @@ A self-service web portal that lets users generate, manage, and renew their own 
 
 - **Self-service key management** — generate, extend, regenerate, and delete LiteLLM API keys
 - **Profile system** — per-user key validity, fair-use spend quotas, model restrictions and TPM/RPM limits
+- **Time-limited assignments** — any profile can be assigned to a user until a
+  date, after which it reverts on its own to the default profile, to a profile
+  the admin chose, or by deleting the key
 - **Usage reporting** — users see what their key has consumed, per day and against their quota
 - **Model discovery** — the dashboard lists the models a key may use, click to copy the exact name
 - **Expiry notifications** — users are warned before their key expires, in the
@@ -117,7 +120,10 @@ over emails above. The admin panel at `/admin` provides:
 
 - **Profiles** — create and edit profiles with model restrictions, TPM/RPM limits, and budget caps. Mark one profile as default; it applies to users with no explicit profile assignment.
 - **Users** — view everyone who has logged in, see their key prefix and expiry,
-  assign a profile, and revoke a key.
+  assign a profile, and revoke a key. An assignment can carry a deadline: set a
+  date and the user reverts to the default profile when it passes, or to a
+  profile you choose, or their key is deleted if you tick that instead. Leave
+  the date empty for a permanent assignment.
 - **Admins** — grant and revoke admin rights, and see where each admin's
   rights come from. Entries from `ADMIN_ROLE` or `ADMIN_IDS` show as "from
   configuration" with no remove button, since removing them here would not

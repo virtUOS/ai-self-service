@@ -21,6 +21,7 @@ var messages = map[string]map[Lang]string{
 	"dash.email":           {DE: "E-Mail", EN: "Email"},
 	"dash.profile":         {DE: "Profil", EN: "Profile"},
 	"dash.profile.help":    {DE: "Ihr Profil bestimmt, welche Modelle Sie nutzen können, wie lange Ihr Schlüssel gilt und wie viel Sie pro Zeitraum verbrauchen dürfen. Es wird von der Administration zugewiesen.", EN: "Your profile decides which models you can use, how long your key lasts and how much you may use per period. An administrator assigns it."},
+	"dash.profile.until":   {DE: "Dieses Profil gilt bis zum %s. Danach gelten wieder die Standardgrenzen.", EN: "This profile applies until %s. The standard limits return afterwards."},
 	"dash.usagelimit":      {DE: "Nutzungslimit", EN: "Usage limit"},
 	"dash.usagelimit.note": {DE: "Anfragen schlagen fehl, sobald das Limit erreicht ist, und funktionieren nach dem nächsten Zurücksetzen automatisch wieder (UTC: täglich um Mitternacht, wöchentlich am Montag, monatlich am Ersten).", EN: "Requests fail once the limit is reached and resume automatically at the next reset (UTC boundaries: daily at midnight UTC, weekly on Monday, monthly on the 1st)."},
 	"dash.usagelimit.help": {DE: "Ihr Kontingent zur fairen Nutzung. Anfragen schlagen fehl, sobald es aufgebraucht ist, und funktionieren nach dem nächsten Zurücksetzen automatisch wieder. Die Zurücksetzung erfolgt zu UTC-Zeiten.", EN: "Your fair-use allowance. Requests stop working once it is used up and start again automatically at the next reset. Resets happen on UTC boundaries."},
@@ -122,6 +123,13 @@ var messages = map[string]map[Lang]string{
 	"admin.col.actor":         {DE: "Ausgeführt von", EN: "Actor"},
 	"admin.col.subject":       {DE: "Betroffen", EN: "Subject"},
 	"admin.col.detail":        {DE: "Detail", EN: "Detail"},
+	"admin.col.until":         {DE: "Befristung", EN: "Deadline"},
+
+	"admin.until":      {DE: "Befristet bis", EN: "Until"},
+	"admin.until.help": {DE: "Leer lassen für eine dauerhafte Zuweisung.", EN: "Leave empty for a permanent assignment."},
+	"admin.thenswitch": {DE: "Danach wechseln zu", EN: "Then switch to"},
+	"admin.thenrevoke": {DE: "Stattdessen Schlüssel löschen", EN: "Delete the key instead"},
+	"admin.permanent":  {DE: "dauerhaft", EN: "permanent"},
 
 	"admin.all":        {DE: "alle", EN: "all"},
 	"admin.none":       {DE: "keiner", EN: "none"},

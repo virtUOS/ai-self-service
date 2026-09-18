@@ -27,6 +27,7 @@ import (
 	"github.com/virtuos/ai-self-service/internal/metrics"
 	"github.com/virtuos/ai-self-service/internal/notify"
 	oidcpkg "github.com/virtuos/ai-self-service/internal/oidc"
+	"github.com/virtuos/ai-self-service/internal/profileexpiry"
 	"github.com/virtuos/ai-self-service/internal/session"
 	"github.com/virtuos/ai-self-service/web"
 )
@@ -206,6 +207,12 @@ func main() {
 	go notify.NewReminder(store, notifier, cfg.FrontendURL, nil).
 		Start(reminderCtx, 6*time.Hour)
 
+	// Revert expired profile assignments. Every 15 minutes rather than hourly:
+	// a deadline an admin set for a particular date should take effect near
+	// midnight, not up to an hour into the next day.
+	expiryCtx, stopExpiry := context.WithCancel(context.Background())
+	go profileexpiry.NewRunner(store, keys).Start(expiryCtx, 15*time.Minute)
+
 	// Refresh key gauges alongside the other periodic work. Reading them from
 	// the database keeps them correct across restarts.
 	refreshGauges := func() {
@@ -265,6 +272,7 @@ func main() {
 
 	close(stopCleanup)
 	stopReminder()
+	stopExpiry()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
