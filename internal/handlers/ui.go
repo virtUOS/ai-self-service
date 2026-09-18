@@ -80,10 +80,13 @@ type dashboardData struct {
 	ExpiresInDays int
 	ExpiryUrgent  bool
 	ProfileName   string
-	// ProfileUntil is the deadline as YYYY-MM-DD while one is set, empty
-	// otherwise. A limit that drops with no warning is a support ticket.
-	ProfileUntil string
-	Quotas       []quotaLine
+	// ProfileNotice is the whole deadline sentence, empty when the assignment
+	// is permanent. Built in the handler rather than the template because what
+	// it says depends on what the administrator chose to happen next, and a
+	// notice promising the standard limits would be wrong for a user whose key
+	// is about to be deleted instead.
+	ProfileNotice string
+	Quotas        []quotaLine
 	// BudgetUnit labels every spend figure on the page, so a deployment that
 	// bills in credits rather than dollars reads correctly.
 	BudgetUnit string
@@ -160,10 +163,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 	// appears in the URL; the query string carries only an opaque token.
 	newKey := u.flash.Take(su.User.ID, r.URL.Query().Get("k"))
 
-	profileUntil := ""
-	if su.User.ProfileExpiresAt != nil {
-		profileUntil = su.User.ProfileExpiresAt.Format("2006-01-02")
-	}
+	profileNotice := u.profileNotice(r.Context(), su.User, lang, expiryPending)
 
 	if err := u.tmpl.Execute(w, dashboardData{
 		User:            su.User,
@@ -175,7 +175,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		ExpiresInDays:   daysUntilExpiry(apiKey),
 		ExpiryUrgent:    isExpiryUrgent(apiKey),
 		ProfileName:     profileName(profile),
-		ProfileUntil:    profileUntil,
+		ProfileNotice:   profileNotice,
 		Quotas:          profileQuotaLines(profile, lang, u.cfg.BudgetUnit),
 		BudgetUnit:      u.cfg.BudgetUnit,
 		SuccessorURL:    u.cfg.SuccessorURL,
@@ -797,4 +797,50 @@ func bindingWindow(windows []quotaWindowView) *quotaWindowView {
 		}
 	}
 	return binding
+}
+
+// profileNotice is the sentence telling a user their assignment ends, and what
+// happens when it does.
+//
+// It names the actual outcome rather than assuming the default one: an admin
+// can send the user to any profile, or have the key deleted instead, and a
+// notice promising "the standard limits return" would be wrong — worst of all
+// for the user whose key is about to disappear.
+//
+// Once the deadline has passed the wording moves to the past tense. The user
+// is still on the profile until the expiry job runs, so claiming it "applies
+// until" a date already gone contradicts the page it sits on.
+//
+// Returns empty for a permanent assignment, which is almost every user.
+func (u *UI) profileNotice(ctx context.Context, user *database.User, lang i18n.Lang, overdue bool) string {
+	if user.ProfileExpiresAt == nil {
+		return ""
+	}
+	date := user.ProfileExpiresAt.Format("2006-01-02")
+
+	if overdue {
+		return fmt.Sprintf(i18n.T(lang, "dash.profile.overdue"), date)
+	}
+	if user.RevokeKeyAtExpiry {
+		return fmt.Sprintf(i18n.T(lang, "dash.profile.until.revoke"), date)
+	}
+	if user.ProfileAfterExpiry != nil {
+		// A profile that has since been deleted leaves the row pointing at
+		// nothing; the user then falls back to the default, so say that rather
+		// than naming a profile that no longer exists.
+		//
+		// A database error looks the same from here and takes the same branch:
+		// the page still renders, with the generic wording. Logged because it
+		// is otherwise indistinguishable from the deleted-profile case, which
+		// is routine.
+		dest, err := u.store.GetProfile(ctx, *user.ProfileAfterExpiry)
+		if err != nil {
+			slog.Error("dashboard: load post-expiry profile",
+				"profile_id", *user.ProfileAfterExpiry, "err", err)
+		}
+		if err == nil && dest != nil {
+			return fmt.Sprintf(i18n.T(lang, "dash.profile.until.profile"), date, dest.Name)
+		}
+	}
+	return fmt.Sprintf(i18n.T(lang, "dash.profile.until"), date)
 }
