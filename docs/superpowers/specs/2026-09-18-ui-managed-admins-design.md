@@ -62,8 +62,10 @@ A third section on `/admin`, alongside Profiles and Users:
 - A list of current admins. Each row shows where the right comes from. Rows
   derived from `ADMIN_ROLE` or `ADMIN_IDS` render a "from configuration" badge
   and no remove button; only `admin_grants` rows can be removed.
-- Granting happens two ways: a "Make admin" button on the existing user rows,
-  and an email field for someone who has not logged in yet.
+- Granting is an email field on the tab, which works whether or not the person
+  has ever logged in. An earlier draft also put a "Make admin" button on the
+  existing user rows; it was dropped as redundant, since the field covers that
+  case too and each user's address is already shown beside it.
 
 ## Schema
 
