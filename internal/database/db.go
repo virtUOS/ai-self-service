@@ -503,3 +503,66 @@ func (s *Store) MarkExpiryNoticeSent(ctx context.Context, keyID int64, daysBefor
 	}).Exec(ctx)
 	return err
 }
+
+// --- Admin grants ---
+
+// GrantAdmin records admin rights for an email address.
+//
+// Granting an address that already holds a grant is a no-op rather than an
+// error: the admin pressed the button twice and the state they asked for
+// already holds.
+func (s *Store) GrantAdmin(ctx context.Context, email, grantedBy string) error {
+	_, err := s.db.NewInsert().
+		Model(&AdminGrant{Email: email, GrantedByEmail: grantedBy, CreatedAt: time.Now()}).
+		On("CONFLICT (email) DO NOTHING").
+		Exec(ctx)
+	return err
+}
+
+// RevokeAdmin removes a grant. Removing one that does not exist is not an
+// error, for the same reason granting twice is not.
+func (s *Store) RevokeAdmin(ctx context.Context, email string) error {
+	_, err := s.db.NewDelete().Model((*AdminGrant)(nil)).
+		Where("email = ? COLLATE NOCASE", email).Exec(ctx)
+	return err
+}
+
+// ListAdminGrants returns every grant made through the panel, oldest first.
+func (s *Store) ListAdminGrants(ctx context.Context) ([]AdminGrant, error) {
+	var grants []AdminGrant
+	err := s.db.NewSelect().Model(&grants).OrderExpr("created_at ASC, id ASC").Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return grants, nil
+}
+
+// IsAdminGranted reports whether a grant covers this subject or address.
+//
+// The subject is checked first and an empty one never matches, so a user whose
+// IdP omits the claim cannot take a grant whose subject is not yet recorded.
+func (s *Store) IsAdminGranted(ctx context.Context, sub, email string) (bool, error) {
+	q := s.db.NewSelect().Model((*AdminGrant)(nil))
+	if sub != "" {
+		q = q.Where("oidc_sub = ? OR email = ? COLLATE NOCASE", sub, email)
+	} else {
+		q = q.Where("email = ? COLLATE NOCASE", email)
+	}
+	count, err := q.Count(ctx)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// LinkAdminGrantSubject records the OIDC subject against a grant made by email.
+//
+// Called on login: from then on the grant is anchored to the person rather than
+// to whoever holds the address.
+func (s *Store) LinkAdminGrantSubject(ctx context.Context, email, sub string) error {
+	_, err := s.db.NewUpdate().Model((*AdminGrant)(nil)).
+		Set("oidc_sub = ?", sub).
+		Where("email = ? COLLATE NOCASE AND oidc_sub IS NULL", email).
+		Exec(ctx)
+	return err
+}
