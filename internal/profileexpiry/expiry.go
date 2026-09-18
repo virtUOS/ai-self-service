@@ -81,7 +81,7 @@ func (r *Runner) expire(ctx context.Context, u *database.User) error {
 	// with no deadline and a key still carrying the elevated limits, which no
 	// later run would ever correct.
 	if key != nil {
-		if err := r.keys.UpdateLimits(ctx, key.LiteLLMKey, u.OIDCSub, profileLimits(dest)); err != nil {
+		if err := r.keys.UpdateLimits(ctx, key.LiteLLMKey, u.OIDCSub, dest.Limits()); err != nil {
 			return fmt.Errorf("push reverted limits: %w", err)
 		}
 	}
@@ -129,23 +129,6 @@ func destName(p *database.Profile) string {
 		return "default"
 	}
 	return p.Name
-}
-
-// profileLimits maps a profile onto the provider-neutral limits.
-func profileLimits(p *database.Profile) keyprovider.Limits {
-	if p == nil {
-		return keyprovider.Limits{}
-	}
-	windows := make([]keyprovider.QuotaWindow, 0, len(p.Quotas))
-	for _, q := range p.Quotas {
-		windows = append(windows, keyprovider.QuotaWindow{Budget: q.Budget, Period: q.Period})
-	}
-	return keyprovider.Limits{
-		Models:            p.Models,
-		TokensPerMinute:   p.TPMLimit,
-		RequestsPerMinute: p.RPMLimit,
-		Quotas:            windows,
-	}
 }
 
 // Start runs the job on an interval until ctx is cancelled.

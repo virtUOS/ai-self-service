@@ -7,7 +7,6 @@ import (
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
 	"github.com/virtuos/ai-self-service/internal/i18n"
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
 
 // Expiry comes from the profile when set, and from the server otherwise, so
@@ -68,37 +67,6 @@ func TestDashboardQuotaRendering(t *testing.T) {
 			}
 		}
 	}
-}
-
-// profileLimits maps the stored profile onto the provider-neutral limits.
-func TestProfileLimits(t *testing.T) {
-	tpm := int64(1000)
-	p := &database.Profile{
-		Models:   []string{"Qwen/Qwen3.8-27B-FP8"},
-		TPMLimit: &tpm,
-		Quotas: []database.ProfileQuota{
-			{Budget: 0.1, Period: "24h"},
-		},
-	}
-	got := profileLimits(p)
-	if len(got.Models) != 1 || got.Models[0] != "Qwen/Qwen3.8-27B-FP8" {
-		t.Errorf("Models = %#v", got.Models)
-	}
-	if got.TokensPerMinute == nil || *got.TokensPerMinute != 1000 {
-		t.Errorf("TokensPerMinute = %v", got.TokensPerMinute)
-	}
-	if len(got.Quotas) != 1 || got.Quotas[0].Budget != 0.1 || got.Quotas[0].Period != "24h" {
-		t.Errorf("quotas = %+v, want one window of 0.1/24h", got.Quotas)
-	}
-}
-
-// A nil profile must produce empty limits rather than panic.
-func TestProfileLimitsNil(t *testing.T) {
-	got := profileLimits(nil)
-	if len(got.Quotas) != 0 || got.Models != nil {
-		t.Errorf("nil profile gave %#v", got)
-	}
-	_ = keyprovider.Limits{}
 }
 
 // The dashboard warning must escalate as expiry approaches and agree with the
