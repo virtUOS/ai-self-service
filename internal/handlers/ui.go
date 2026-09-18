@@ -139,11 +139,10 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 	u.syncKeyLimits(r.Context(), apiKey, profile, su.User.OIDCSub)
 
 	// The Admin link must agree with what the /admin gate will actually allow,
-	// so it is decided the same way: role first, then the configured list.
-	isAdmin := u.cfg.HasAdminRole(oidcpkg.RealmRoles(su.IDToken))
-	if !isAdmin {
-		isAdmin, _ = u.cfg.IsAdmin(su.User.OIDCSub, su.User.Email)
-	}
+	// so it is decided by the same resolver rather than a second copy of the
+	// precedence rule.
+	src, _ := resolveAdmin(r.Context(), u.cfg, u.store, su.IDToken, su.User.OIDCSub, su.User.Email)
+	isAdmin := src.isAdmin()
 
 	// Redeem a one-time new key stashed by GenerateKey. The secret never
 	// appears in the URL; the query string carries only an opaque token.

@@ -32,6 +32,7 @@
     <div class="tabs">
       <button class="tab-btn active" onclick="showTab('profiles', this)">{{T .Lang "admin.profiles"}}</button>
       <button class="tab-btn" onclick="showTab('users', this)">{{T .Lang "admin.users"}}</button>
+      <button class="tab-btn" onclick="showTab('admins', this)">{{T .Lang "admin.admins"}}</button>
       <button class="tab-btn" onclick="showTab('audit', this)">{{T .Lang "admin.audit"}}</button>
     </div>
 
@@ -243,6 +244,61 @@
       </div>
     </div>
 
+    <!-- ── Admins tab ─────────────────────────────────────── -->
+    <div id="tab-admins" class="tab-panel">
+      <h2 style="margin-bottom:1.25rem">{{T .Lang "admin.admins"}}</h2>
+      <p class="text-muted" style="margin-bottom:1rem;font-size:.9rem">
+        {{T .Lang "admin.admins.note"}}
+      </p>
+      {{if .AdminRoleName}}
+      <p class="text-muted" style="margin-bottom:1rem;font-size:.9rem">
+        {{printf (T .Lang "admin.admins.role") .AdminRoleName}}
+      </p>
+      {{end}}
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>{{T .Lang "admin.col.email"}}</th>
+              <th>{{T .Lang "admin.admins.source"}}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Admins}}
+            <tr>
+              <td>{{.Email}}{{if .IsSelf}} <span class="badge">{{T $.Lang "admin.admins.self"}}</span>{{end}}</td>
+              <td>
+                {{if eq .Source "config"}}<em class="text-faint">{{T $.Lang "admin.admins.fromconfig"}}</em>
+                {{else}}{{T $.Lang "admin.admins.granted"}}{{end}}
+              </td>
+              <td>
+                {{if .Removable}}
+                <form method="POST" action="/admin/admins/revoke" style="display:inline">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="email" value="{{.Email}}">
+                  <button class="btn btn-sm btn-danger">{{T $.Lang "admin.admins.revoke"}}</button>
+                </form>
+                {{end}}
+              </td>
+            </tr>
+            {{else}}
+            <tr><td colspan="3" class="text-faint" style="text-align:center">{{T .Lang "admin.admins.none"}}</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+
+      <form method="POST" action="/admin/admins"
+            style="display:flex;gap:.5rem;align-items:center;margin-top:1rem">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input type="email" name="email" required
+               placeholder="{{T .Lang "admin.admins.add"}}" style="width:auto">
+        <button type="submit" class="btn btn-sm btn-primary">{{T .Lang "admin.admins.grant"}}</button>
+      </form>
+    </div>
+
     <!-- ── Audit tab ──────────────────────────────────────── -->
     <div id="tab-audit" class="tab-panel">
       <h2 style="margin-bottom:1.25rem">{{T .Lang "admin.audit"}}</h2>
@@ -385,7 +441,8 @@ function resetProfileForm() {
 
 // Restore tab from hash
 if (location.hash === '#users') showTab('users', document.querySelectorAll('.tab-btn')[1]);
-if (location.hash === '#audit') showTab('audit', document.querySelectorAll('.tab-btn')[2]);
+if (location.hash === '#admins') showTab('admins', document.querySelectorAll('.tab-btn')[2]);
+if (location.hash === '#audit') showTab('audit', document.querySelectorAll('.tab-btn')[3]);
 </script>
 
 <script src="/static/help.js"></script>

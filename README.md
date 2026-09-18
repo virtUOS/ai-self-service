@@ -21,6 +21,9 @@ A self-service web portal that lets users generate, manage, and renew their own 
 - **OIDC authentication** — login, logout, and back-channel logout support
 - **SQLite storage** — single file, no separate database server
 - **Admin panel** — manage profiles and assign them to users
+- **Admin rights from the panel** — admins can grant and withdraw the admin
+  panel for other users without a redeploy; `ADMIN_IDS` still always grants and
+  cannot be removed there, so a lockout is always recoverable
 - **Local development** — Keycloak or a faster OIDC mock, both in `dev/`
 
 ## Configuration
@@ -36,8 +39,8 @@ Copy `.env.example` to `.env` and fill in the values:
 | `OIDC_CLIENT_SECRET` | yes      | —           | OIDC client secret                                                 |
 | `OIDC_REDIRECT_URL`  | yes      | —           | Callback URL (must match OIDC client config)                       |
 | `FRONTEND_URL`       | yes      | —           | Public base URL of this app (shown to users as the API base URL)   |
-| `ADMIN_ROLE`         | no       | —           | IdP role that grants the admin panel; supersedes `ADMIN_IDS`       |
-| `ADMIN_IDS`          | no       | —           | Comma-separated admins, each an OIDC subject **or** an email       |
+| `ADMIN_ROLE`         | no       | —           | IdP role that grants the admin panel; supersedes `ADMIN_IDS` and grants made in the panel |
+| `ADMIN_IDS`          | no       | —           | Comma-separated admins, each an OIDC subject **or** an email. Always grant, and cannot be removed from the panel — this is the recovery path if the last admin is removed |
 | `ADMIN_EMAILS`       | no       | —           | Deprecated alias for `ADMIN_IDS`; still read, email entries only   |
 | `DB_PATH`            | no       | `./data.db` | Path to the SQLite database file                                   |
 | `LISTEN_ADDR`        | no       | `:8080`     | Address and port to listen on                                      |
@@ -98,11 +101,31 @@ prefer: an address is assigned by the IdP and can be reassigned, so an
 allowlist keyed on it grants admin to whoever holds that address today rather
 than to a person. Each user's subject is shown in the admin panel's user table,
 click to copy. Granting by email still works and is logged as such, so an
-existing `ADMIN_EMAILS` deployment keeps running while it is migrated. The admin panel at `/admin` provides:
+existing `ADMIN_EMAILS` deployment keeps running while it is migrated.
+
+Admin rights can also be granted from the panel itself, on the **Admins** tab,
+without a redeploy. The three sources are checked in order, first match wins:
+`ADMIN_ROLE` first, then `ADMIN_IDS`, then the grants made from the panel.
+`ADMIN_IDS` always wins over a panel grant, and a panel grant can never remove
+an `ADMIN_IDS` entry, which makes the env allowlist the recovery path if the
+last panel-granted admin is ever removed by mistake — there is always a way
+back in that does not depend on the database. A grant can be made by email
+address before the person has ever logged in; their **OIDC subject** is
+recorded the first time they authenticate, and from that point the grant no
+longer depends on the address, for the same reason `ADMIN_IDS` prefers subjects
+over emails above. The admin panel at `/admin` provides:
 
 - **Profiles** — create and edit profiles with model restrictions, TPM/RPM limits, and budget caps. Mark one profile as default; it applies to users with no explicit profile assignment.
 - **Users** — view everyone who has logged in, see their key prefix and expiry,
   assign a profile, and revoke a key.
+- **Admins** — grant and revoke admin rights, and see where each admin's
+  rights come from. Entries from `ADMIN_ROLE` or `ADMIN_IDS` show as "from
+  configuration" with no remove button, since removing them here would not
+  actually take effect. `ADMIN_ROLE` holders cannot be listed individually,
+  because role membership lives in the IdP rather than this app, so the tab
+  says as much instead of implying its list is complete. An admin can neither
+  revoke their own rights nor revoke an `ADMIN_IDS` entry, and every grant and
+  revocation is written to the audit log.
 - **Audit log** — the 50 most recent key and profile changes, recording who did
   what to whom. Rows outlive the key and user they describe, so revoking does
   not erase the history.

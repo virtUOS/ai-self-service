@@ -157,6 +157,8 @@ func main() {
 		r.Post("/profiles/{id}/delete", admin.DeleteProfile)
 		r.Post("/users/{id}/profile", admin.SetUserProfile)
 		r.Post("/users/{id}/key/revoke", admin.RevokeUserKey)
+		r.Post("/admins", admin.GrantAdmin)
+		r.Post("/admins/revoke", admin.RevokeAdmin)
 	})
 
 	// Scraped by the monitoring host; Caddy restricts it to those IPs.

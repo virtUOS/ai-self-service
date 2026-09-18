@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strconv"
 	"strings"
@@ -18,7 +19,6 @@ import (
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 	"github.com/virtuos/ai-self-service/internal/litellm"
 	"github.com/virtuos/ai-self-service/internal/metrics"
-	oidcpkg "github.com/virtuos/ai-self-service/internal/oidc"
 	"github.com/virtuos/ai-self-service/internal/session"
 	"github.com/virtuos/ai-self-service/web"
 )
@@ -147,25 +147,18 @@ func (a *Admin) Middleware(next http.Handler) http.Handler {
 			http.Redirect(w, r, "/login", http.StatusFound)
 			return
 		}
-		// A role from the IdP wins: membership is then managed where staff
-		// changes already are, and the list is only a fallback for realms that
-		// do not emit one.
-		if a.cfg.HasAdminRole(oidcpkg.RealmRoles(su.IDToken)) {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		admin, bySubject := a.cfg.IsAdmin(su.User.OIDCSub, su.User.Email)
-		if !admin {
+		src, bySubject := resolveAdmin(r.Context(), a.cfg, a.store,
+			su.IDToken, su.User.OIDCSub, su.User.Email)
+		if !src.isAdmin() {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-		if !bySubject {
+		if (src == adminSourceEnv || src == adminSourceGrant) && !bySubject {
 			// The entry that granted this is an email address, which the IdP
 			// can reassign. Say so once per request rather than silently
 			// relying on it, so an operator can migrate the allowlist.
 			slog.Warn("admin granted by email rather than OIDC subject",
-				"email", su.User.Email, "sub", su.User.OIDCSub)
+				"email", su.User.Email, "sub", su.User.OIDCSub, "source", src)
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -195,6 +188,11 @@ type adminData struct {
 	CSRFToken      string
 	// BudgetUnit labels quota amounts
 	BudgetUnit string
+	// Admins are the rows of the Admins tab. AdminRoleName is non-empty when
+	// ADMIN_ROLE is configured, so the tab can say that role holders are
+	// admins too without being able to list them.
+	Admins        []adminRow
+	AdminRoleName string
 }
 
 // Panel renders the admin page with profile and user lists.
@@ -239,6 +237,10 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("list audit events", "err", err)
 	}
+	grants, err := a.store.ListAdminGrants(r.Context())
+	if err != nil {
+		slog.Error("list admin grants", "err", err)
+	}
 	flash := r.URL.Query().Get("flash")
 	if err := a.tmpl.Execute(w, adminData{
 		Lang:            i18n.FromRequest(r),
@@ -252,6 +254,8 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 		Flash:           flash,
 		CSRFToken:       a.csrf.Token(w, r),
 		BudgetUnit:      a.cfg.BudgetUnit,
+		Admins:          adminRows(a.cfg, grants, a.actorEmail(r)),
+		AdminRoleName:   a.cfg.AdminRole,
 	}); err != nil {
 		slog.Error("admin template", "err", err)
 	}
@@ -394,6 +398,60 @@ func (a *Admin) SetUserProfile(w http.ResponseWriter, r *http.Request) {
 	a.audit(r, database.AuditProfileSet, subjectEmail, &userID, detail)
 
 	http.Redirect(w, r, "/admin?flash=User+profile+updated#users", http.StatusFound)
+}
+
+// GrantAdmin handles POST /admin/admins, giving an address the admin panel.
+func (a *Admin) GrantAdmin(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	email := strings.TrimSpace(r.FormValue("email"))
+	if _, err := mail.ParseAddress(email); err != nil {
+		http.Redirect(w, r, "/admin?flash=Enter+a+valid+email+address#admins", http.StatusFound)
+		return
+	}
+
+	if err := a.store.GrantAdmin(r.Context(), email, a.actorEmail(r)); err != nil {
+		slog.Error("grant admin", "email", email, "err", err)
+		http.Redirect(w, r, "/admin?flash=Failed+to+grant+admin#admins", http.StatusFound)
+		return
+	}
+	a.audit(r, database.AuditAdminGranted, email, nil, "admin granted")
+	http.Redirect(w, r, "/admin?flash=Admin+granted#admins", http.StatusFound)
+}
+
+// RevokeAdmin handles POST /admin/admins/revoke.
+//
+// An admin cannot remove their own rights: doing so would need the deployment
+// edited to get them back, which is the very thing this feature exists to
+// avoid.
+func (a *Admin) RevokeAdmin(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	email := strings.TrimSpace(r.FormValue("email"))
+	if strings.EqualFold(email, a.actorEmail(r)) {
+		http.Redirect(w, r, "/admin?flash=You+cannot+remove+your+own+admin+rights#admins", http.StatusFound)
+		return
+	}
+
+	// An address in ADMIN_IDS keeps its rights whatever this table says, so
+	// deleting a row for it would report a revoke that did not happen. Say so
+	// instead, and do not audit it.
+	if admin, _ := a.cfg.IsAdmin("", email); admin {
+		http.Redirect(w, r, "/admin?flash=That+admin+comes+from+the+configuration+and+cannot+be+removed+here#admins", http.StatusFound)
+		return
+	}
+
+	if err := a.store.RevokeAdmin(r.Context(), email); err != nil {
+		slog.Error("revoke admin", "email", email, "err", err)
+		http.Redirect(w, r, "/admin?flash=Failed+to+revoke+admin#admins", http.StatusFound)
+		return
+	}
+	a.audit(r, database.AuditAdminRevoked, email, nil, "admin revoked")
+	http.Redirect(w, r, "/admin?flash=Admin+revoked#admins", http.StatusFound)
 }
 
 // --- helpers ---

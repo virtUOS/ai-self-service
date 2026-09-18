@@ -136,6 +136,18 @@ var messages = map[string]map[Lang]string{
 	"admin.noevents":   {DE: "Noch keine Ereignisse erfasst.", EN: "No events recorded yet."},
 	"admin.audit.note": {DE: "Die 50 jüngsten Schlüssel- und Profiländerungen.", EN: "The 50 most recent key and profile changes."},
 
+	"admin.admins":            {DE: "Administration", EN: "Admins"},
+	"admin.admins.note":       {DE: "Wer auf diese Seite zugreifen darf. Einträge aus der Konfiguration können hier nicht entfernt werden.", EN: "Who may reach this page. Entries from the configuration cannot be removed here."},
+	"admin.admins.role":       {DE: "Zusätzlich ist jede Person Administrator, die im IdP die Rolle %s trägt. Diese Liste kann sie nicht anzeigen.", EN: "Anyone holding the %s role in the IdP is an admin as well. This list cannot show them."},
+	"admin.admins.source":     {DE: "Quelle", EN: "Source"},
+	"admin.admins.fromconfig": {DE: "aus der Konfiguration", EN: "from configuration"},
+	"admin.admins.granted":    {DE: "hier vergeben", EN: "granted here"},
+	"admin.admins.self":       {DE: "Sie", EN: "you"},
+	"admin.admins.add":        {DE: "E-Mail-Adresse", EN: "Email address"},
+	"admin.admins.grant":      {DE: "Zum Administrator machen", EN: "Make admin"},
+	"admin.admins.revoke":     {DE: "Entfernen", EN: "Remove"},
+	"admin.admins.none":       {DE: "Keine hier vergebenen Administratorrechte.", EN: "No admin rights granted here."},
+
 	"admin.form.new":           {DE: "Neues Profil", EN: "New profile"},
 	"admin.form.edit":          {DE: "Profil bearbeiten:", EN: "Edit profile:"},
 	"admin.form.create":        {DE: "Profil anlegen", EN: "Create profile"},
