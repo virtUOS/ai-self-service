@@ -168,14 +168,20 @@ func TestDashboardShowsTheDeadline(t *testing.T) {
 	// Relative to now, not a fixed date: a hardcoded one eventually falls into
 	// the past and the test would silently start exercising the overdue
 	// wording instead of the one it names.
-	deadline := time.Now().AddDate(0, 0, 16)
+	//
+	// In UTC, because that is what the value becomes once it round-trips
+	// through the database and what the page formats. Building it from local
+	// time made this fail for the two hours a day when the two are on
+	// different calendar dates — passing all afternoon and failing at
+	// midnight, which is the worst way for a test to be wrong.
+	deadline := time.Now().UTC().AddDate(0, 0, 16)
 	if err := store.SetUserProfileUntil(ctx, user.ID, &p.ID, &deadline, nil, false); err != nil {
 		t.Fatal(err)
 	}
 
 	body := getPage(t, ui, ui.Dashboard, "/").Body.String()
 
-	if !strings.Contains(body, deadline.Format("2006-01-02")) {
+	if !strings.Contains(body, deadline.UTC().Format("2006-01-02")) {
 		t.Error("the dashboard does not show the deadline")
 	}
 	// The test UI renders German, so assert on the German sentence: the two
@@ -287,7 +293,10 @@ func TestDashboardMarksAPassedDeadlineOverdue(t *testing.T) {
 	if err := store.CreateProfile(ctx, p); err != nil {
 		t.Fatal(err)
 	}
-	passed := time.Now().Add(-time.Hour)
+	// UTC, matching what the page formats after the value round-trips through
+	// the database. A local-time comparison passes or fails depending on the
+	// hour of day.
+	passed := time.Now().UTC().Add(-time.Hour)
 	if err := store.SetUserProfileUntil(ctx, user.ID, &p.ID, &passed, nil, false); err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +311,7 @@ func TestDashboardMarksAPassedDeadlineOverdue(t *testing.T) {
 	}
 	// The date still has to be there: the user needs to know which deadline
 	// this is, not just that one went by.
-	if !strings.Contains(body, passed.Format("2006-01-02")) {
+	if !strings.Contains(body, passed.UTC().Format("2006-01-02")) {
 		t.Error("the overdue notice dropped the date")
 	}
 }
