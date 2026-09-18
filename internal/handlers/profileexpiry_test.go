@@ -106,7 +106,8 @@ func TestSetUserProfileRejectsAMalformedDate(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/profile", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: token})
-	postToUser(t, a.SetUserProfile, httptest.NewRecorder(), req, u.ID)
+	rec := httptest.NewRecorder()
+	postToUser(t, a.SetUserProfile, rec, req, u.ID)
 
 	got, err := store.GetUserByID(ctx, u.ID)
 	if err != nil {
@@ -114,6 +115,43 @@ func TestSetUserProfileRejectsAMalformedDate(t *testing.T) {
 	}
 	if got.ProfileExpiresAt != nil {
 		t.Errorf("deadline = %v, want nil for an unparseable date", got.ProfileExpiresAt)
+	}
+
+	// An unstored deadline alone does not prove a refusal: silently dropping
+	// the field would look identical. The flash is what tells the admin their
+	// date was rejected rather than accepted, so assert on it.
+	if !strings.Contains(rec.Header().Get("Location"), "flash=Enter+the+date") {
+		t.Errorf("redirect = %q, want the malformed-date flash", rec.Header().Get("Location"))
+	}
+}
+
+// A refused date must leave an existing deadline alone. Treating the refusal
+// as an empty field would quietly make a temporary assignment permanent —
+// the opposite of what the admin was trying to do.
+func TestSetUserProfileRefusalKeepsAnExistingDeadline(t *testing.T) {
+	a, store, token := newGrantTestAdmin(t, "pexpf4")
+	ctx := context.Background()
+	u, err := store.GetOrCreateUser(ctx, "sub-w", "w@uni-osnabrueck.de", "W")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tomorrow := time.Now().Add(24 * time.Hour)
+	if err := store.SetUserProfileUntil(ctx, u.ID, nil, &tomorrow, nil, false); err != nil {
+		t.Fatal(err)
+	}
+
+	form := url.Values{"profile_id": {"0"}, "expires_at": {"04.10.2026"}}
+	req := httptest.NewRequest(http.MethodPost, "/admin/users/1/profile", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: token})
+	postToUser(t, a.SetUserProfile, httptest.NewRecorder(), req, u.ID)
+
+	got, err := store.GetUserByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ProfileExpiresAt == nil {
+		t.Error("a refused date cleared the deadline that was already set")
 	}
 }
 
