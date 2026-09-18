@@ -165,15 +165,58 @@ func TestDashboardShowsTheDeadline(t *testing.T) {
 	if err := store.CreateProfile(ctx, p); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Date(2026, 10, 4, 23, 59, 59, 0, time.UTC)
+	// Relative to now, not a fixed date: a hardcoded one eventually falls into
+	// the past and the test would silently start exercising the overdue
+	// wording instead of the one it names.
+	deadline := time.Now().AddDate(0, 0, 16)
 	if err := store.SetUserProfileUntil(ctx, user.ID, &p.ID, &deadline, nil, false); err != nil {
 		t.Fatal(err)
 	}
 
 	body := getPage(t, ui, ui.Dashboard, "/").Body.String()
 
-	if !strings.Contains(body, "2026-10-04") {
+	if !strings.Contains(body, deadline.Format("2006-01-02")) {
 		t.Error("the dashboard does not show the deadline")
+	}
+	// The test UI renders German, so assert on the German sentence: the two
+	// wordings differ only in the verb ("gilt" vs "galt"), which is exactly
+	// the distinction under test.
+	if !strings.Contains(body, "Dieses Profil gilt bis zum") {
+		t.Error("a future deadline did not use the present-tense wording")
+	}
+	if strings.Contains(body, "Dieses Profil galt bis zum") {
+		t.Error("a future deadline used the overdue wording")
+	}
+}
+
+// Between the deadline passing and the job running, the profile is still
+// applied — so "applies until <a past date>" states something the page itself
+// contradicts. The wording changes; the date does not.
+func TestDashboardMarksAPassedDeadlineOverdue(t *testing.T) {
+	ui, _, store, user := newTestUI(t, "pexpd3")
+	ctx := context.Background()
+
+	p := &database.Profile{Name: "raised"}
+	if err := store.CreateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	passed := time.Now().Add(-time.Hour)
+	if err := store.SetUserProfileUntil(ctx, user.ID, &p.ID, &passed, nil, false); err != nil {
+		t.Fatal(err)
+	}
+
+	body := getPage(t, ui, ui.Dashboard, "/").Body.String()
+
+	if !strings.Contains(body, "Dieses Profil galt bis zum") {
+		t.Error("a passed deadline did not use the overdue wording")
+	}
+	if strings.Contains(body, "Dieses Profil gilt bis zum") {
+		t.Error("a passed deadline still claimed the profile applies until then")
+	}
+	// The date still has to be there: the user needs to know which deadline
+	// this is, not just that one went by.
+	if !strings.Contains(body, passed.Format("2006-01-02")) {
+		t.Error("the overdue notice dropped the date")
 	}
 }
 

@@ -83,7 +83,12 @@ type dashboardData struct {
 	// ProfileUntil is the deadline as YYYY-MM-DD while one is set, empty
 	// otherwise. A limit that drops with no warning is a support ticket.
 	ProfileUntil string
-	Quotas       []quotaLine
+	// ProfileOverdue marks a deadline that has passed while the expiry job has
+	// not yet moved the user — normally a window of minutes, longer if the job
+	// is failing. Saying "applies until <past date>" then states something the
+	// page itself contradicts, so the wording changes rather than the date.
+	ProfileOverdue bool
+	Quotas         []quotaLine
 	// BudgetUnit labels every spend figure on the page, so a deployment that
 	// bills in credits rather than dollars reads correctly.
 	BudgetUnit string
@@ -160,9 +165,12 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 	// appears in the URL; the query string carries only an opaque token.
 	newKey := u.flash.Take(su.User.ID, r.URL.Query().Get("k"))
 
-	profileUntil := ""
+	profileUntil, profileOverdue := "", false
 	if su.User.ProfileExpiresAt != nil {
 		profileUntil = su.User.ProfileExpiresAt.Format("2006-01-02")
+		// Same comparison the expiry job selects on, so the page and the job
+		// agree about which side of the deadline the user is on.
+		profileOverdue = !su.User.ProfileExpiresAt.After(time.Now())
 	}
 
 	if err := u.tmpl.Execute(w, dashboardData{
@@ -176,6 +184,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		ExpiryUrgent:    isExpiryUrgent(apiKey),
 		ProfileName:     profileName(profile),
 		ProfileUntil:    profileUntil,
+		ProfileOverdue:  profileOverdue,
 		Quotas:          profileQuotaLines(profile, lang, u.cfg.BudgetUnit),
 		BudgetUnit:      u.cfg.BudgetUnit,
 		SuccessorURL:    u.cfg.SuccessorURL,
