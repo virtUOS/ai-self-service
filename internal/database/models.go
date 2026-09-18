@@ -49,12 +49,26 @@ type ProfileQuota struct {
 type User struct {
 	bun.BaseModel `bun:"table:users"`
 
-	ID        int64     `bun:"id,pk,autoincrement"`
-	OIDCSub   string    `bun:"oidc_sub,unique,notnull"`
-	Email     string    `bun:"email,notnull"`
-	Name      string    `bun:"name,notnull"`
-	ProfileID *int64    `bun:"profile_id"`
-	Profile   *Profile  `bun:"rel:belongs-to,join:profile_id=id"`
+	ID        int64    `bun:"id,pk,autoincrement"`
+	OIDCSub   string   `bun:"oidc_sub,unique,notnull"`
+	Email     string   `bun:"email,notnull"`
+	Name      string   `bun:"name,notnull"`
+	ProfileID *int64   `bun:"profile_id"`
+	Profile   *Profile `bun:"rel:belongs-to,join:profile_id=id"`
+
+	// ProfileExpiresAt ends the current assignment. Null means permanent,
+	// which is every assignment made before this existed.
+	ProfileExpiresAt *time.Time `bun:"profile_expires_at"`
+
+	// ProfileAfterExpiry is where the user lands when the deadline passes.
+	// Null means the default profile — never "no access", and never the key
+	// being deleted, which is RevokeKeyAtExpiry's job alone.
+	ProfileAfterExpiry *int64 `bun:"profile_after_expiry"`
+
+	// RevokeKeyAtExpiry deletes the key instead of switching profiles. Chosen
+	// explicitly by the admin; it is never implied by an unset destination.
+	RevokeKeyAtExpiry bool `bun:"revoke_key_at_expiry,notnull"`
+
 	CreatedAt time.Time `bun:"created_at,notnull"`
 	UpdatedAt time.Time `bun:"updated_at,notnull"`
 }
@@ -83,13 +97,14 @@ type Session struct {
 
 // AuditAction values recorded in AuditEvent.Action.
 const (
-	AuditKeyGenerated = "key.generated"
-	AuditKeyExtended  = "key.extended"
-	AuditKeyDeleted   = "key.deleted"
-	AuditKeyRevoked   = "key.revoked" // by an admin, not the owner
-	AuditProfileSet   = "user.profile_set"
-	AuditAdminGranted = "admin.granted"
-	AuditAdminRevoked = "admin.revoked"
+	AuditKeyGenerated   = "key.generated"
+	AuditKeyExtended    = "key.extended"
+	AuditKeyDeleted     = "key.deleted"
+	AuditKeyRevoked     = "key.revoked" // by an admin, not the owner
+	AuditProfileSet     = "user.profile_set"
+	AuditProfileExpired = "user.profile_expired" // by the deadline, not an admin
+	AuditAdminGranted   = "admin.granted"
+	AuditAdminRevoked   = "admin.revoked"
 )
 
 // AuditEvent is an append-only record of a key or profile change.
