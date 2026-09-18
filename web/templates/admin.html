@@ -235,18 +235,27 @@
                     {{end}}
                   </select>
                   <input type="date" name="expires_at" value="{{.ExpiresAt}}"
-                         title="{{T $.Lang "admin.until.help"}}" style="width:auto">
-                  <select name="after_expiry" style="width:auto"
-                          title="{{T $.Lang "admin.thenswitch"}}">
-                    <option value="0">{{T $.Lang "admin.default"}}</option>
-                    {{range $.Profiles}}
-                    <option value="{{.ID}}"{{if eq .ID $after}} selected{{end}}>{{.Name}}</option>
-                    {{end}}
-                  </select>
-                  <label style="display:flex;gap:.25rem;align-items:center;font-size:.85rem">
-                    <input type="checkbox" name="revoke_at_expiry"{{if .RevokeAtExpiry}} checked{{end}}>
-                    {{T $.Lang "admin.thenrevoke"}}
-                  </label>
+                         title="{{T $.Lang "admin.until.help"}}" style="width:auto"
+                         oninput="toggleExpiryOptions(this)">
+                  {{/* What happens at the deadline only means anything once
+                       there is one, so these stay hidden until a date is set.
+                       Hidden, not absent: the server decides what they mean —
+                       an empty date nulls both — and this is only about not
+                       putting two dead controls on every row. */}}
+                  <span class="expiry-options"{{if not .ExpiresAt}} hidden{{end}}
+                        style="display:flex;gap:.5rem;align-items:center">
+                    <select name="after_expiry" style="width:auto"
+                            title="{{T $.Lang "admin.thenswitch"}}">
+                      <option value="0">{{T $.Lang "admin.default"}}</option>
+                      {{range $.Profiles}}
+                      <option value="{{.ID}}"{{if eq .ID $after}} selected{{end}}>{{.Name}}</option>
+                      {{end}}
+                    </select>
+                    <label style="display:flex;gap:.25rem;align-items:center;font-size:.85rem">
+                      <input type="checkbox" name="revoke_at_expiry"{{if .RevokeAtExpiry}} checked{{end}}>
+                      {{T $.Lang "admin.thenrevoke"}}
+                    </label>
+                  </span>
                   <button type="submit" class="btn btn-sm btn-primary">{{T $.Lang "admin.save"}}</button>
                 </form>
               </td>
@@ -355,6 +364,14 @@
 </main>
 
 <script>
+// The deadline's follow-up controls are meaningless without a date, so they
+// appear with one. Server-rendered state decides the initial visibility; this
+// only keeps it in step as the admin types.
+function toggleExpiryOptions(input) {
+  const opts = input.closest('form').querySelector('.expiry-options');
+  if (opts) opts.hidden = !input.value;
+}
+
 function showTab(name, btn) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
