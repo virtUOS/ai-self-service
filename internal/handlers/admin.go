@@ -171,6 +171,11 @@ type userRow struct {
 	KeyExpires   string
 	KeyExpired   bool
 	HasKey       bool
+	// ExpiresAt is the deadline as YYYY-MM-DD for the date input, empty when
+	// the assignment is permanent.
+	ExpiresAt      string
+	AfterExpiryID  int64 // 0 means the default profile
+	RevokeAtExpiry bool
 }
 
 type adminData struct {
@@ -224,6 +229,13 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 		if u.ProfileID != nil {
 			row.ProfileIDVal = *u.ProfileID
 		}
+		if u.ProfileExpiresAt != nil {
+			row.ExpiresAt = u.ProfileExpiresAt.Format("2006-01-02")
+		}
+		if u.ProfileAfterExpiry != nil {
+			row.AfterExpiryID = *u.ProfileAfterExpiry
+		}
+		row.RevokeAtExpiry = u.RevokeKeyAtExpiry
 		if k, ok := keyByUser[u.ID]; ok {
 			row.HasKey = true
 			row.KeyPrefix = k.KeyPrefix
@@ -379,7 +391,30 @@ func (a *Admin) SetUserProfile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := a.store.SetUserProfile(r.Context(), userID, profileID); err != nil {
+	// An empty date means a permanent assignment. A date that will not parse is
+	// refused outright rather than treated as empty: silently dropping it would
+	// leave the admin believing a deadline was set.
+	var expiresAt *time.Time
+	if v := strings.TrimSpace(r.FormValue("expires_at")); v != "" {
+		d, err := time.Parse("2006-01-02", v)
+		if err != nil {
+			http.Redirect(w, r, "/admin?flash=Enter+the+date+as+YYYY-MM-DD#users", http.StatusFound)
+			return
+		}
+		// End of the chosen day, so "until 4 October" includes the 4th.
+		d = d.Add(24*time.Hour - time.Second)
+		expiresAt = &d
+	}
+
+	var afterExpiry *int64
+	if v := r.FormValue("after_expiry"); v != "" && v != "0" {
+		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
+			afterExpiry = &id
+		}
+	}
+	revokeKey := r.FormValue("revoke_at_expiry") != ""
+
+	if err := a.store.SetUserProfileUntil(r.Context(), userID, profileID, expiresAt, afterExpiry, revokeKey); err != nil {
 		slog.Error("set user profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+update+user+profile", http.StatusFound)
 		return
@@ -390,6 +425,9 @@ func (a *Admin) SetUserProfile(w http.ResponseWriter, r *http.Request) {
 		if p, err := a.store.GetProfile(r.Context(), *profileID); err == nil {
 			detail = p.Name
 		}
+	}
+	if expiresAt != nil {
+		detail += " until " + expiresAt.Format("2006-01-02")
 	}
 	subjectEmail := ""
 	if u, err := a.store.GetUserByID(r.Context(), userID); err == nil {

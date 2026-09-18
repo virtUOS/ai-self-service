@@ -122,6 +122,13 @@ var messages = map[string]map[Lang]string{
 	"admin.col.actor":         {DE: "Ausgeführt von", EN: "Actor"},
 	"admin.col.subject":       {DE: "Betroffen", EN: "Subject"},
 	"admin.col.detail":        {DE: "Detail", EN: "Detail"},
+	"admin.col.until":         {DE: "Befristung", EN: "Deadline"},
+
+	"admin.until":      {DE: "Befristet bis", EN: "Until"},
+	"admin.until.help": {DE: "Leer lassen für eine dauerhafte Zuweisung.", EN: "Leave empty for a permanent assignment."},
+	"admin.thenswitch": {DE: "Danach wechseln zu", EN: "Then switch to"},
+	"admin.thenrevoke": {DE: "Stattdessen Schlüssel löschen", EN: "Delete the key instead"},
+	"admin.permanent":  {DE: "dauerhaft", EN: "permanent"},
 
 	"admin.all":        {DE: "alle", EN: "all"},
 	"admin.none":       {DE: "keiner", EN: "none"},

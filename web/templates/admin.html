@@ -190,11 +190,13 @@
               <th>{{T .Lang "admin.col.profile"}}</th>
               <th>{{T .Lang "admin.col.apikey"}}</th>
               <th>{{T .Lang "admin.col.changeprofile"}}</th>
+              <th>{{T .Lang "admin.col.until"}}</th>
             </tr>
           </thead>
           <tbody>
             {{range .Users}}
             {{$pid := .ProfileIDVal}}
+            {{$after := .AfterExpiryID}}
             <tr>
               <td>{{.Name}}</td>
               <td>{{.Email}}</td>
@@ -232,12 +234,28 @@
                     <option value="{{.ID}}"{{if eq .ID $pid}} selected{{end}}>{{.Name}}</option>
                     {{end}}
                   </select>
+                  <input type="date" name="expires_at" value="{{.ExpiresAt}}"
+                         title="{{T $.Lang "admin.until.help"}}" style="width:auto">
+                  <select name="after_expiry" style="width:auto"
+                          title="{{T $.Lang "admin.thenswitch"}}">
+                    <option value="0">{{T $.Lang "admin.default"}}</option>
+                    {{range $.Profiles}}
+                    <option value="{{.ID}}"{{if eq .ID $after}} selected{{end}}>{{.Name}}</option>
+                    {{end}}
+                  </select>
+                  <label style="display:flex;gap:.25rem;align-items:center;font-size:.85rem">
+                    <input type="checkbox" name="revoke_at_expiry"{{if .RevokeAtExpiry}} checked{{end}}>
+                    {{T $.Lang "admin.thenrevoke"}}
+                  </label>
                   <button type="submit" class="btn btn-sm btn-primary">{{T $.Lang "admin.save"}}</button>
                 </form>
               </td>
+              <td>
+                {{if .ExpiresAt}}{{.ExpiresAt}}{{else}}<em class="text-faint">{{T $.Lang "admin.permanent"}}</em>{{end}}
+              </td>
             </tr>
             {{else}}
-            <tr><td colspan="5" class="text-faint" style="text-align:center">{{T .Lang "admin.nousers"}}</td></tr>
+            <tr><td colspan="7" class="text-faint" style="text-align:center">{{T .Lang "admin.nousers"}}</td></tr>
             {{end}}
           </tbody>
         </table>
