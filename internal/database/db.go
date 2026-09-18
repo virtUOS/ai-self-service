@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/uptrace/bun"
@@ -261,6 +262,12 @@ func (s *Store) GetOrCreateUser(ctx context.Context, sub, email, name string) (*
 			Set("name = ?", name).
 			Set("updated_at = ?", user.UpdatedAt).
 			Where("id = ?", user.ID).Exec(ctx)
+		// Anchor any grant made by address alone to this subject, now that it is
+		// known. Failing here must not block the login: the grant still resolves
+		// by address until the next attempt.
+		if err := s.LinkAdminGrantSubject(ctx, email, sub); err != nil {
+			slog.Error("link admin grant subject", "email", email, "err", err)
+		}
 		return user, nil
 	}
 
@@ -275,6 +282,12 @@ func (s *Store) GetOrCreateUser(ctx context.Context, sub, email, name string) (*
 	_, err = s.db.NewInsert().Model(user).Exec(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("create user: %w", err)
+	}
+	// Anchor any grant made by address alone to this subject, now that it is
+	// known. Failing here must not block the login: the grant still resolves
+	// by address until the next attempt.
+	if err := s.LinkAdminGrantSubject(ctx, email, sub); err != nil {
+		slog.Error("link admin grant subject", "email", email, "err", err)
 	}
 	return user, nil
 }

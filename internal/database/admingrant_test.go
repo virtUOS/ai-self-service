@@ -156,3 +156,49 @@ func TestRevokeAdminRemovesTheGrant(t *testing.T) {
 		t.Error("a revoked grant still authorises")
 	}
 }
+
+// A grant made before the person ever logged in is anchored to their subject
+// the moment they do, so it stops depending on the address.
+func TestLoginLinksAPendingGrantToTheSubject(t *testing.T) {
+	store := migratedStore(t, "admingrants8")
+	ctx := context.Background()
+
+	if err := store.GrantAdmin(ctx, "future@uni-osnabrueck.de", "boss@uni-osnabrueck.de"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetOrCreateUser(ctx, "sub-99", "future@uni-osnabrueck.de", "Future Admin"); err != nil {
+		t.Fatal(err)
+	}
+
+	grants, err := store.ListAdminGrants(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(grants) != 1 {
+		t.Fatalf("got %d grants, want 1", len(grants))
+	}
+	if grants[0].OIDCSub == nil || *grants[0].OIDCSub != "sub-99" {
+		t.Errorf("OIDCSub = %v, want sub-99 recorded on first login", grants[0].OIDCSub)
+	}
+}
+
+// Logging in must not attach a subject to somebody else's grant.
+func TestLoginLeavesOtherGrantsAlone(t *testing.T) {
+	store := migratedStore(t, "admingrants9")
+	ctx := context.Background()
+
+	if err := store.GrantAdmin(ctx, "other@uni-osnabrueck.de", "boss@uni-osnabrueck.de"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetOrCreateUser(ctx, "sub-100", "unrelated@uni-osnabrueck.de", "Someone"); err != nil {
+		t.Fatal(err)
+	}
+
+	grants, err := store.ListAdminGrants(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if grants[0].OIDCSub != nil {
+		t.Errorf("OIDCSub = %v, want an unrelated login to leave it unset", *grants[0].OIDCSub)
+	}
+}
