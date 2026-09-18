@@ -56,11 +56,8 @@
       <dt>{{T .Lang "dash.name"}}</dt>  <dd>{{.User.Name}}</dd>
       <dt>{{T .Lang "dash.email"}}</dt> <dd>{{.User.Email}}</dd>
       {{if .ProfileName}}<dt>{{T .Lang "dash.profile"}} <button type="button" class="help" data-help="{{T .Lang "dash.profile.help"}}">?</button></dt> <dd>{{.ProfileName}}
-        {{if .ProfileUntil}}
-        <p class="text-muted" style="font-size:.85rem;margin-top:.25rem">
-          {{if .ProfileOverdue}}{{printf (T .Lang "dash.profile.overdue") .ProfileUntil}}
-          {{else}}{{printf (T .Lang "dash.profile.until") .ProfileUntil}}{{end}}
-        </p>
+        {{if .ProfileNotice}}
+        <p class="text-muted" style="font-size:.85rem;margin-top:.25rem">{{.ProfileNotice}}</p>
         {{end}}
       </dd>{{end}}
       {{if .Quotas}}

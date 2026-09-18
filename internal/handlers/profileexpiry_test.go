@@ -189,6 +189,93 @@ func TestDashboardShowsTheDeadline(t *testing.T) {
 	}
 }
 
+// An admin can send the user to a named profile instead of the default. Saying
+// "the standard limits return" would then be wrong, so the notice names it.
+func TestDashboardNamesTheDestinationProfile(t *testing.T) {
+	ui, _, store, user := newTestUI(t, "pexpd4")
+	ctx := context.Background()
+
+	from := &database.Profile{Name: "raised"}
+	to := &database.Profile{Name: "restricted"}
+	if err := store.CreateProfile(ctx, from); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateProfile(ctx, to); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().AddDate(0, 0, 10)
+	if err := store.SetUserProfileUntil(ctx, user.ID, &from.ID, &future, &to.ID, false); err != nil {
+		t.Fatal(err)
+	}
+
+	body := getPage(t, ui, ui.Dashboard, "/").Body.String()
+
+	if !strings.Contains(body, "restricted") {
+		t.Error("the notice does not name the profile the user moves to")
+	}
+	if strings.Contains(body, "Standardgrenzen") {
+		t.Error("the notice promised the standard limits, but a profile was chosen")
+	}
+}
+
+// The worst case to get wrong: the key is about to be deleted, and a notice
+// promising the standard limits would say the opposite of what happens.
+func TestDashboardSaysTheKeyWillBeDeleted(t *testing.T) {
+	ui, _, store, user := newTestUI(t, "pexpd5")
+	ctx := context.Background()
+
+	p := &database.Profile{Name: "raised"}
+	if err := store.CreateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().AddDate(0, 0, 10)
+	if err := store.SetUserProfileUntil(ctx, user.ID, &p.ID, &future, nil, true); err != nil {
+		t.Fatal(err)
+	}
+
+	body := getPage(t, ui, ui.Dashboard, "/").Body.String()
+
+	if !strings.Contains(body, "gelöscht") {
+		t.Error("the notice does not warn that the key will be deleted")
+	}
+	if strings.Contains(body, "Standardgrenzen") {
+		t.Error("the notice promised the standard limits while the key is to be deleted")
+	}
+}
+
+// A destination profile deleted after the fact leaves the row pointing at
+// nothing. The user falls back to the default, so the notice must say that
+// rather than naming a profile that no longer exists.
+func TestDashboardFallsBackWhenTheDestinationIsGone(t *testing.T) {
+	ui, _, store, user := newTestUI(t, "pexpd6")
+	ctx := context.Background()
+
+	from := &database.Profile{Name: "raised"}
+	to := &database.Profile{Name: "doomed"}
+	if err := store.CreateProfile(ctx, from); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateProfile(ctx, to); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().AddDate(0, 0, 10)
+	if err := store.SetUserProfileUntil(ctx, user.ID, &from.ID, &future, &to.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DeleteProfile(ctx, to.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	body := getPage(t, ui, ui.Dashboard, "/").Body.String()
+
+	if strings.Contains(body, "doomed") {
+		t.Error("the notice named a profile that has been deleted")
+	}
+	if !strings.Contains(body, "Standardgrenzen") {
+		t.Error("the notice did not fall back to the standard limits")
+	}
+}
+
 // Between the deadline passing and the job running, the profile is still
 // applied — so "applies until <a past date>" states something the page itself
 // contradicts. The wording changes; the date does not.

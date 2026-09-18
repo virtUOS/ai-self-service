@@ -21,12 +21,17 @@ var messages = map[string]map[Lang]string{
 	"dash.email":           {DE: "E-Mail", EN: "Email"},
 	"dash.profile":         {DE: "Profil", EN: "Profile"},
 	"dash.profile.help":    {DE: "Ihr Profil bestimmt, welche Modelle Sie nutzen können, wie lange Ihr Schlüssel gilt und wie viel Sie pro Zeitraum verbrauchen dürfen. Es wird von der Administration zugewiesen.", EN: "Your profile decides which models you can use, how long your key lasts and how much you may use per period. An administrator assigns it."},
-	"dash.profile.until":   {DE: "Dieses Profil gilt bis zum %s. Danach gelten wieder die Standardgrenzen.", EN: "This profile applies until %s. The standard limits return afterwards."},
-	"dash.profile.overdue": {DE: "Dieses Profil galt bis zum %s. Die Standardgrenzen greifen in Kürze automatisch wieder.", EN: "This profile applied until %s. The standard limits return automatically, shortly."},
-	"dash.usagelimit":      {DE: "Nutzungslimit", EN: "Usage limit"},
-	"dash.usagelimit.note": {DE: "Anfragen schlagen fehl, sobald das Limit erreicht ist, und funktionieren nach dem nächsten Zurücksetzen automatisch wieder (UTC: täglich um Mitternacht, wöchentlich am Montag, monatlich am Ersten).", EN: "Requests fail once the limit is reached and resume automatically at the next reset (UTC boundaries: daily at midnight UTC, weekly on Monday, monthly on the 1st)."},
-	"dash.usagelimit.help": {DE: "Ihr Kontingent zur fairen Nutzung. Anfragen schlagen fehl, sobald es aufgebraucht ist, und funktionieren nach dem nächsten Zurücksetzen automatisch wieder. Die Zurücksetzung erfolgt zu UTC-Zeiten.", EN: "Your fair-use allowance. Requests stop working once it is used up and start again automatically at the next reset. Resets happen on UTC boundaries."},
-	"dash.quota.note":      {DE: "Anfragen schlagen fehl, sobald das Limit erreicht ist, und funktionieren beim nächsten Zurücksetzen automatisch wieder (UTC: täglich um Mitternacht UTC, wöchentlich montags, monatlich am 1.).", EN: "Requests fail once the limit is reached and resume automatically at the next reset (UTC boundaries: daily at midnight UTC, weekly on Monday, monthly on the 1st)."},
+	// Four sentences rather than one: what happens at the deadline depends on
+	// what the administrator chose, and a notice promising the standard limits
+	// would be wrong for a user whose key is about to be deleted instead.
+	"dash.profile.until":         {DE: "Dieses Profil gilt bis zum %s. Danach gelten wieder die Standardgrenzen.", EN: "This profile applies until %s. The standard limits return afterwards."},
+	"dash.profile.until.profile": {DE: "Dieses Profil gilt bis zum %s. Danach wechseln Sie auf das Profil „%s\".", EN: "This profile applies until %s. You then move to the %q profile."},
+	"dash.profile.until.revoke":  {DE: "Dieses Profil gilt bis zum %s. Danach wird Ihr Schlüssel gelöscht; ein neuer lässt sich jederzeit erzeugen.", EN: "This profile applies until %s. Your key is deleted afterwards; you can generate a new one at any time."},
+	"dash.profile.overdue":       {DE: "Dieses Profil galt bis zum %s. Die Umstellung erfolgt in Kürze automatisch.", EN: "This profile applied until %s. The change happens automatically, shortly."},
+	"dash.usagelimit":            {DE: "Nutzungslimit", EN: "Usage limit"},
+	"dash.usagelimit.note":       {DE: "Anfragen schlagen fehl, sobald das Limit erreicht ist, und funktionieren nach dem nächsten Zurücksetzen automatisch wieder (UTC: täglich um Mitternacht, wöchentlich am Montag, monatlich am Ersten).", EN: "Requests fail once the limit is reached and resume automatically at the next reset (UTC boundaries: daily at midnight UTC, weekly on Monday, monthly on the 1st)."},
+	"dash.usagelimit.help":       {DE: "Ihr Kontingent zur fairen Nutzung. Anfragen schlagen fehl, sobald es aufgebraucht ist, und funktionieren nach dem nächsten Zurücksetzen automatisch wieder. Die Zurücksetzung erfolgt zu UTC-Zeiten.", EN: "Your fair-use allowance. Requests stop working once it is used up and start again automatically at the next reset. Resets happen on UTC boundaries."},
+	"dash.quota.note":            {DE: "Anfragen schlagen fehl, sobald das Limit erreicht ist, und funktionieren beim nächsten Zurücksetzen automatisch wieder (UTC: täglich um Mitternacht UTC, wöchentlich montags, monatlich am 1.).", EN: "Requests fail once the limit is reached and resume automatically at the next reset (UTC boundaries: daily at midnight UTC, weekly on Monday, monthly on the 1st)."},
 
 	"dash.apikey":       {DE: "API-Schlüssel", EN: "API key"},
 	"dash.key":          {DE: "Schlüssel", EN: "Key"},
