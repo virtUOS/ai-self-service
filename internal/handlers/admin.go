@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strconv"
 	"strings"
@@ -386,6 +387,60 @@ func (a *Admin) SetUserProfile(w http.ResponseWriter, r *http.Request) {
 	a.audit(r, database.AuditProfileSet, subjectEmail, &userID, detail)
 
 	http.Redirect(w, r, "/admin?flash=User+profile+updated#users", http.StatusFound)
+}
+
+// GrantAdmin handles POST /admin/admins, giving an address the admin panel.
+func (a *Admin) GrantAdmin(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	email := strings.TrimSpace(r.FormValue("email"))
+	if _, err := mail.ParseAddress(email); err != nil {
+		http.Redirect(w, r, "/admin?flash=Enter+a+valid+email+address#admins", http.StatusFound)
+		return
+	}
+
+	if err := a.store.GrantAdmin(r.Context(), email, a.actorEmail(r)); err != nil {
+		slog.Error("grant admin", "email", email, "err", err)
+		http.Redirect(w, r, "/admin?flash=Failed+to+grant+admin#admins", http.StatusFound)
+		return
+	}
+	a.audit(r, database.AuditAdminGranted, email, nil, "admin granted")
+	http.Redirect(w, r, "/admin?flash=Admin+granted#admins", http.StatusFound)
+}
+
+// RevokeAdmin handles POST /admin/admins/revoke.
+//
+// An admin cannot remove their own rights: doing so would need the deployment
+// edited to get them back, which is the very thing this feature exists to
+// avoid.
+func (a *Admin) RevokeAdmin(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	email := strings.TrimSpace(r.FormValue("email"))
+	if strings.EqualFold(email, a.actorEmail(r)) {
+		http.Redirect(w, r, "/admin?flash=You+cannot+remove+your+own+admin+rights#admins", http.StatusFound)
+		return
+	}
+
+	// An address in ADMIN_IDS keeps its rights whatever this table says, so
+	// deleting a row for it would report a revoke that did not happen. Say so
+	// instead, and do not audit it.
+	if admin, _ := a.cfg.IsAdmin("", email); admin {
+		http.Redirect(w, r, "/admin?flash=That+admin+comes+from+the+configuration+and+cannot+be+removed+here#admins", http.StatusFound)
+		return
+	}
+
+	if err := a.store.RevokeAdmin(r.Context(), email); err != nil {
+		slog.Error("revoke admin", "email", email, "err", err)
+		http.Redirect(w, r, "/admin?flash=Failed+to+revoke+admin#admins", http.StatusFound)
+		return
+	}
+	a.audit(r, database.AuditAdminRevoked, email, nil, "admin revoked")
+	http.Redirect(w, r, "/admin?flash=Admin+revoked#admins", http.StatusFound)
 }
 
 // --- helpers ---
