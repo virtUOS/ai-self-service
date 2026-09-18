@@ -25,7 +25,7 @@ var messages = map[string]map[Lang]string{
 	// what the administrator chose, and a notice promising the standard limits
 	// would be wrong for a user whose key is about to be deleted instead.
 	"dash.profile.until":         {DE: "Dieses Profil gilt bis zum %s. Danach gelten wieder die Standardgrenzen.", EN: "This profile applies until %s. The standard limits return afterwards."},
-	"dash.profile.until.profile": {DE: "Dieses Profil gilt bis zum %s. Danach wechseln Sie auf das Profil „%s\".", EN: "This profile applies until %s. You then move to the %q profile."},
+	"dash.profile.until.profile": {DE: "Dieses Profil gilt bis zum %s. Danach wechseln Sie auf das Profil „%s“.", EN: "This profile applies until %s. You then move to the %q profile."},
 	"dash.profile.until.revoke":  {DE: "Dieses Profil gilt bis zum %s. Danach wird Ihr Schlüssel gelöscht; ein neuer lässt sich jederzeit erzeugen.", EN: "This profile applies until %s. Your key is deleted afterwards; you can generate a new one at any time."},
 	"dash.profile.overdue":       {DE: "Dieses Profil galt bis zum %s. Die Umstellung erfolgt in Kürze automatisch.", EN: "This profile applied until %s. The change happens automatically, shortly."},
 	"dash.usagelimit":            {DE: "Nutzungslimit", EN: "Usage limit"},

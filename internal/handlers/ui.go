@@ -828,7 +828,17 @@ func (u *UI) profileNotice(ctx context.Context, user *database.User, lang i18n.L
 		// A profile that has since been deleted leaves the row pointing at
 		// nothing; the user then falls back to the default, so say that rather
 		// than naming a profile that no longer exists.
-		if dest, err := u.store.GetProfile(ctx, *user.ProfileAfterExpiry); err == nil && dest != nil {
+		//
+		// A database error looks the same from here and takes the same branch:
+		// the page still renders, with the generic wording. Logged because it
+		// is otherwise indistinguishable from the deleted-profile case, which
+		// is routine.
+		dest, err := u.store.GetProfile(ctx, *user.ProfileAfterExpiry)
+		if err != nil {
+			slog.Error("dashboard: load post-expiry profile",
+				"profile_id", *user.ProfileAfterExpiry, "err", err)
+		}
+		if err == nil && dest != nil {
 			return fmt.Sprintf(i18n.T(lang, "dash.profile.until.profile"), date, dest.Name)
 		}
 	}
