@@ -1,7 +1,11 @@
 # Two OIDC providers for local development; pick one.
 #
-#   docker compose -f dev/docker-compose.yml up -d              # Keycloak
-#   docker compose -f dev/docker-compose.yml --profile mock up -d  # mock
+#   docker compose -f dev/docker-compose.yml --profile keycloak up -d  # Keycloak
+#   docker compose -f dev/docker-compose.yml --profile mock up -d      # mock
+#
+# Both bind port 8081, so each sits behind its own profile and neither starts
+# by default: a bare `up` would otherwise start Keycloak alongside whichever
+# one was asked for, and the two would fight over the port.
 #
 # Keycloak is the same software the university runs, so it is what to use when
 # touching anything auth-shaped. The mock starts in about a second and needs no
@@ -12,6 +16,7 @@
 # Realm, client and two test users are imported from realm-export.json.
 services:
   keycloak:
+    profiles: ["keycloak"]
     image: quay.io/keycloak/keycloak:26.0
     command: ["start-dev", "--import-realm", "--http-port=8081"]
     environment:
@@ -28,8 +33,7 @@ services:
       timeout: 5s
       retries: 30
 
-  # Fast alternative to Keycloak. Under a compose profile so it only starts
-  # when asked for, leaving the default `up` behaviour unchanged.
+  # Fast alternative to Keycloak.
   #
   # It accepts any client id and secret without registration, so no client
   # config is needed: log in as either user below by entering their subject.

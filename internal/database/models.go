@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/uptrace/bun"
+
+	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
 
 type Profile struct {
@@ -157,4 +159,30 @@ type AdminGrant struct {
 	Email          string    `bun:"email,unique,notnull"`
 	GrantedByEmail string    `bun:"granted_by_email,notnull"`
 	CreatedAt      time.Time `bun:"created_at,notnull"`
+}
+
+// Limits maps a profile onto the provider-neutral limits applied to a key.
+//
+// It lives here, on the profile, because two callers need it and they must not
+// disagree: the dashboard re-applies limits on every load, and the expiry job
+// applies them when an assignment runs out. Two copies would drift the moment
+// a field was added to keyprovider.Limits and wired into only one of them, and
+// the same user would then get different limits depending on which path last
+// touched their key.
+//
+// A nil profile means no restriction, which is what an unassigned user gets.
+func (p *Profile) Limits() keyprovider.Limits {
+	if p == nil {
+		return keyprovider.Limits{}
+	}
+	windows := make([]keyprovider.QuotaWindow, 0, len(p.Quotas))
+	for _, q := range p.Quotas {
+		windows = append(windows, keyprovider.QuotaWindow{Budget: q.Budget, Period: q.Period})
+	}
+	return keyprovider.Limits{
+		Models:            p.Models,
+		TokensPerMinute:   p.TPMLimit,
+		RequestsPerMinute: p.RPMLimit,
+		Quotas:            windows,
+	}
 }

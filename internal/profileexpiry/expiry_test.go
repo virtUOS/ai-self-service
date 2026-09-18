@@ -140,8 +140,16 @@ func TestRunPushesNewLimitsUpstream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := &database.Profile{Name: "raised"}
-	if err := store.CreateProfile(ctx, p); err != nil {
+	rpm := int64(30)
+	from := &database.Profile{Name: "raised"}
+	// The destination carries limits nothing else in this test has, so the
+	// assertion below distinguishes "pushed the right profile" from merely
+	// "pushed something".
+	to := &database.Profile{Name: "restricted", Models: []string{"small-model"}, RPMLimit: &rpm}
+	if err := store.CreateProfile(ctx, from); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateProfile(ctx, to); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.CreateAPIKey(ctx, &database.APIKey{
@@ -151,7 +159,7 @@ func TestRunPushesNewLimitsUpstream(t *testing.T) {
 		t.Fatal(err)
 	}
 	yesterday := time.Now().Add(-time.Hour)
-	if err := store.SetUserProfileUntil(ctx, u.ID, &p.ID, &yesterday, nil, false); err != nil {
+	if err := store.SetUserProfileUntil(ctx, u.ID, &from.ID, &yesterday, &to.ID, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -160,8 +168,17 @@ func TestRunPushesNewLimitsUpstream(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, ok := fake.LimitsByRef["sk-live"]; !ok {
-		t.Error("the job did not push the reverted limits to the gateway")
+	got, ok := fake.LimitsByRef["sk-live"]
+	if !ok {
+		t.Fatal("the job did not push the reverted limits to the gateway")
+	}
+	// By value, not just presence: pushing the old profile's limits would
+	// leave the elevated allowance enforced with no deadline left to correct it.
+	if len(got.Models) != 1 || got.Models[0] != "small-model" {
+		t.Errorf("pushed Models = %#v, want the destination profile's", got.Models)
+	}
+	if got.RequestsPerMinute == nil || *got.RequestsPerMinute != 30 {
+		t.Errorf("pushed RequestsPerMinute = %v, want 30", got.RequestsPerMinute)
 	}
 }
 

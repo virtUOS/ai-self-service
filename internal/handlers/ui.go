@@ -368,7 +368,7 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 		Owner:     su.User.Email,
 		OwnerID:   su.User.OIDCSub,
 		ExpiresAt: expiresAt,
-		Limits:    profileLimits(profile),
+		Limits:    profile.Limits(),
 	})
 	if err != nil {
 		metrics.KeyOperations.WithLabelValues("generate", "provider_error").Inc()
@@ -710,24 +710,6 @@ func (u *UI) resolveProfile(r *http.Request, user *database.User) (*database.Pro
 	return u.store.GetDefaultProfile(r.Context())
 }
 
-// profileLimits maps a profile onto the provider-neutral limits. Translating
-// those into a specific gateway's wire format is the adapter's job.
-func profileLimits(p *database.Profile) keyprovider.Limits {
-	if p == nil {
-		return keyprovider.Limits{}
-	}
-	windows := make([]keyprovider.QuotaWindow, 0, len(p.Quotas))
-	for _, q := range p.Quotas {
-		windows = append(windows, keyprovider.QuotaWindow{Budget: q.Budget, Period: q.Period})
-	}
-	return keyprovider.Limits{
-		Models:            p.Models,
-		TokensPerMinute:   p.TPMLimit,
-		RequestsPerMinute: p.RPMLimit,
-		Quotas:            windows,
-	}
-}
-
 // syncKeyLimits re-applies a profile's limits to an existing key and to the
 // allowance held against its owner, so a profile edit takes effect without the
 // user regenerating.
@@ -745,7 +727,7 @@ func (u *UI) syncKeyLimits(ctx context.Context, k *database.APIKey, p *database.
 	if !ok {
 		return
 	}
-	if err := limiter.UpdateLimits(ctx, k.LiteLLMKey, ownerID, profileLimits(p)); err != nil {
+	if err := limiter.UpdateLimits(ctx, k.LiteLLMKey, ownerID, p.Limits()); err != nil {
 		slog.Error("re-apply profile limits", "key_prefix", k.KeyPrefix, "err", err)
 	}
 }

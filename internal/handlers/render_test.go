@@ -616,3 +616,43 @@ func TestAdminShowsOIDCSubject(t *testing.T) {
 		t.Error("admin panel does not show the OIDC subject")
 	}
 }
+
+// The deadline's follow-up controls mean nothing without a date, so a row with
+// no deadline renders them hidden and a row with one renders them visible.
+// Asserted here because the visibility is server-rendered: the JS only keeps it
+// in step afterwards, so a broken template would ship two dead controls on
+// every user row with nothing failing.
+func TestAdminTemplateHidesExpiryOptionsWithoutADate(t *testing.T) {
+	tmpl := parseAdminTemplate()
+
+	render := func(row userRow) string {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, adminData{
+			Lang:     i18n.EN,
+			Profiles: []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
+			Users:    []userRow{row},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+
+	permanent := render(userRow{User: database.User{ID: 1, Email: "a@uni-osnabrueck.de"}})
+	if !strings.Contains(permanent, `class="expiry-options" hidden`) {
+		t.Error("a row with no deadline did not hide the follow-up controls")
+	}
+
+	dated := render(userRow{
+		User:      database.User{ID: 2, Email: "b@uni-osnabrueck.de"},
+		ExpiresAt: "2026-10-04",
+	})
+	if strings.Contains(dated, `class="expiry-options" hidden`) {
+		t.Error("a row with a deadline hid the follow-up controls")
+	}
+	// The controls must still be present in both cases: hiding is not removing,
+	// and the form posts them either way.
+	if !strings.Contains(permanent, `name="after_expiry"`) {
+		t.Error("the destination dropdown was omitted rather than hidden")
+	}
+}
