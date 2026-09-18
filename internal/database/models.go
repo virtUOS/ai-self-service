@@ -88,6 +88,8 @@ const (
 	AuditKeyDeleted   = "key.deleted"
 	AuditKeyRevoked   = "key.revoked" // by an admin, not the owner
 	AuditProfileSet   = "user.profile_set"
+	AuditAdminGranted = "admin.granted"
+	AuditAdminRevoked = "admin.revoked"
 )
 
 // AuditEvent is an append-only record of a key or profile change.
@@ -122,4 +124,22 @@ type ExpiringKey struct {
 	APIKey
 	Email string
 	Name  string
+}
+
+// AdminGrant is admin rights given through the admin panel, as opposed to the
+// deploy-time ADMIN_ROLE and ADMIN_IDS settings.
+//
+// OIDCSub is null until the person first logs in: an admin can be named by
+// email before they have ever signed in, and the subject is recorded then.
+// The subject is what authorises them once known — an email address is
+// assigned by the IdP and can be reassigned to someone else, so a grant
+// resolving by email alone grants rights to whoever holds the address today.
+type AdminGrant struct {
+	bun.BaseModel `bun:"table:admin_grants"`
+
+	ID             int64     `bun:"id,pk,autoincrement"`
+	OIDCSub        *string   `bun:"oidc_sub"`
+	Email          string    `bun:"email,unique,notnull"`
+	GrantedByEmail string    `bun:"granted_by_email,notnull"`
+	CreatedAt      time.Time `bun:"created_at,notnull"`
 }
