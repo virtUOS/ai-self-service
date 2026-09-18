@@ -22,7 +22,7 @@ func init() {
 			CREATE TABLE admin_grants (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				oidc_sub TEXT,
-				email TEXT NOT NULL UNIQUE,
+				email TEXT NOT NULL COLLATE NOCASE UNIQUE,
 				granted_by_email TEXT NOT NULL,
 				created_at TIMESTAMP NOT NULL
 			)`); err != nil {

@@ -202,3 +202,28 @@ func TestLoginLeavesOtherGrantsAlone(t *testing.T) {
 		t.Errorf("OIDCSub = %v, want an unrelated login to leave it unset", *grants[0].OIDCSub)
 	}
 }
+
+// IdPs vary in how they present an address, and an admin typing it by hand
+// should not create a duplicate row just because the case differs from a
+// prior grant. The unique constraint must fold case the same way the
+// lookups do, or ON CONFLICT never fires and the same person ends up
+// granted twice.
+func TestGrantAdminIsIdempotentAcrossEmailCase(t *testing.T) {
+	store := migratedStore(t, "admingrants10")
+	ctx := context.Background()
+
+	if err := store.GrantAdmin(ctx, "Bob@uni-osnabrueck.de", "boss@uni-osnabrueck.de"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.GrantAdmin(ctx, "bob@uni-osnabrueck.de", "boss@uni-osnabrueck.de"); err != nil {
+		t.Fatalf("second grant of the same address in a different case: %v", err)
+	}
+
+	grants, err := store.ListAdminGrants(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(grants) != 1 {
+		t.Errorf("got %d grants, want 1", len(grants))
+	}
+}
