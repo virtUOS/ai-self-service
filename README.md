@@ -74,8 +74,8 @@ discovery document at startup. `dev/` provides two; see `dev/README.md` for
 which to use when.
 
 ```bash
-docker compose -f dev/docker-compose.yml up -d                 # Keycloak, ~20s
-docker compose -f dev/docker-compose.yml --profile mock up -d  # OIDC mock, ~8s
+docker compose -f dev/docker-compose.yml --profile keycloak up -d  # Keycloak, ~20s
+docker compose -f dev/docker-compose.yml --profile mock up -d      # OIDC mock, ~8s
 ```
 
 Keycloak is the software production runs, so it is what to use when touching

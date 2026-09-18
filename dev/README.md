@@ -5,7 +5,7 @@ document before it will serve traffic. There are two to choose from.
 
 | | Keycloak | Mock |
 | --- | --- | --- |
-| Start | `docker compose -f dev/docker-compose.yml up -d` | `docker compose -f dev/docker-compose.yml --profile mock up -d` |
+| Start | `docker compose -f dev/docker-compose.yml --profile keycloak up -d` | `docker compose -f dev/docker-compose.yml --profile mock up -d` |
 | Ready in | ~20s (realm import) | ~8s |
 | Fidelity | same software as production | different implementation |
 | Back-channel logout | yes | **no** |
@@ -20,12 +20,15 @@ to something else. It is quicker and needs no realm import, but it serves no
 back-channel logout endpoint, so the `/logout/backchannel` path cannot be
 exercised against it.
 
-Both listen on port 8081, so run one at a time.
+Both listen on port 8081, so run one at a time. Each sits behind its own
+compose profile and neither starts by default, so the profile flag is what
+picks one — a bare `up` starts nothing rather than starting Keycloak on top of
+whichever you asked for.
 
 ## Start Keycloak
 
 ```bash
-docker compose -f dev/docker-compose.yml up -d
+docker compose -f dev/docker-compose.yml --profile keycloak up -d
 ```
 
 Admin console: <http://localhost:8081> (`admin` / `admin`).
