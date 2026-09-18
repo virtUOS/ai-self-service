@@ -83,7 +83,7 @@ type dashboardData struct {
 	// ProfileUntil is the deadline as YYYY-MM-DD while one is set, empty
 	// otherwise. A limit that drops with no warning is a support ticket.
 	ProfileUntil string
-	Quotas        []quotaLine
+	Quotas       []quotaLine
 	// BudgetUnit labels every spend figure on the page, so a deployment that
 	// bills in credits rather than dollars reads correctly.
 	BudgetUnit string
@@ -139,7 +139,16 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 	// here so an existing key converges on its profile rather than keeping
 	// whatever it was created with — otherwise this page advertises a limit
 	// the gateway does not enforce.
-	u.syncKeyLimits(r.Context(), apiKey, profile, su.User.OIDCSub)
+	//
+	// While a passed deadline is still on the row, the expiry job owns this
+	// user's limits: it may be pushing the reverted ones right now, and a push
+	// from here would race it and could leave the old limits enforced with no
+	// deadline left to correct them. The job clears the deadline when it
+	// succeeds, so this skip lasts at most one job interval.
+	expiryPending := su.User.ProfileExpiresAt != nil && !su.User.ProfileExpiresAt.After(time.Now())
+	if !expiryPending {
+		u.syncKeyLimits(r.Context(), apiKey, profile, su.User.OIDCSub)
+	}
 
 	// The Admin link must agree with what the /admin gate will actually allow,
 	// so it is decided by the same resolver rather than a second copy of the

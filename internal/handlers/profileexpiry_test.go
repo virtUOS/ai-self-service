@@ -162,3 +162,39 @@ func TestDashboardSaysNothingWithoutADeadline(t *testing.T) {
 		t.Error("the dashboard mentions a deadline for a permanent assignment")
 	}
 }
+
+// While a deadline has already passed, the expiry job owns the user's limits
+// — it may be reverting them right now — so the dashboard must not push the
+// profile it just read. Doing so would race the job: if the job wins by
+// clearing the deadline right after the dashboard reads it, a push here would
+// leave the old limits enforced with no deadline left to correct them.
+func TestDashboardSkipsSyncWithAPassedDeadline(t *testing.T) {
+	ui, fake, store, user := newTestUI(t, "pexpd3")
+	ctx := context.Background()
+
+	post(t, ui, ui.GenerateKey, "/key/generate")
+	k, err := store.GetAPIKeyByUser(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p := &database.Profile{Name: "elevated"}
+	if err := store.CreateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetProfileQuotas(ctx, p.ID, []database.ProfileQuota{
+		{Budget: 0.01, Period: "1h"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().Add(-time.Hour)
+	if err := store.SetUserProfileUntil(ctx, user.ID, &p.ID, &past, nil, false); err != nil {
+		t.Fatal(err)
+	}
+
+	getPage(t, ui, ui.Dashboard, "/")
+
+	if _, ok := fake.LimitsByRef[k.LiteLLMKey]; ok {
+		t.Error("dashboard pushed limits for a user with an already-passed deadline")
+	}
+}
