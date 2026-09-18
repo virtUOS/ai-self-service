@@ -150,9 +150,14 @@ var messages = map[string]map[Lang]string{
 	"admin.noevents":   {DE: "Noch keine Ereignisse erfasst.", EN: "No events recorded yet."},
 	"admin.audit.note": {DE: "Die 50 jüngsten Schlüssel- und Profiländerungen.", EN: "The 50 most recent key and profile changes."},
 
-	"admin.admins":            {DE: "Administration", EN: "Admins"},
-	"admin.admins.note":       {DE: "Wer auf diese Seite zugreifen darf. Einträge aus der Konfiguration können hier nicht entfernt werden.", EN: "Who may reach this page. Entries from the configuration cannot be removed here."},
-	"admin.admins.role":       {DE: "Zusätzlich ist jede Person Administrator, die im IdP die Rolle %s trägt. Diese Liste kann sie nicht anzeigen.", EN: "Anyone holding the %s role in the IdP is an admin as well. This list cannot show them."},
+	"admin.admins":       {DE: "Administration", EN: "Admins"},
+	"admin.admins.note":  {DE: "Wer auf diese Seite zugreifen darf. Einträge aus der Konfiguration können hier nicht entfernt werden.", EN: "Who may reach this page. Entries from the configuration cannot be removed here."},
+	"admin.admins.role":  {DE: "Zusätzlich ist jede Person Administrator, die im IdP die Rolle %s trägt. Diese Liste kann sie nicht anzeigen.", EN: "Anyone holding the %s role in the IdP is an admin as well. This list cannot show them."},
+	"admin.admins.entry": {DE: "Eintrag", EN: "Entry"},
+	"admin.admins.who":   {DE: "Person", EN: "Person"},
+	// Not "never signed in": the entry could also be a typo, or belong to
+	// someone whose account has since been removed.
+	"admin.admins.unknown":    {DE: "diesem Portal nicht bekannt", EN: "not known to this portal"},
 	"admin.admins.source":     {DE: "Quelle", EN: "Source"},
 	"admin.admins.fromconfig": {DE: "aus der Konfiguration", EN: "from configuration"},
 	"admin.admins.granted":    {DE: "hier vergeben", EN: "granted here"},

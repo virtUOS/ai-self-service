@@ -190,11 +190,11 @@ func TestAdminRowsMarkConfigEntriesUnremovable(t *testing.T) {
 	cfg := &config.Config{AdminIDs: []string{"fixed@uni-osnabrueck.de"}}
 	grants := []database.AdminGrant{{Email: "granted@uni-osnabrueck.de"}}
 
-	rows := adminRows(cfg, grants, actingAdminEmail)
+	rows := adminRows(cfg, grants, actingAdminEmail, nil)
 
 	var fixed, granted *adminRow
 	for i := range rows {
-		switch rows[i].Email {
+		switch rows[i].ID {
 		case "fixed@uni-osnabrueck.de":
 			fixed = &rows[i]
 		case "granted@uni-osnabrueck.de":
@@ -216,7 +216,7 @@ func TestAdminRowsMarkConfigEntriesUnremovable(t *testing.T) {
 func TestAdminRowsMarkSelf(t *testing.T) {
 	grants := []database.AdminGrant{{Email: actingAdminEmail}}
 
-	rows := adminRows(&config.Config{}, grants, actingAdminEmail)
+	rows := adminRows(&config.Config{}, grants, actingAdminEmail, nil)
 
 	if len(rows) != 1 {
 		t.Fatalf("rows = %+v, want one", rows)
@@ -226,5 +226,89 @@ func TestAdminRowsMarkSelf(t *testing.T) {
 	}
 	if rows[0].Removable {
 		t.Error("the acting admin's own row offered a remove button")
+	}
+}
+
+// An ADMIN_IDS entry is usually an OIDC subject, which is a UUID and names
+// nobody. The panel resolves it against the users this portal has seen, or an
+// operator reading the list cannot tell who any of them are.
+func TestAdminRowsNameThePersonBehindASubject(t *testing.T) {
+	cfg := &config.Config{AdminIDs: []string{
+		"7ca16f0b-d201-459e-82ff-782fd097f78f",
+		"00000000-0000-0000-0000-000000000000", // nobody who has logged in
+	}}
+	users := []database.User{{
+		OIDCSub: "7ca16f0b-d201-459e-82ff-782fd097f78f",
+		Email:   "known@uni-osnabrueck.de",
+		Name:    "Known Person",
+	}}
+
+	rows := adminRows(cfg, nil, actingAdminEmail, users)
+
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want 2", len(rows))
+	}
+	if rows[0].Identity != "Known Person <known@uni-osnabrueck.de>" {
+		t.Errorf("Identity = %q, want the name and address behind the subject", rows[0].Identity)
+	}
+	// The entry itself stays verbatim: it is what an operator must match when
+	// editing ADMIN_IDS.
+	if rows[0].ID != "7ca16f0b-d201-459e-82ff-782fd097f78f" {
+		t.Errorf("ID = %q, want the subject unchanged", rows[0].ID)
+	}
+	// A subject nobody has signed in with cannot be resolved, and must not
+	// borrow someone else's name.
+	if rows[1].Identity != "" {
+		t.Errorf("Identity = %q, want empty for a subject nobody has used", rows[1].Identity)
+	}
+}
+
+// An entry that is already an address gains nothing from repeating it.
+func TestAdminRowsDoNotEchoAnAddressBackAtItself(t *testing.T) {
+	cfg := &config.Config{AdminIDs: []string{"plain@uni-osnabrueck.de"}}
+	users := []database.User{{
+		OIDCSub: "sub-1",
+		Email:   "plain@uni-osnabrueck.de",
+	}}
+
+	rows := adminRows(cfg, nil, actingAdminEmail, users)
+
+	if rows[0].Identity != "" {
+		t.Errorf("Identity = %q, want empty when the entry is already the address", rows[0].Identity)
+	}
+}
+
+// users.email has no unique constraint, so two accounts can share an address.
+// Naming either beside an admin entry would be a guess, and the wrong name is
+// worse than none.
+func TestAdminRowsRefuseToGuessOnASharedAddress(t *testing.T) {
+	cfg := &config.Config{AdminIDs: []string{"shared@uni-osnabrueck.de"}}
+	users := []database.User{
+		{OIDCSub: "sub-a", Email: "shared@uni-osnabrueck.de", Name: "First Person"},
+		{OIDCSub: "sub-b", Email: "shared@uni-osnabrueck.de", Name: "Second Person"},
+	}
+
+	rows := adminRows(cfg, nil, actingAdminEmail, users)
+
+	if rows[0].Identity != "" {
+		t.Errorf("Identity = %q, want empty when two accounts share the address", rows[0].Identity)
+	}
+}
+
+// config.IsAdmin matches subjects exactly. Resolving one case-insensitively
+// would put a name beside an entry the gate itself rejects, telling an
+// operator a broken entry works.
+func TestAdminRowsMatchSubjectsExactly(t *testing.T) {
+	cfg := &config.Config{AdminIDs: []string{"7CA16F0B-D201-459E-82FF-782FD097F78F"}}
+	users := []database.User{{
+		OIDCSub: "7ca16f0b-d201-459e-82ff-782fd097f78f",
+		Email:   "someone@uni-osnabrueck.de",
+		Name:    "Someone",
+	}}
+
+	rows := adminRows(cfg, nil, actingAdminEmail, users)
+
+	if rows[0].Identity != "" {
+		t.Errorf("Identity = %q, want empty: the gate would not accept this entry either", rows[0].Identity)
 	}
 }

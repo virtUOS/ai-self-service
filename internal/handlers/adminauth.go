@@ -59,7 +59,15 @@ func resolveAdmin(ctx context.Context, cfg *config.Config, store *database.Store
 
 // adminRow is one line of the Admins tab.
 type adminRow struct {
-	Email     string
+	// ID is the entry exactly as configured or granted: an OIDC subject or an
+	// email address. It is what an operator must match when editing ADMIN_IDS,
+	// so it is shown verbatim rather than prettified.
+	ID string
+	// Identity names the person behind ID when the portal knows them, as
+	// "Name <email>". A subject is a UUID and says nothing about who holds it;
+	// it can only be resolved once that person has logged in here, so this is
+	// empty for an admin who never has.
+	Identity  string
 	Source    string // "role", "config" or "granted"
 	Removable bool
 	IsSelf    bool
@@ -75,18 +83,72 @@ type adminRow struct {
 // ADMIN_ROLE cannot be enumerated: role membership lives in the IdP and this
 // process only ever sees the token of whoever is currently signed in. The
 // template says so rather than implying the list is complete.
-func adminRows(cfg *config.Config, grants []database.AdminGrant, actor string) []adminRow {
+func adminRows(cfg *config.Config, grants []database.AdminGrant, actor string, users []database.User) []adminRow {
+	// An entry may be an OIDC subject, which is a UUID and names nobody. Index
+	// the users this portal has seen so those rows can say who they are; an
+	// admin who has never logged in here stays unresolved, because nothing
+	// maps their subject to a person until they do.
+	//
+	// Subjects and addresses are indexed separately and matched the way
+	// config.IsAdmin matches them — subjects exactly, addresses case-folded.
+	// A looser match here would put a name beside an entry that the gate
+	// itself rejects, telling an operator a broken entry works.
+	bySub := make(map[string]string, len(users))
+	byEmail := make(map[string]string, len(users))
+	// users.email carries no unique constraint, so two accounts can share an
+	// address. Naming either one beside an admin entry would be a guess, and a
+	// wrong name is worse than none — so a shared address resolves to nothing.
+	shared := make(map[string]bool, len(users))
+
+	for _, u := range users {
+		who := u.Email
+		if u.Name != "" {
+			who = u.Name + " <" + u.Email + ">"
+		}
+		if u.OIDCSub != "" {
+			bySub[u.OIDCSub] = who
+		}
+		if u.Email == "" {
+			continue
+		}
+		key := strings.ToLower(u.Email)
+		if prev, seen := byEmail[key]; seen && prev != who {
+			shared[key] = true
+			continue
+		}
+		byEmail[key] = who
+	}
+
+	// An entry that is already the address it resolves to gains nothing from
+	// repeating it beside itself.
+	nameFor := func(id string) string {
+		if who, ok := bySub[id]; ok {
+			return who
+		}
+		key := strings.ToLower(id)
+		if shared[key] {
+			return ""
+		}
+		who := byEmail[key]
+		if strings.EqualFold(who, id) {
+			return ""
+		}
+		return who
+	}
+
 	rows := make([]adminRow, 0, len(cfg.AdminIDs)+len(grants))
 	for _, id := range cfg.AdminIDs {
 		rows = append(rows, adminRow{
-			Email:  id,
-			Source: "config",
-			IsSelf: strings.EqualFold(id, actor),
+			ID:       id,
+			Identity: nameFor(id),
+			Source:   "config",
+			IsSelf:   strings.EqualFold(id, actor),
 		})
 	}
 	for _, g := range grants {
 		rows = append(rows, adminRow{
-			Email:     g.Email,
+			ID:        g.Email,
+			Identity:  nameFor(g.Email),
 			Source:    "granted",
 			Removable: !strings.EqualFold(g.Email, actor),
 			IsSelf:    strings.EqualFold(g.Email, actor),
