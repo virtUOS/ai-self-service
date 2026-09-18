@@ -10,10 +10,11 @@ import (
 // both the dashboard and the expiry job depend on it: a test next to only one
 // caller would leave the other free to drift.
 func TestProfileLimits(t *testing.T) {
-	tpm := int64(1000)
+	tpm, rpm := int64(1000), int64(60)
 	p := &Profile{
 		Models:   []string{"Qwen/Qwen3.8-27B-FP8"},
 		TPMLimit: &tpm,
+		RPMLimit: &rpm,
 		Quotas: []ProfileQuota{
 			{Budget: 0.1, Period: "24h"},
 		},
@@ -24,6 +25,11 @@ func TestProfileLimits(t *testing.T) {
 	}
 	if got.TokensPerMinute == nil || *got.TokensPerMinute != 1000 {
 		t.Errorf("TokensPerMinute = %v", got.TokensPerMinute)
+	}
+	// Every field gets pinned by value: a mapping dropped in a refactor would
+	// otherwise leave that cap silently unenforced on every live key.
+	if got.RequestsPerMinute == nil || *got.RequestsPerMinute != 60 {
+		t.Errorf("RequestsPerMinute = %v", got.RequestsPerMinute)
 	}
 	if len(got.Quotas) != 1 || got.Quotas[0].Budget != 0.1 || got.Quotas[0].Period != "24h" {
 		t.Errorf("quotas = %+v, want one window of 0.1/24h", got.Quotas)
