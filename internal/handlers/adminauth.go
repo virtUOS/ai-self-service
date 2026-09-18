@@ -88,23 +88,48 @@ func adminRows(cfg *config.Config, grants []database.AdminGrant, actor string, u
 	// the users this portal has seen so those rows can say who they are; an
 	// admin who has never logged in here stays unresolved, because nothing
 	// maps their subject to a person until they do.
-	identity := make(map[string]string, len(users)*2)
+	//
+	// Subjects and addresses are indexed separately and matched the way
+	// config.IsAdmin matches them — subjects exactly, addresses case-folded.
+	// A looser match here would put a name beside an entry that the gate
+	// itself rejects, telling an operator a broken entry works.
+	bySub := make(map[string]string, len(users))
+	byEmail := make(map[string]string, len(users))
+	// users.email carries no unique constraint, so two accounts can share an
+	// address. Naming either one beside an admin entry would be a guess, and a
+	// wrong name is worse than none — so a shared address resolves to nothing.
+	shared := make(map[string]bool, len(users))
+
 	for _, u := range users {
 		who := u.Email
 		if u.Name != "" {
 			who = u.Name + " <" + u.Email + ">"
 		}
 		if u.OIDCSub != "" {
-			identity[strings.ToLower(u.OIDCSub)] = who
+			bySub[u.OIDCSub] = who
 		}
-		if u.Email != "" {
-			identity[strings.ToLower(u.Email)] = who
+		if u.Email == "" {
+			continue
 		}
+		key := strings.ToLower(u.Email)
+		if prev, seen := byEmail[key]; seen && prev != who {
+			shared[key] = true
+			continue
+		}
+		byEmail[key] = who
 	}
+
 	// An entry that is already the address it resolves to gains nothing from
 	// repeating it beside itself.
 	nameFor := func(id string) string {
-		who := identity[strings.ToLower(id)]
+		if who, ok := bySub[id]; ok {
+			return who
+		}
+		key := strings.ToLower(id)
+		if shared[key] {
+			return ""
+		}
+		who := byEmail[key]
 		if strings.EqualFold(who, id) {
 			return ""
 		}
