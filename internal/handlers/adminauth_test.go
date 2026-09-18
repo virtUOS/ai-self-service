@@ -3,7 +3,10 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
@@ -11,6 +14,7 @@ import (
 
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/ai-self-service/internal/session"
 )
 
 // newAuthTestStore opens a migrated in-memory store for the resolver tests.
@@ -93,5 +97,64 @@ func TestResolveAdminRefusesAStranger(t *testing.T) {
 
 	if src.isAdmin() {
 		t.Errorf("source = %v, want no admin rights", src)
+	}
+}
+
+// adminGateWithGrant runs the admin middleware for a user who holds a grant in
+// the table and no other source of rights, returning the status code.
+func adminGateWithGrant(t *testing.T, name string, cfg *config.Config, email string) int {
+	t.Helper()
+	sqldb, err := sql.Open(sqliteshim.ShimName, "file:"+name+"?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+	t.Cleanup(func() { db.Close() })
+
+	store := database.NewStore(db)
+	ctx := context.Background()
+	if err := store.RunMigrations(ctx); err != nil {
+		t.Fatal(err)
+	}
+	user, err := store.GetOrCreateUser(ctx, "sub-1", email, "N")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.GrantAdmin(ctx, email, "boss@uni-osnabrueck.de"); err != nil {
+		t.Fatal(err)
+	}
+
+	sessions := session.NewManager(store, time.Hour, false)
+	token, err := sessions.Create(ctx, user.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	admin := &Admin{cfg: cfg, store: store, sessions: sessions}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: token})
+	admin.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})).ServeHTTP(rec, req)
+	return rec.Code
+}
+
+// The point of the feature: a grant made in the panel opens the panel, with
+// nothing in the deployment naming this person.
+func TestAdminGateAcceptsAGrant(t *testing.T) {
+	got := adminGateWithGrant(t, "gate1", &config.Config{}, "granted@uni-osnabrueck.de")
+
+	if got != http.StatusOK {
+		t.Errorf("status %d for a granted admin, want 200", got)
+	}
+}
+
+// Someone with no grant and no configuration is still refused.
+func TestAdminGateStillRefusesAStranger(t *testing.T) {
+	got := adminGate(t, "gate2", &config.Config{}, "")
+
+	if got != http.StatusForbidden {
+		t.Errorf("status %d for a stranger, want 403", got)
 	}
 }

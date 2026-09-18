@@ -18,7 +18,6 @@ import (
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 	"github.com/virtuos/ai-self-service/internal/litellm"
 	"github.com/virtuos/ai-self-service/internal/metrics"
-	oidcpkg "github.com/virtuos/ai-self-service/internal/oidc"
 	"github.com/virtuos/ai-self-service/internal/session"
 	"github.com/virtuos/ai-self-service/web"
 )
@@ -147,25 +146,18 @@ func (a *Admin) Middleware(next http.Handler) http.Handler {
 			http.Redirect(w, r, "/login", http.StatusFound)
 			return
 		}
-		// A role from the IdP wins: membership is then managed where staff
-		// changes already are, and the list is only a fallback for realms that
-		// do not emit one.
-		if a.cfg.HasAdminRole(oidcpkg.RealmRoles(su.IDToken)) {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		admin, bySubject := a.cfg.IsAdmin(su.User.OIDCSub, su.User.Email)
-		if !admin {
+		src, bySubject := resolveAdmin(r.Context(), a.cfg, a.store,
+			su.IDToken, su.User.OIDCSub, su.User.Email)
+		if !src.isAdmin() {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-		if !bySubject {
+		if (src == adminSourceEnv || src == adminSourceGrant) && !bySubject {
 			// The entry that granted this is an email address, which the IdP
 			// can reassign. Say so once per request rather than silently
 			// relying on it, so an operator can migrate the allowlist.
 			slog.Warn("admin granted by email rather than OIDC subject",
-				"email", su.User.Email, "sub", su.User.OIDCSub)
+				"email", su.User.Email, "sub", su.User.OIDCSub, "source", src)
 		}
 		next.ServeHTTP(w, r)
 	})
