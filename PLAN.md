@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.7.0` |
+| Latest release | `v0.7.1` |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -51,7 +51,7 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-295 tests. `go test ./...` needs nothing external; the one skip is a manual
+299 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -237,6 +237,22 @@ and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
 needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
+
+### Released as v0.7.1 (2026-09-19)
+
+No schema change; the admin panel reads better.
+
+An `ADMIN_IDS` entry is usually an OIDC subject, so the Admins tab listed a
+column of UUIDs headed "E-Mail" — right data, wrong label, and no way to tell
+who any of the admins were. The entry is now shown verbatim beside the person
+it names, resolved from the users this portal has seen. It refuses to guess:
+an address two accounts share resolves to nothing, and subjects are matched
+exactly as `config.IsAdmin` matches them, so a name never appears beside an
+entry the gate itself would reject.
+
+Also fixes two dashboard tests that compared a local-time deadline against a
+page formatting in UTC, so they failed for the two hours a day when those are
+different dates.
 
 ### Released as v0.7.0 (2026-09-18)
 
