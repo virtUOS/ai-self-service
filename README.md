@@ -101,11 +101,31 @@ prefer: an address is assigned by the IdP and can be reassigned, so an
 allowlist keyed on it grants admin to whoever holds that address today rather
 than to a person. Each user's subject is shown in the admin panel's user table,
 click to copy. Granting by email still works and is logged as such, so an
-existing `ADMIN_EMAILS` deployment keeps running while it is migrated. The admin panel at `/admin` provides:
+existing `ADMIN_EMAILS` deployment keeps running while it is migrated.
+
+Admin rights can also be granted from the panel itself, on the **Admins** tab,
+without a redeploy. The three sources are checked in order, first match wins:
+`ADMIN_ROLE` first, then `ADMIN_IDS`, then the grants made from the panel.
+`ADMIN_IDS` always wins over a panel grant, and a panel grant can never remove
+an `ADMIN_IDS` entry, which makes the env allowlist the recovery path if the
+last panel-granted admin is ever removed by mistake — there is always a way
+back in that does not depend on the database. A grant can be made by email
+address before the person has ever logged in; their **OIDC subject** is
+recorded the first time they authenticate, and from that point the grant no
+longer depends on the address, for the same reason `ADMIN_IDS` prefers subjects
+over emails above. The admin panel at `/admin` provides:
 
 - **Profiles** — create and edit profiles with model restrictions, TPM/RPM limits, and budget caps. Mark one profile as default; it applies to users with no explicit profile assignment.
 - **Users** — view everyone who has logged in, see their key prefix and expiry,
   assign a profile, and revoke a key.
+- **Admins** — grant and revoke admin rights, and see where each admin's
+  rights come from. Entries from `ADMIN_ROLE` or `ADMIN_IDS` show as "from
+  configuration" with no remove button, since removing them here would not
+  actually take effect. `ADMIN_ROLE` holders cannot be listed individually,
+  because role membership lives in the IdP rather than this app, so the tab
+  says as much instead of implying its list is complete. An admin can neither
+  revoke their own rights nor revoke an `ADMIN_IDS` entry, and every grant and
+  revocation is written to the audit log.
 - **Audit log** — the 50 most recent key and profile changes, recording who did
   what to whom. Rows outlive the key and user they describe, so revoking does
   not erase the history.
