@@ -213,8 +213,8 @@ func TestAdminTemplateRendersAdminsTab(t *testing.T) {
 		Profiles:  []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
 		CSRFToken: "TOK",
 		Admins: []adminRow{
-			{Email: "fixed@uni-osnabrueck.de", Source: "config", Removable: false},
-			{Email: "granted@uni-osnabrueck.de", Source: "granted", Removable: true},
+			{ID: "fixed@uni-osnabrueck.de", Source: "config", Removable: false},
+			{ID: "granted@uni-osnabrueck.de", Source: "granted", Removable: true},
 		},
 		AdminRoleName: "ai-self-service-admin",
 	})
@@ -374,8 +374,8 @@ func TestAdminPageFullyGerman(t *testing.T) {
 		Users:           []userRow{{User: database.User{ID: 2, Name: "U", Email: "u@x.de"}}},
 		CSRFToken:       "T",
 		Admins: []adminRow{
-			{Email: "fixed@uni-osnabrueck.de", Source: "config", Removable: false},
-			{Email: "granted@uni-osnabrueck.de", Source: "granted", Removable: true},
+			{ID: "fixed@uni-osnabrueck.de", Source: "config", Removable: false},
+			{ID: "granted@uni-osnabrueck.de", Source: "granted", Removable: true},
 		},
 		AdminRoleName: "ai-self-service-admin",
 	})

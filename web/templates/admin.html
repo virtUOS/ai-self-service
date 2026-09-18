@@ -287,7 +287,8 @@
         <table>
           <thead>
             <tr>
-              <th>{{T .Lang "admin.col.email"}}</th>
+              <th>{{T .Lang "admin.admins.entry"}}</th>
+              <th>{{T .Lang "admin.admins.who"}}</th>
               <th>{{T .Lang "admin.admins.source"}}</th>
               <th></th>
             </tr>
@@ -295,7 +296,13 @@
           <tbody>
             {{range .Admins}}
             <tr>
-              <td>{{.Email}}{{if .IsSelf}} <span class="badge">{{T $.Lang "admin.admins.self"}}</span>{{end}}</td>
+              {{/* Shown verbatim: this is the string an operator has to match
+                   when editing ADMIN_IDS, so prettifying it would mislead. */}}
+              <td><code>{{.ID}}</code>{{if .IsSelf}} <span class="badge">{{T $.Lang "admin.admins.self"}}</span>{{end}}</td>
+              <td>
+                {{if .Identity}}{{.Identity}}
+                {{else}}<em class="text-faint">{{T $.Lang "admin.admins.unknown"}}</em>{{end}}
+              </td>
               <td>
                 {{if eq .Source "config"}}<em class="text-faint">{{T $.Lang "admin.admins.fromconfig"}}</em>
                 {{else}}{{T $.Lang "admin.admins.granted"}}{{end}}
@@ -304,14 +311,14 @@
                 {{if .Removable}}
                 <form method="POST" action="/admin/admins/revoke" style="display:inline">
                   <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                  <input type="hidden" name="email" value="{{.Email}}">
+                  <input type="hidden" name="email" value="{{.ID}}">
                   <button class="btn btn-sm btn-danger">{{T $.Lang "admin.admins.revoke"}}</button>
                 </form>
                 {{end}}
               </td>
             </tr>
             {{else}}
-            <tr><td colspan="3" class="text-faint" style="text-align:center">{{T .Lang "admin.admins.none"}}</td></tr>
+            <tr><td colspan="4" class="text-faint" style="text-align:center">{{T .Lang "admin.admins.none"}}</td></tr>
             {{end}}
           </tbody>
         </table>

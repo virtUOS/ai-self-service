@@ -266,7 +266,7 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 		Flash:           flash,
 		CSRFToken:       a.csrf.Token(w, r),
 		BudgetUnit:      a.cfg.BudgetUnit,
-		Admins:          adminRows(a.cfg, grants, a.actorEmail(r)),
+		Admins:          adminRows(a.cfg, grants, a.actorEmail(r), rawUsers),
 		AdminRoleName:   a.cfg.AdminRole,
 	}); err != nil {
 		slog.Error("admin template", "err", err)
