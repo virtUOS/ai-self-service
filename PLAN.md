@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.6.3` |
+| Latest release | `v0.7.0` |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -51,7 +51,7 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-237 tests. `go test ./...` needs nothing external; the one skip is a manual
+295 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -237,6 +237,34 @@ and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
 needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
+
+### Released as v0.7.0 (2026-09-18)
+
+Two features, each adding columns. Both migrations are additive and every
+existing row keeps its current behaviour, so the upgrade needs no data work.
+
+**Admin rights from the panel.** A new `admin_grants` table, managed from an
+Admins tab, joins the two deploy-time sources. Precedence is `ADMIN_ROLE`,
+then `ADMIN_IDS`, then the table, decided in one resolver that the admin gate
+and the dashboard's nav link both call. `ADMIN_IDS` always grants and cannot
+be removed from the panel, which keeps the deployment as the way back in if
+the last panel-granted admin is removed. A grant made by email is anchored to
+the person's OIDC subject at their first login.
+
+**Time-limited profile assignments.** Any profile can be assigned to a user
+until a date; nothing marks a profile as temporary, and the same profile can
+be permanent for one user and expiring for another. At the deadline the user
+moves to the default profile, to one the admin chose, or their key is deleted
+if the admin picked that explicitly. A job every 15 minutes pushes the
+reverted limits to the gateway itself, so a user who never opens the
+dashboard still has their key corrected; it pushes before clearing the
+deadline, so a gateway failure retries rather than stranding the old limits.
+
+Also in this release: the retired-portal banner from the work merged before
+it, `profileLimits` hoisted onto `database.Profile` so the dashboard and the
+job cannot enforce different limits, and a dev-environment fix — Keycloak had
+no compose profile, so it started alongside the mock and the two fought over
+port 8081, which meant the documented mock command never worked.
 
 ### Released as v0.6.3 (2026-09-07)
 
