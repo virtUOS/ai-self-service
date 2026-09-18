@@ -21,3 +21,6 @@
 # working directory when it is driven from here; they are throwaway captures.
 .playwright-mcp/
 *.png
+
+# Local Claude Code settings. Per-developer, not shared.
+.claude/
