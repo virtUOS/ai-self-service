@@ -11,6 +11,8 @@ var messages = map[string]map[Lang]string{
 	"nav.admin":     {DE: "Administration", EN: "Admin"},
 	"nav.dashboard": {DE: "Übersicht", EN: "Dashboard"},
 	"nav.signout":   {DE: "Abmelden", EN: "Sign out"},
+	"nav.privacy":   {DE: "Datenschutz", EN: "Privacy"},
+	"privacy.title": {DE: "Datenschutzhinweise", EN: "Privacy notice"},
 	"lang.label":    {DE: "Sprache", EN: "Language"},
 
 	// ── Dashboard ───────────────────────────────────────────────────────
@@ -37,6 +39,7 @@ var messages = map[string]map[Lang]string{
 	"dash.key":          {DE: "Schlüssel", EN: "Key"},
 	"dash.expires":      {DE: "Gültig bis", EN: "Expires"},
 	"dash.expires.help": {DE: "Wann dieser Schlüssel ungültig wird. Mit „Verlängern“ erhalten Sie jederzeit einen vollen neuen Zeitraum, beliebig oft.", EN: "When this key stops working. Click Extend for a full new period — you can do that at any time, as often as you like."},
+	"dash.privacy":      {DE: "Datenschutzhinweise zur API-Nutzung", EN: "Privacy notice for API use"},
 	"dash.nokey":        {DE: "Sie haben noch keinen API-Schlüssel.", EN: "You don't have an API key yet."},
 	"dash.generate":     {DE: "API-Schlüssel erzeugen", EN: "Generate API key"},
 	"dash.extend":       {DE: "Verlängern", EN: "Extend"},

@@ -12,6 +12,7 @@
   <h1>{{T .Lang "app.title"}}</h1>
   <nav>
     {{if .IsAdmin}}<a href="/admin">{{T .Lang "nav.admin"}}</a>{{end}}
+    {{if .PrivacyNotice}}<a href="/privacy">{{T .Lang "nav.privacy"}}</a>{{end}}
     <span style="opacity:.6;font-size:.85rem">{{.User.Name}}</span>
     <form method="POST" action="/logout" style="display:inline">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -138,6 +139,12 @@
       </form>
       {{end}}
 
+    {{end}}
+
+    {{if .PrivacyNotice}}
+    <p class="text-muted" style="font-size:.85rem;margin-top:1.25rem">
+      <a href="/privacy">{{T .Lang "dash.privacy"}} →</a>
+    </p>
     {{end}}
   </div>
 

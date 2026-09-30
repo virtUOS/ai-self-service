@@ -142,6 +142,7 @@ func main() {
 		r.Post("/logout", ui.Logout)
 		r.Get("/session/status", ui.SessionStatus)
 		r.Post("/lang", handlers.SetLanguage(cfg.CookieSecure))
+		r.Get("/privacy", ui.Privacy)
 
 		r.Get("/", ui.Dashboard)
 		r.Post("/key/generate", ui.GenerateKey)

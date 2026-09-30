@@ -32,6 +32,9 @@ type UI struct {
 	csrf     *session.CSRF
 	models   *modelCache
 	usage    *usageCache
+
+	// privacyTmpl renders /privacy, the deployment's privacy notice.
+	privacyTmpl *template.Template
 }
 
 func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager, oidc *oidcpkg.Provider, keys keyprovider.Provider, csrf *session.CSRF) *UI {
@@ -45,7 +48,7 @@ func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager,
 		usage.windowDays = cfg.UsageHistoryDays
 	}
 	return &UI{cfg: cfg, store: store, sessions: sessions, oidc: oidc, keys: keys,
-		tmpl: tmpl, flash: newKeyFlash(), csrf: csrf,
+		tmpl: tmpl, privacyTmpl: parsePrivacyTemplate(), flash: newKeyFlash(), csrf: csrf,
 		models: newModelCache(lister), usage: usage}
 }
 
@@ -99,6 +102,9 @@ type dashboardData struct {
 	// SuccessorURL, when set, puts a banner on the page pointing users to
 	// the portal that replaces this one, and hides the key issuing buttons.
 	SuccessorURL string
+	// PrivacyNotice reports that /privacy has a notice to show, so the page
+	// links it rather than a 404.
+	PrivacyNotice bool
 }
 
 // audit records a self-service action, attributing it to the user themselves.
@@ -179,6 +185,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		Quotas:          profileQuotaLines(profile, lang, u.cfg.BudgetUnit),
 		BudgetUnit:      u.cfg.BudgetUnit,
 		SuccessorURL:    u.cfg.SuccessorURL,
+		PrivacyNotice:   privacyNotice(u.cfg, lang) != "",
 		Models:          u.userModels(r.Context(), profile),
 		EmbeddingModels: u.models.Embeddings(r.Context()),
 		Usage:           u.userUsage(r.Context(), apiKey, su.User.OIDCSub, lang),
