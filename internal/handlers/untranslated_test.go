@@ -48,6 +48,7 @@ func TestDashboardHasNoUntranslatedProse(t *testing.T) {
 		ExpiryUrgent:  true,
 		NewKey:        "sk-new",
 		CSRFToken:     "TOK",
+		PrivacyNotice: true,
 	}
 
 	var buf bytes.Buffer
@@ -85,7 +86,7 @@ func TestDashboardRendersNoRawCatalogueKeys(t *testing.T) {
 		ProfileName: "students", ExtendUntil: "2026-11-23",
 		Models: []string{"gpt-4o"}, NewKey: "sk-new",
 		ExpiresInDays: 2, ExpiryUrgent: true, CSRFToken: "TOK",
-		BudgetUnit: "$",
+		BudgetUnit: "$", PrivacyNotice: true,
 		Usage: usageReport{
 			Days:  []keyprovider.DailyUsage{{Day: "2026-08-25", Tokens: 204}},
 			Total: 204, Peak: 204,
@@ -113,7 +114,7 @@ func TestDashboardRendersNoRawCatalogueKeys(t *testing.T) {
 	text := regexp.MustCompile(`<[^>]*>`).ReplaceAllString(buf.String(), " ")
 
 	// Catalogue keys are dotted lowercase identifiers like "dash.quota.used".
-	raw := regexp.MustCompile(`\b(dash|help|badge|admin)\.[a-z][a-z.]*[a-z]\b`)
+	raw := regexp.MustCompile(`\b(dash|help|badge|admin|nav)\.[a-z][a-z.]*[a-z]\b`)
 	if m := raw.FindAllString(text, -1); len(m) > 0 {
 		t.Errorf("template rendered raw catalogue keys (missing from messages.go): %v", m)
 	}

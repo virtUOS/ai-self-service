@@ -66,6 +66,14 @@ type Config struct {
 	// the currency LiteLLM prices models in, or a word like "credits" when the
 	// prices are nominal and should not read as money.
 	BudgetUnit string
+
+	// PrivacyNoticeDE and PrivacyNoticeEN are the deployment's privacy notice,
+	// an HTML fragment per language read from the files PRIVACY_NOTICE_FILE_DE
+	// and PRIVACY_NOTICE_FILE_EN name. The text is the operator's, not the
+	// portal's: it describes what this deployment's gateway and models keep.
+	// With neither set the portal has no privacy page.
+	PrivacyNoticeDE string
+	PrivacyNoticeEN string
 }
 
 func Load() (*Config, error) {
@@ -130,7 +138,40 @@ func Load() (*Config, error) {
 	}
 	cfg.KeyDurationDays = days
 
+	for _, n := range []struct {
+		env string
+		dst *string
+	}{
+		{"PRIVACY_NOTICE_FILE_DE", &cfg.PrivacyNoticeDE},
+		{"PRIVACY_NOTICE_FILE_EN", &cfg.PrivacyNoticeEN},
+	} {
+		text, err := readNotice(strings.TrimSpace(os.Getenv(n.env)))
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", n.env, err)
+		}
+		*n.dst = text
+	}
+
 	return cfg, nil
+}
+
+// readNotice reads a privacy notice file, or nothing when no path is given.
+//
+// A named file that is missing or blank is an error rather than no notice: the
+// operator asked for the page, and a typo in the path would otherwise remove it
+// without anyone noticing.
+func readNotice(path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(string(b)) == "" {
+		return "", fmt.Errorf("%s is empty", path)
+	}
+	return string(b), nil
 }
 
 // HasAdminRole reports whether any of the roles a user's token carries is the

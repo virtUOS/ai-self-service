@@ -141,6 +141,13 @@ main {
 .card h2 { font-size: 1.05rem; font-weight: 600; margin-bottom: 1.25rem; color: var(--text); }
 .card h3 { font-size: .95rem; font-weight: 600; margin-bottom: .75rem; color: var(--text); }
 
+/* The privacy notice is the operator's own prose markup, which the reset above
+   would run together into one block. */
+.notice h3 { margin-top: 1.5rem; }
+.notice p, .notice ul { margin-bottom: .75rem; }
+.notice ul { padding-left: 1.25rem; }
+.notice li { margin-bottom: .4rem; }
+
 /* ── Info grid ───────────────────────────────────────────── */
 .info-grid { display: grid; grid-template-columns: max-content 1fr; gap: .4rem 1.25rem; }
 .info-grid dt { color: var(--text-subtle); font-size: .85rem; padding-top: .05rem; }

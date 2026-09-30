@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="{{.Lang}}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{T .Lang "privacy.title"}} · {{T .Lang "app.title"}}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <h1>{{T .Lang "app.title"}}</h1>
+  <nav>
+    <a href="/">{{T .Lang "nav.dashboard"}}</a>
+    <form method="POST" action="/lang" class="lang-switch">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="return_to" value="{{.Path}}">
+      {{$cur := .Lang}}{{range .Langs}}{{if ne . $cur}}
+      <button type="submit" name="lang" value="{{.}}" title="{{.Name}}">{{.}}</button>
+      {{end}}{{end}}
+    </form>
+  </nav>
+</header>
+
+<main>
+  <div class="card notice">
+    {{.Notice}}
+  </div>
+</main>
+
+</body>
+</html>
