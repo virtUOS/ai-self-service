@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.7.1` |
+| Latest release | `v0.8.0` |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -51,7 +51,7 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-299 tests. `go test ./...` needs nothing external; the one skip is a manual
+313 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -237,6 +237,26 @@ and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
 needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
+
+### Released as v0.8.0 (2026-09-30)
+
+No schema change; a privacy notice, supplied by the deployment.
+
+Users asked whether requests made with a portal key are stored or used for
+training, and the answer was written down nowhere they could find. It is now at
+`/privacy`, readable without login and linked from the dashboard header and the
+key card. The portal carries no text of its own: `PRIVACY_NOTICE_FILE_DE` and
+`PRIVACY_NOTICE_FILE_EN` name an HTML fragment the deployment ships, since what
+the notice describes is what that deployment's gateway and models keep. The
+approved German text lives in the setup repo
+(`files/ai-self-service/privacy.de.html`); there is no English one yet, so
+English readers get the German. With neither variable set there is no page and
+no link, and a named file that is missing or blank stops startup.
+
+The notice deliberately names no retention periods, as none are decided. Note
+that LiteLLM's spend-log retention never applied: it sat under
+`litellm_settings`, where litellm ignores it (fix in litellm-setup,
+`fix-spend-log-retention`).
 
 ### Released as v0.7.1 (2026-09-19)
 
