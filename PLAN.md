@@ -40,7 +40,8 @@ Phases 1–6 of the original assessment all shipped:
   consumed per day over 30 days, and what is left of the enforced quota.
 - **Profile sync** — a profile's limits are re-applied to existing keys on
   every dashboard load, so an edit takes effect without regenerating.
-- **Local dev** — Keycloak, or a faster OIDC mock under `--profile mock`.
+- **Local dev** — an OIDC mock (`--profile mock`, which `.env.example` targets
+  out of the box), or Keycloak under `--profile keycloak`.
 - **Stacked quota windows** — a profile holds several allowances at once
   (100k/day AND 1M/month); the gateway enforces each independently.
 - **A usage bar per quota window** — the card shows every allowance, since the

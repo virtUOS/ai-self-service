@@ -31,7 +31,9 @@ A self-service web portal that lets users generate, manage, and renew their own 
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in the values:
+Copy `.env.example` to `.env` and fill in the values. The example is preset
+for local development against the OIDC mock in `dev/`, so for that only
+`LITELLM_BASE_URL` and `LITELLM_MASTER_KEY` need filling in:
 
 | Variable             | Required | Default     | Description                                                        |
 | -------------------- | -------- | ----------- | ------------------------------------------------------------------ |
@@ -71,18 +73,23 @@ The server runs database migrations and seeds a default profile on startup.
 
 ### Local development
 
-The app needs an OIDC provider before it will serve traffic — it fetches the
-discovery document at startup. `dev/` provides two; see `dev/README.md` for
-which to use when.
-
 ```bash
-docker compose -f dev/docker-compose.yml --profile keycloak up -d  # Keycloak, ~20s
-docker compose -f dev/docker-compose.yml --profile mock up -d      # OIDC mock, ~8s
+cp .env.example .env    # then set LITELLM_BASE_URL and LITELLM_MASTER_KEY
+docker compose -f dev/docker-compose.yml --profile mock up -d   # or podman compose
+go run ./cmd/server
 ```
 
-Keycloak is the software production runs, so it is what to use when touching
-anything auth-shaped. The mock starts faster and needs no realm import, but
-serves no back-channel logout, so that path cannot be exercised against it.
+Open <http://localhost:8080> and log in by entering `admin` (admin panel) or
+`student` at the mock's prompt. Stop the mock with
+`docker compose -f dev/docker-compose.yml --profile mock down`.
+
+The app needs an OIDC provider before it will serve traffic — it fetches the
+discovery document at startup. The mock starts in seconds and needs no
+configuration, but serves no back-channel logout, so that path cannot be
+exercised against it. When touching anything auth-shaped, switch to Keycloak,
+the software production runs: stop the mock, start `--profile keycloak`, and
+set `OIDC_ISSUER_URL=http://localhost:8081/realms/virtuos`. See
+`dev/README.md` for details.
 
 The auth-path tests need neither: `internal/oidc/mockprovider_test.go` runs an
 in-process issuer, so `go test ./...` requires nothing external.
