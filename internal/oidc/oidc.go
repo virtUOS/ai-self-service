@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -77,7 +78,31 @@ func NewProvider(ctx context.Context, cfg *config.Config, store *database.Store)
 	}, nil
 }
 
+// canonicalHop marks a login request this handler already moved to the
+// redirect URL's host, so a proxy that rewrites Host cannot make it loop.
+const canonicalHop = "canonical"
+
 func (p *Provider) LoginHandler(w http.ResponseWriter, r *http.Request) {
+	// The state cookie is bound to the host /login is served on, but the
+	// provider returns the browser to OIDC_REDIRECT_URL. Reached under another
+	// name — 127.0.0.1 for localhost, say — the callback arrives without the
+	// cookie and fails with "invalid state", so start the login on the
+	// redirect URL's host instead.
+	if canonical, err := url.Parse(p.cfg.OIDCRedirectURL); err == nil && canonical.Host != "" &&
+		!strings.EqualFold(r.Host, canonical.Host) {
+		if r.URL.Query().Get(canonicalHop) == "" {
+			target := *canonical
+			target.Path = r.URL.Path
+			q := r.URL.Query()
+			q.Set(canonicalHop, "1")
+			target.RawQuery = q.Encode()
+			http.Redirect(w, r, target.String(), http.StatusFound)
+			return
+		}
+		slog.Warn("login: request host still differs from OIDC_REDIRECT_URL after redirect; is the proxy rewriting Host?",
+			"host", r.Host, "redirect_host", canonical.Host)
+	}
+
 	state := generateState()
 	http.SetCookie(w, &http.Cookie{
 		Name:     "oidc_state_" + state,
