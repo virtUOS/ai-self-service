@@ -8,25 +8,7 @@
 </head>
 <body>
 
-<header>
-  <h1>{{T .Lang "app.title"}}</h1>
-  <nav>
-    {{if .IsAdmin}}<a href="/admin">{{T .Lang "nav.admin"}}</a>{{end}}
-    {{if .PrivacyNotice}}<a href="/privacy">{{T .Lang "nav.privacy"}}</a>{{end}}
-    <span style="opacity:.6;font-size:.85rem">{{.User.Name}}</span>
-    <form method="POST" action="/logout" style="display:inline">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <button type="submit">{{T .Lang "nav.signout"}}</button>
-    </form>
-    <form method="POST" action="/lang" class="lang-switch">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <input type="hidden" name="return_to" value="{{.Path}}">
-      {{$cur := .Lang}}{{range .Langs}}{{if ne . $cur}}
-      <button type="submit" name="lang" value="{{.}}" title="{{.Name}}">{{.}}</button>
-      {{end}}{{end}}
-    </form>
-  </nav>
-</header>
+{{template "header" .}}
 
 <main>
 
@@ -308,6 +290,8 @@
   {{end}}
 
 </main>
+
+{{template "footer" .}}
 
 <script>
 const COPIED = {{T .Lang "dash.copied"}};

@@ -92,12 +92,12 @@ func TestPrivacyNoticeFollowsTheReadersLanguage(t *testing.T) {
 	}
 }
 
-// Once a notice exists, users find it from the header on every visit and from
-// the key card, where they are about to create the key it is about. Without
-// one there is nothing to link to.
+// Once a notice exists, users find it in the footer of every page and on the
+// key card, where they are about to create the key it is about. Without one
+// there is nothing to link to.
 func TestDashboardLinksThePrivacyNoticeWhenConfigured(t *testing.T) {
 	ui, _, _, _ := newTestUI(t, "priv4")
-	render := func() (header, main string) {
+	render := func() (main, footer string) {
 		t.Helper()
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.AddCookie(&http.Cookie{Name: "session_token", Value: os.Getenv("SESSION_TOKEN")})
@@ -106,21 +106,22 @@ func TestDashboardLinksThePrivacyNoticeWhenConfigured(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("dashboard returned %d", rec.Code)
 		}
-		header, main, ok := strings.Cut(rec.Body.String(), "<main>")
+		_, rest, ok := strings.Cut(rec.Body.String(), "<main>")
 		if !ok {
 			t.Fatal("dashboard has no <main>")
 		}
-		return header, main
+		main, footer, _ = strings.Cut(rest, "</main>")
+		return main, footer
 	}
 
-	if header, main := render(); strings.Contains(header+main, `href="/privacy"`) {
+	if main, footer := render(); strings.Contains(main+footer, `href="/privacy"`) {
 		t.Error("dashboard links a privacy page that does not exist")
 	}
 
 	ui.cfg.PrivacyNoticeDE = "<p>Hinweise</p>"
-	header, main := render()
-	if !strings.Contains(header, `href="/privacy"`) {
-		t.Error("header does not link the privacy notice")
+	main, footer := render()
+	if !strings.Contains(footer, `<footer>`) || !strings.Contains(footer, `href="/privacy"`) {
+		t.Error("footer does not link the privacy notice")
 	}
 	if !strings.Contains(main, `href="/privacy"`) {
 		t.Error("key card does not link the privacy notice")

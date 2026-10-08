@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/virtuos/ai-self-service/internal/config"
+	"github.com/virtuos/ai-self-service/internal/database"
 	"github.com/virtuos/ai-self-service/internal/i18n"
 	"github.com/virtuos/ai-self-service/web"
 )
@@ -13,7 +14,7 @@ import (
 func parsePrivacyTemplate() *template.Template {
 	return template.Must(template.New("privacy.html").
 		Funcs(langFuncs()).
-		ParseFS(web.TemplateFS, "templates/privacy.html"))
+		ParseFS(web.TemplateFS, "templates/privacy.html", "templates/layout.html"))
 }
 
 // privacyData is what privacy.html renders.
@@ -23,6 +24,11 @@ type privacyData struct {
 	Path      string
 	CSRFToken string
 	Notice    template.HTML
+	TitleKey  string
+	// User is nil for an anonymous reader, who gets no account menu.
+	User          *database.User
+	IsAdmin       bool
+	PrivacyNotice bool
 }
 
 // privacyNotice is the deployment's notice in the reader's language, or in the
@@ -54,13 +60,23 @@ func (u *UI) Privacy(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if err := u.privacyTmpl.Execute(w, privacyData{
-		Lang:      lang,
-		Langs:     i18n.Supported,
-		Path:      r.URL.Path,
-		CSRFToken: u.csrf.Token(w, r),
-		Notice:    notice,
-	}); err != nil {
+	data := privacyData{
+		Lang:          lang,
+		Langs:         i18n.Supported,
+		Path:          r.URL.Path,
+		CSRFToken:     u.csrf.Token(w, r),
+		Notice:        notice,
+		TitleKey:      "app.title",
+		PrivacyNotice: true,
+	}
+	// A signed-in reader keeps the account menu. The Admin entry is decided
+	// by the same resolver as the /admin gate, as on the dashboard.
+	if su, err := u.requireSession(r); err == nil && su != nil {
+		data.User = su.User
+		src, _ := resolveAdmin(r.Context(), u.cfg, u.store, su.IDToken, su.User.OIDCSub, su.User.Email)
+		data.IsAdmin = src.isAdmin()
+	}
+	if err := u.privacyTmpl.Execute(w, data); err != nil {
 		slog.Error("privacy template", "err", err)
 	}
 }

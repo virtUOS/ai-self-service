@@ -57,7 +57,7 @@ func parseAdminTemplate() *template.Template {
 	funcs["fmtPeriod"] = formatPeriod
 	return template.Must(template.New("admin.html").
 		Funcs(funcs).
-		ParseFS(web.TemplateFS, "templates/admin.html"))
+		ParseFS(web.TemplateFS, "templates/admin.html", "templates/layout.html"))
 }
 
 func NewAdmin(cfg *config.Config, store *database.Store, sessions *session.Manager, keys keyprovider.Provider, csrf *session.CSRF) *Admin {
@@ -179,9 +179,15 @@ type userRow struct {
 }
 
 type adminData struct {
-	Lang            i18n.Lang
-	Langs           []i18n.Lang
-	Path            string
+	Lang     i18n.Lang
+	Langs    []i18n.Lang
+	Path     string
+	TitleKey string
+	// User, IsAdmin and PrivacyNotice feed the shared header and footer.
+	// IsAdmin is always true here, since the route is gated on it.
+	User            *database.User
+	IsAdmin         bool
+	PrivacyNotice   bool
 	AvailableModels []string
 	// DefaultKeyDays is the server-wide expiry a profile falls back to, shown
 	// so "default" in the table is a number rather than a mystery.
@@ -254,10 +260,23 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 		slog.Error("list admin grants", "err", err)
 	}
 	flash := r.URL.Query().Get("flash")
+	// The gate in front of this route has already loaded the session, so a
+	// failure here is a race with logout; the page still renders, without
+	// the account menu.
+	var user *database.User
+	actor := "unknown"
+	if su, err := a.sessions.Get(r.Context(), a.sessions.TokenFromRequest(r)); err == nil && su != nil {
+		user, actor = su.User, su.User.Email
+	}
+	lang := i18n.FromRequest(r)
 	if err := a.tmpl.Execute(w, adminData{
-		Lang:            i18n.FromRequest(r),
+		Lang:            lang,
 		Langs:           i18n.Supported,
 		Path:            r.URL.Path,
+		TitleKey:        "admin.title",
+		User:            user,
+		IsAdmin:         true,
+		PrivacyNotice:   privacyNotice(a.cfg, lang) != "",
 		AvailableModels: a.models.Models(r.Context()),
 		DefaultKeyDays:  a.cfg.KeyDurationDays,
 		Profiles:        profiles,
@@ -266,7 +285,7 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 		Flash:           flash,
 		CSRFToken:       a.csrf.Token(w, r),
 		BudgetUnit:      a.cfg.BudgetUnit,
-		Admins:          adminRows(a.cfg, grants, a.actorEmail(r), rawUsers),
+		Admins:          adminRows(a.cfg, grants, actor, rawUsers),
 		AdminRoleName:   a.cfg.AdminRole,
 	}); err != nil {
 		slog.Error("admin template", "err", err)
