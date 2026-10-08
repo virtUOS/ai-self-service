@@ -57,8 +57,14 @@ func init() {
 	}
 }
 
-// Handler serves the Prometheus exposition format.
-func Handler() http.Handler { return promhttp.Handler() }
+// Handler serves the OpenMetrics format to scrapers that ask for it and falls
+// back to the Prometheus text format otherwise.
+func Handler() http.Handler {
+	return promhttp.InstrumentMetricHandler(prometheus.DefaultRegisterer,
+		promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
+			EnableOpenMetrics: true,
+		}))
+}
 
 // SetKeyGauges publishes the current key counts.
 func SetKeyGauges(active, expiringWithin7d int) {

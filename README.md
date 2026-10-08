@@ -285,7 +285,9 @@ back to English rather than rendering the key.
 ## Metrics
 
 Prometheus metrics are served on `/metrics`, labelled by route template so a
-per-user path does not create a time series per user. In the deployment Caddy
+per-user path does not create a time series per user. Scrapers that send an
+OpenMetrics `Accept` header (Prometheus does by default) get the OpenMetrics
+format; other clients get the classic Prometheus text format. In the deployment Caddy
 restricts the endpoint to the monitoring host.
 
 | Metric | Meaning |
