@@ -52,6 +52,12 @@
   {{end}}
 
   <div class="card">
+    <h2>{{T .Lang "dash.intro.title"}}</h2>
+    <p class="text-muted" style="margin-bottom:.75rem">{{T .Lang "dash.intro.body"}}</p>
+    <p class="text-muted">{{T .Lang "dash.intro.usage"}}</p>
+  </div>
+
+  <div class="card">
     <h2>{{T .Lang "dash.account"}}</h2>
     <dl class="info-grid">
       <dt>{{T .Lang "dash.name"}}</dt>  <dd>{{.User.Name}}</dd>
@@ -252,11 +258,14 @@
   </div>
   {{end}}
 
-  {{if .APIKey}}
+  {{/* Shown before a key exists as well, so newcomers see what they would
+       get and how to use it. A retired portal issues no keys, so there it
+       only helps someone who already has one. */}}
+  {{if or .APIKey (not .SuccessorURL)}}
   <div class="card">
     <h2>{{T .Lang "dash.usage"}}</h2>
     <p class="text-muted" style="margin-bottom:.75rem;font-size:.9rem">
-      {{T .Lang "dash.usage.note"}}
+      {{if .APIKey}}{{T .Lang "dash.usage.note"}}{{else}}{{T .Lang "dash.usage.nokey"}}{{end}}
     </p>
     <dl class="info-grid">
       <dt>{{T .Lang "dash.baseurl"}} <button type="button" class="help" data-help="{{T .Lang "dash.baseurl.help"}}">?</button></dt>
@@ -276,12 +285,17 @@
           {{end}}
         </ul>
         {{/* Clicking a chip copies the bare name — what someone pasting into
-             an SDK or a config file needs — and reveals the request around it
-             here, for the people who wanted a whole example. */}}
-        <div id="curl-panel" class="curl-panel" hidden>
+             an SDK or a config file needs — and switches the example below to
+             that model. The example is on show from the start, for the first
+             model: tucked behind a click, nobody found it. */}}
+        <div id="curl-panel" class="curl-panel">
           <div class="curl-panel-head">
             <span class="text-muted">{{T $.Lang "dash.models.curltitle"}}
               <code id="curl-model"></code></span>
+            <span class="example-tabs" role="group">
+              <button type="button" data-lang="curl" aria-pressed="true" onclick="setExampleLang('curl')">curl</button>
+              <button type="button" data-lang="python" aria-pressed="false" onclick="setExampleLang('python')">Python</button>
+            </span>
             <button type="button" class="copy-btn" onclick="copyCurl(this)">{{T $.Lang "dash.copy"}}</button>
           </div>
           <pre id="curl-code" class="curl-code"></pre>
@@ -328,15 +342,33 @@ function copyText(id, btn) {
   });
 }
 
-// Reveals the request around a model, for the people who want a whole example
+// Which example the panel shows: curl or Python. Remembered per browser, as a
+// convenience only — storage can be blocked, and the default is fine then.
+const EXAMPLE_LANG_KEY = 'exampleLang';
+let exampleLang = 'curl';
+let exampleModel = '';
+try {
+  if (localStorage.getItem(EXAMPLE_LANG_KEY) === 'python') exampleLang = 'python';
+} catch (e) {}
+
+// Shows the request around a model, for the people who want a whole example
 // rather than the name. Focus is not moved: the click was a copy, and yanking
 // the caret down the page would fight anyone tabbing through the chips.
-function showCurl(model) {
+function showExample(model) {
   const panel = document.getElementById('curl-panel');
   if (!panel) return;
+  exampleModel = model;
   document.getElementById('curl-model').textContent = model;
-  document.getElementById('curl-code').textContent = curlExample(model);
-  panel.hidden = false;
+  document.getElementById('curl-code').textContent =
+    exampleLang === 'python' ? pythonExample(model) : curlExample(model);
+  panel.querySelectorAll('.example-tabs button').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.lang === exampleLang)));
+}
+
+function setExampleLang(lang) {
+  exampleLang = lang;
+  try { localStorage.setItem(EXAMPLE_LANG_KEY, lang); } catch (e) {}
+  showExample(exampleModel);
 }
 
 // Copies the example currently on show. Separate from the chips so that
@@ -378,15 +410,41 @@ function curlExample(model) {
     "  }'";
 }
 
+// The same request through the OpenAI Python SDK, which is how most people
+// will script against the gateway. The key comes from the environment for the
+// same reason as above: a secret in a script ends up committed somewhere.
+function pythonExample(model) {
+  const embedding = EMBEDDING_MODELS[model] === true;
+  const call = embedding
+    ? "resp = client.embeddings.create(\n" +
+      "    model=\"" + model + "\",\n" +
+      "    input=\"Your text to embed\",\n" +
+      ")\n" +
+      "print(resp.data[0].embedding[:5])"
+    : "resp = client.chat.completions.create(\n" +
+      "    model=\"" + model + "\",\n" +
+      "    messages=[{\"role\": \"user\", \"content\": \"Hello!\"}],\n" +
+      ")\n" +
+      "print(resp.choices[0].message.content)";
+  return "# pip install openai\n" +
+    "import os\n" +
+    "from openai import OpenAI\n\n" +
+    "client = OpenAI(\n" +
+    "    base_url=\"" + BASE_URL + "\",\n" +
+    "    api_key=os.environ[\"OPENAI_API_KEY\"],\n" +
+    ")\n\n" +
+    call;
+}
+
 // Clicking a model copies its bare name: that is what goes into an SDK call, a
 // config file or an environment variable, and it is the thing that is tedious
-// to retype correctly. The curl example is revealed below rather than put on
+// to retype correctly. The example below switches to it rather than going on
 // the clipboard, so wanting one does not cost the other.
 //
 // The label is swapped rather than the code element replaced, so the button
 // keeps its width and the row does not jump.
 function copyModel(btn) {
-  showCurl(btn.dataset.model);
+  showExample(btn.dataset.model);
   navigator.clipboard.writeText(btn.dataset.model).then(() => {
     if (btn.dataset.busy) return;
     btn.dataset.busy = '1';
@@ -407,6 +465,12 @@ function copyModel(btn) {
       delete btn.dataset.busy;
     }, 1200);
   });
+}
+
+// Fill the example for the first model, so the panel is never empty.
+{
+  const first = document.querySelector('.model-copy');
+  if (first) showExample(first.dataset.model);
 }
 
 // Colour expiry badges
