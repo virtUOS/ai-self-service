@@ -2,6 +2,8 @@ package oidc
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -86,5 +88,53 @@ func TestValidateLogoutTokenRejectsWrongAudience(t *testing.T) {
 
 	if _, err := p.ValidateLogoutToken(context.Background(), tok); err == nil {
 		t.Fatal("logout token for another audience was accepted")
+	}
+}
+
+func TestLoginMovesToRedirectURLHost(t *testing.T) {
+	p := newTestProvider(t, newMockKeycloak(t))
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8080/login?next=x", nil)
+	rec := httptest.NewRecorder()
+	p.LoginHandler(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", rec.Code)
+	}
+	loc := rec.Header().Get("Location")
+	if !strings.HasPrefix(loc, "http://localhost:8080/login?") ||
+		!strings.Contains(loc, "canonical=1") || !strings.Contains(loc, "next=x") {
+		t.Errorf("Location = %q, want /login on localhost:8080 with the query kept", loc)
+	}
+	if len(rec.Result().Cookies()) != 0 {
+		t.Error("state cookie set on the wrong host; the callback would not see it")
+	}
+}
+
+func TestLoginOnRedirectURLHostStartsAuth(t *testing.T) {
+	m := newMockKeycloak(t)
+	p := newTestProvider(t, m)
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/login", nil)
+	rec := httptest.NewRecorder()
+	p.LoginHandler(rec, req)
+
+	if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, m.Issuer()) {
+		t.Errorf("Location = %q, want the provider's authorize endpoint", loc)
+	}
+	if len(rec.Result().Cookies()) != 1 {
+		t.Errorf("cookies = %d, want the state cookie", len(rec.Result().Cookies()))
+	}
+}
+
+// A proxy that rewrites Host would never match; after one hop the login must
+// proceed rather than redirect forever.
+func TestLoginDoesNotLoopWhenHostIsRewritten(t *testing.T) {
+	m := newMockKeycloak(t)
+	p := newTestProvider(t, m)
+	req := httptest.NewRequest(http.MethodGet, "http://upstream:8080/login?canonical=1", nil)
+	rec := httptest.NewRecorder()
+	p.LoginHandler(rec, req)
+
+	if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, m.Issuer()) {
+		t.Errorf("Location = %q, want the provider's authorize endpoint", loc)
 	}
 }
