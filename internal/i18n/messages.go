@@ -16,6 +16,9 @@ var messages = map[string]map[Lang]string{
 	"lang.label":    {DE: "Sprache", EN: "Language"},
 
 	// ── Dashboard ───────────────────────────────────────────────────────
+	"dash.intro.title":     {DE: "Worum geht es?", EN: "What is this?"},
+	"dash.intro.body":      {DE: "Über dieses Portal erhalten Sie Ihren persönlichen API-Schlüssel für das KI-Gateway. Damit können Sie große Sprachmodelle (LLMs) direkt aus eigenen Skripten, Programmen und Werkzeugen nutzen, etwa aus einem Python-Skript, einer Chat-Anwendung wie Open WebUI oder einem Coding-Assistenten im Editor, statt nur über eine Chat-Webseite.", EN: "This portal issues your personal API key for the AI gateway. With it you can use large language models (LLMs) directly from your own scripts, programs and tools (for example a Python script, a chat app such as Open WebUI, or a coding assistant in your editor) rather than only through a chat website."},
+	"dash.intro.usage":     {DE: "Das Gateway ist OpenAI-kompatibel, die meisten KI-Werkzeuge funktionieren also damit: Tragen Sie die Basis-URL und Ihren Schlüssel ein. Welche Modelle Sie nutzen können und in welchem Umfang, hängt von Ihrem Profil ab. Ihr Schlüssel ist persönlich; bitte geben Sie ihn nicht weiter.", EN: "The gateway speaks the OpenAI API, so most AI tools work with it: enter the base URL and your key. Which models you can use, and how much, depends on your profile. Your key is personal; please do not share it."},
 	"dash.successor.title": {DE: "Dieses Portal ist nur zum Testen.", EN: "This portal is only for testing."},
 	"dash.successor.body":  {DE: "Bitte erzeugen Sie Ihren Schlüssel im neuen Portal:", EN: "Please create your key on the new portal:"},
 	"dash.account":         {DE: "Ihr Konto", EN: "Your account"},
@@ -55,6 +58,7 @@ var messages = map[string]map[Lang]string{
 
 	"dash.usage":                  {DE: "Schlüssel verwenden", EN: "Using your key"},
 	"dash.usage.note":             {DE: "Konfigurieren Sie Ihren KI-Client mit diesen Einstellungen:", EN: "Configure your AI client with these settings:"},
+	"dash.usage.nokey":            {DE: "Sobald Sie oben einen Schlüssel erzeugt haben, konfigurieren Sie Ihren KI-Client mit diesen Einstellungen:", EN: "Once you have generated a key above, configure your AI client with these settings:"},
 	"dash.baseurl":                {DE: "Basis-URL", EN: "Base URL"},
 	"dash.models":                 {DE: "Verfügbare Modelle", EN: "Available models"},
 	"dash.usagestats":             {DE: "Ihr Verbrauch", EN: "Your usage"},
@@ -82,9 +86,9 @@ var messages = map[string]map[Lang]string{
 	"dash.col.input":              {DE: "Eingabe-Tokens", EN: "Input tokens"},
 	"dash.col.output":             {DE: "Ausgabe-Tokens", EN: "Output tokens"},
 	"dash.col.total":              {DE: "Gesamt", EN: "Total"},
-	"dash.models.help":            {DE: "Die Modelle, die Ihr Schlüssel verwenden darf. Klicken Sie auf ein Modell, um den Namen zu kopieren — darunter erscheint eine Beispielanfrage.", EN: "The models your key may use. Click one to copy its name; an example request appears below."},
+	"dash.models.help":            {DE: "Die Modelle, die Ihr Schlüssel verwenden darf. Klicken Sie auf ein Modell, um den Namen zu kopieren — das Beispiel darunter wechselt zu diesem Modell.", EN: "The models your key may use. Click one to copy its name; the example below switches to it."},
 	"dash.models.curltitle":       {DE: "Beispielanfrage für", EN: "Example request for"},
-	"dash.models.curlnote":        {DE: "Der Schlüssel wird aus $OPENAI_API_KEY gelesen — setzen Sie ihn zuerst, damit er nicht in der Shell-History landet.", EN: "The key is read from $OPENAI_API_KEY — set it first so it stays out of your shell history."},
+	"dash.models.curlnote":        {DE: "Der Schlüssel wird aus der Umgebungsvariablen OPENAI_API_KEY gelesen — setzen Sie sie zuerst, damit er weder im Code noch in der Shell-History landet.", EN: "The key is read from the OPENAI_API_KEY environment variable — set it first so it stays out of your code and shell history."},
 	"dash.baseurl.help":           {DE: "Richten Sie Ihren KI-Client auf diese Adresse und hinterlegen Sie Ihren API-Schlüssel. Die Schnittstelle ist OpenAI-kompatibel, funktioniert also mit den üblichen Werkzeugen.", EN: "Point your AI client at this address and give it your API key. It speaks the OpenAI API, so any OpenAI-compatible tool works."},
 
 	"dash.confirm.regenerate": {DE: "Damit wird Ihr aktueller Schlüssel ungültig und ein neuer erzeugt. Fortfahren?", EN: "This will revoke your current key and generate a new one. Continue?"},

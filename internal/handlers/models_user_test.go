@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"html/template"
 	"strings"
 	"testing"
 	"time"
@@ -129,7 +130,7 @@ func TestModelCopyConfirmsInWords(t *testing.T) {
 }
 
 // Clicking a model copies the bare name — what goes into an SDK call or a
-// config file — and reveals the request around it below, so wanting an example
+// config file — and switches the example below to it, so wanting an example
 // does not cost the ability to grab the name.
 func TestModelChipCopiesTheNameAndShowsCurl(t *testing.T) {
 	var buf bytes.Buffer
@@ -159,14 +160,19 @@ func TestModelChipCopiesTheNameAndShowsCurl(t *testing.T) {
 	if !strings.Contains(out, "writeText(btn.dataset.model)") {
 		t.Error("the chip does not copy the bare model name")
 	}
-	if !strings.Contains(out, "showCurl(btn.dataset.model)") {
-		t.Error("the chip does not reveal the example request")
+	if !strings.Contains(out, "showExample(btn.dataset.model)") {
+		t.Error("the chip does not switch the example request")
 	}
 
-	// The panel starts hidden, so the card is not padded with an example for a
-	// model nobody has chosen yet.
-	if !strings.Contains(out, `id="curl-panel" class="curl-panel" hidden`) {
-		t.Error("the example panel is not hidden until a model is picked")
+	// The panel is on show from the start: behind a click, nobody found it.
+	if !strings.Contains(out, `id="curl-panel" class="curl-panel">`) {
+		t.Error("the example panel is hidden until a model is picked")
+	}
+	// Python alongside curl, since that is how most people script against it.
+	for _, want := range []string{"pythonExample(", "setExampleLang('python')", "from openai import OpenAI"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("Python example is missing %q", want)
+		}
 	}
 	// It carries its own copy button, separate from the chips.
 	if !strings.Contains(out, "copyCurl(this)") {
@@ -194,6 +200,9 @@ func TestCurlExampleDoesNotEmbedTheKey(t *testing.T) {
 
 	if !strings.Contains(out, "$OPENAI_API_KEY") {
 		t.Error("curl example does not read the key from the environment")
+	}
+	if !strings.Contains(out, `os.environ[\"OPENAI_API_KEY\"]`) {
+		t.Error("Python example does not read the key from the environment")
 	}
 	// The freshly issued key is shown once in its own box; it must not also be
 	// baked into a command the user pastes into a terminal.
@@ -251,5 +260,65 @@ func TestDashboardRendersWithoutEmbeddingInfo(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "EMBEDDING_MODELS") {
 		t.Error("EMBEDDING_MODELS missing; the script would throw on a click")
+	}
+}
+
+// A newcomer without a key should still see what they would get and how to use
+// it, or the page explains nothing until they commit to generating one. A
+// retired portal issues no keys, so there the card would only mislead.
+func TestUsingYourKeyShownBeforeAKeyExists(t *testing.T) {
+	render := func(successor string) string {
+		var buf bytes.Buffer
+		if err := parseDashboardTemplate().Execute(&buf, dashboardData{
+			Lang:         i18n.EN,
+			User:         &database.User{Name: "T", Email: "t@example.com"},
+			APIBaseURL:   "https://gateway.example/v1",
+			Models:       []string{"gpt-4o"},
+			CSRFToken:    "TOK",
+			SuccessorURL: successor,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+
+	out := render("")
+	for _, want := range []string{
+		i18n.T(i18n.EN, "dash.usage"),
+		i18n.T(i18n.EN, "dash.usage.nokey"),
+		`id="base-url-val">https://gateway.example/v1<`,
+		`data-model="gpt-4o"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("dashboard without a key is missing %q", want)
+		}
+	}
+
+	retired := render("https://new.example")
+	if strings.Contains(retired, i18n.T(i18n.EN, "dash.usage.nokey")) ||
+		strings.Contains(retired, `id="base-url-val"`) {
+		t.Error("a retired portal shows setup help to someone who cannot get a key")
+	}
+}
+
+// The intro is the only place that says what the portal is for, so it has to
+// be there in either language, key or not.
+func TestDashboardExplainsItself(t *testing.T) {
+	for _, lang := range []i18n.Lang{i18n.EN, i18n.DE} {
+		var buf bytes.Buffer
+		if err := parseDashboardTemplate().Execute(&buf, dashboardData{
+			Lang:      lang,
+			User:      &database.User{Name: "T", Email: "t@example.com"},
+			CSRFToken: "TOK",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		out := buf.String()
+		for _, key := range []string{"dash.intro.title", "dash.intro.body", "dash.intro.usage"} {
+			want := template.HTMLEscapeString(i18n.T(lang, key))
+			if !strings.Contains(out, want) {
+				t.Errorf("%s dashboard is missing %s", lang, key)
+			}
+		}
 	}
 }

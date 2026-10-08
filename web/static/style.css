@@ -586,9 +586,9 @@ tr:hover td { background: var(--tr-hover); }
 }
 
 /* ── Example request ────────────────────────────────────── */
-/* Revealed under the model list when a model is clicked. The chip copies the
-   bare name; this shows the request around it, so wanting one does not cost
-   the other. */
+/* Shown under the model list, for the first model until another is clicked.
+   The chip copies the bare name; this shows the request around it, so wanting
+   one does not cost the other. */
 .curl-panel {
   margin-top: .75rem;
   border: 1px solid var(--key-border);
@@ -611,6 +611,27 @@ tr:hover td { background: var(--tr-hover); }
   font-family: 'Courier New', monospace;
   word-break: break-all;
 }
+/* The title takes the free space, so the language switch sits beside the
+   copy button rather than floating mid-row. */
+.curl-panel-head > span:first-child { margin-right: auto; }
+
+.example-tabs { display: inline-flex; }
+.example-tabs button {
+  background: none;
+  border: 1px solid var(--copy-btn-border);
+  padding: .2rem .55rem;
+  font-size: .78rem;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.example-tabs button:first-child { border-radius: 4px 0 0 4px; }
+.example-tabs button:last-child  { border-radius: 0 4px 4px 0; border-left: none; }
+.example-tabs button:hover { background: var(--copy-btn-hover); }
+.example-tabs button[aria-pressed="true"] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
 
 .curl-code {
   margin: 0;
@@ -625,4 +646,6 @@ tr:hover td { background: var(--tr-hover); }
   overflow-x: auto;
 }
 
-.curl-note { margin: .5rem 0 0; font-size: .75rem; }
+/* Prose, not an identifier: undo the break-all it inherits from the info grid,
+   which split words mid-way on a phone. */
+.curl-note { margin: .5rem 0 0; font-size: .75rem; word-break: normal; overflow-wrap: anywhere; }
