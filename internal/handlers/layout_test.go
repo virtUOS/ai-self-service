@@ -38,9 +38,10 @@ func TestHeaderSticksToTheTop(t *testing.T) {
 	}
 }
 
-// Below 600px the header's title and nav no longer fit on one line. It has to
-// release its fixed height, or the wrapped row is clipped.
-func TestHeaderWrapsOnNarrowScreens(t *testing.T) {
+// The header used to wrap onto two or three lines on a phone. Everything but
+// the language switch now lives in the account menu, so it keeps one row of
+// fixed height, and a long username is cut instead of forcing a wrap.
+func TestHeaderStaysOneRowOnNarrowScreens(t *testing.T) {
 	css := stylesheet(t)
 
 	i := strings.Index(css, "@media (max-width: 600px)")
@@ -48,11 +49,23 @@ func TestHeaderWrapsOnNarrowScreens(t *testing.T) {
 		t.Fatal("no mobile breakpoint")
 	}
 	mobile := css[i:]
-
-	for _, want := range []string{"height: auto", "flex-wrap: wrap"} {
-		if !strings.Contains(mobile, want) {
-			t.Errorf("mobile header is missing %q, so a wrapped nav is clipped", want)
+	j := strings.Index(mobile, "header {")
+	if j < 0 {
+		t.Fatal("no mobile header rule")
+	}
+	header := mobile[j : j+strings.Index(mobile[j:], "}")]
+	for _, unwanted := range []string{"height: auto", "flex-wrap: wrap"} {
+		if strings.Contains(header, unwanted) {
+			t.Errorf("mobile header has %q, so it wraps again", unwanted)
 		}
+	}
+
+	k := strings.Index(css, ".account-name {")
+	if k < 0 {
+		t.Fatal("no .account-name rule")
+	}
+	if name := css[k : k+strings.Index(css[k:], "}")]; !strings.Contains(name, "text-overflow: ellipsis") {
+		t.Error("a long username is not truncated")
 	}
 }
 

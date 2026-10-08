@@ -65,7 +65,7 @@ func (u *UI) requireSession(r *http.Request) (*session.SessionUser, error) {
 func parseDashboardTemplate() *template.Template {
 	return template.Must(template.New("dashboard.html").
 		Funcs(langFuncs()).
-		ParseFS(web.TemplateFS, "templates/dashboard.html"))
+		ParseFS(web.TemplateFS, "templates/dashboard.html", "templates/layout.html"))
 }
 
 // dashboardData is what dashboard.html renders. Named rather than anonymous so
@@ -74,6 +74,7 @@ type dashboardData struct {
 	Lang          i18n.Lang
 	Langs         []i18n.Lang
 	Path          string
+	TitleKey      string
 	User          *database.User
 	APIKey        *database.APIKey
 	NewKey        string
@@ -193,6 +194,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		Lang:            lang,
 		Langs:           i18n.Supported,
 		Path:            r.URL.Path,
+		TitleKey:        "app.title",
 	}); err != nil {
 		slog.Error("dashboard template", "err", err)
 	}

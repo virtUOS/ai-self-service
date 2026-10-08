@@ -12,6 +12,7 @@ var messages = map[string]map[Lang]string{
 	"nav.dashboard": {DE: "Übersicht", EN: "Dashboard"},
 	"nav.signout":   {DE: "Abmelden", EN: "Sign out"},
 	"nav.privacy":   {DE: "Datenschutz", EN: "Privacy"},
+	"nav.account":   {DE: "Konto", EN: "Account"},
 	"privacy.title": {DE: "Datenschutzhinweise", EN: "Privacy notice"},
 	"lang.label":    {DE: "Sprache", EN: "Language"},
 

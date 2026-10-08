@@ -1,0 +1,51 @@
+{{/*
+  Page chrome shared by every page. The data passed in must carry Lang, Langs,
+  Path, CSRFToken, TitleKey, User, IsAdmin and PrivacyNotice; User is nil when
+  nobody is signed in (the privacy page is public).
+*/}}
+
+{{define "header"}}
+<header>
+  <h1><a href="/">{{T .Lang (or .TitleKey "app.title")}}</a></h1>
+  <nav>
+    <form method="POST" action="/lang" class="lang-switch">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="return_to" value="{{.Path}}">
+      {{$cur := .Lang}}{{range .Langs}}{{if ne . $cur}}
+      <button type="submit" name="lang" value="{{.}}" title="{{.Name}}">{{.}}</button>
+      {{end}}{{end}}
+    </form>
+    {{if .User}}
+    <button type="button" class="account-trigger" popovertarget="account-menu"
+            aria-label="{{T .Lang "nav.account"}}: {{.User.Name}}">
+      <span class="account-name">{{.User.Name}}</span><span aria-hidden="true">▾</span>
+    </button>
+    {{else}}
+    <a href="/">{{T .Lang "nav.dashboard"}}</a>
+    {{end}}
+  </nav>
+  {{/* Outside <nav> so the header's link styles do not reach into it. A
+       popover rather than a scripted dropdown: the browser opens and closes
+       it, and dismisses it on Esc or a click elsewhere. */}}
+  {{if .User}}
+  <div id="account-menu" class="account-menu" popover>
+    <div class="account-menu-email">{{.User.Email}}</div>
+    {{if ne .Path "/"}}<a href="/">{{T .Lang "nav.dashboard"}}</a>{{end}}
+    {{if and .IsAdmin (ne .Path "/admin")}}<a href="/admin">{{T .Lang "nav.admin"}}</a>{{end}}
+    <hr>
+    <form method="POST" action="/logout">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit">{{T .Lang "nav.signout"}}</button>
+    </form>
+  </div>
+  {{end}}
+</header>
+{{end}}
+
+{{define "footer"}}
+{{if and .PrivacyNotice (ne .Path "/privacy")}}
+<footer>
+  <a href="/privacy">{{T .Lang "nav.privacy"}}</a>
+</footer>
+{{end}}
+{{end}}

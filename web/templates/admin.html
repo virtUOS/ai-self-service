@@ -8,19 +8,7 @@
 </head>
 <body>
 
-<header>
-  <h1>{{T .Lang "admin.title"}}</h1>
-  <nav>
-    <a href="/">{{T .Lang "nav.dashboard"}}</a>
-    <form method="POST" action="/lang" class="lang-switch">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <input type="hidden" name="return_to" value="{{.Path}}">
-      {{$cur := .Lang}}{{range .Langs}}{{if ne . $cur}}
-      <button type="submit" name="lang" value="{{.}}" title="{{.Name}}">{{.}}</button>
-      {{end}}{{end}}
-    </form>
-  </nav>
-</header>
+{{template "header" .}}
 
 <main>
 
@@ -369,6 +357,8 @@
 
   </div><!-- .card -->
 </main>
+
+{{template "footer" .}}
 
 <script>
 // The deadline's follow-up controls are meaningless without a date, so they
