@@ -1,0 +1,42 @@
+name: Create new release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Same flags as the Dockerfile: CGO off so bun's sqliteshim selects the
+      # pure-Go sqlite backend, giving a static, self-contained binary.
+      - name: Build (amd64)
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: amd64
+        run: >
+          go build -trimpath -ldflags='-s -w'
+          -o "ai-self-service-${{ github.ref_name }}.linux-x86_64"
+          ./cmd/server
+
+      - run: file ai-self-service-*
+
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ai-self-service-*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
