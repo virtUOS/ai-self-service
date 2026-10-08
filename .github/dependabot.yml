@@ -1,0 +1,33 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      # Bundle routine bumps into one PR; major versions still arrive alone.
+      go-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # Base images of the published container (golang build stage, alpine runtime).
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+
+  # Images of the local development stack (Keycloak, mock OIDC).
+  - package-ecosystem: docker-compose
+    directory: /dev
+    schedule:
+      interval: monthly
+    groups:
+      dev-stack:
+        patterns: ["*"]
