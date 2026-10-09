@@ -122,7 +122,7 @@ func main() {
 	syncer := limitsync.New(store, keys, cfg.LimitSyncWorkers)
 
 	ui := handlers.NewUI(cfg, store, sessions, oidcProvider, keys, csrf)
-	admin := handlers.NewAdmin(cfg, store, sessions, keys, csrf)
+	admin := handlers.NewAdmin(cfg, store, sessions, keys, csrf, syncer)
 
 	// ── Router ────────────────────────────────────────────────────────────────
 	r := chi.NewRouter()

@@ -16,6 +16,41 @@
   <div class="alert alert-info">{{.Flash}}</div>
   {{end}}
 
+  {{with .LimitSync}}
+  <div id="limit-sync" class="alert {{if .Unavailable}}alert-danger{{else if .OK}}alert-success{{else if .Failures}}alert-warning{{else}}alert-info{{end}}">
+    <strong>{{T $.Lang "admin.sync.title"}}:</strong> {{.Summary}}
+    {{range .Details}}<br>{{.}}{{end}}
+    {{if .Failures}}
+    <details style="margin-top:.5rem">
+      <summary>{{T $.Lang "admin.sync.failures"}}</summary>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>{{T $.Lang "admin.col.email"}}</th>
+              <th>{{T $.Lang "admin.sync.col.key"}}</th>
+              <th>{{T $.Lang "admin.sync.col.error"}}</th>
+              <th>{{T $.Lang "admin.sync.col.when"}}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Failures}}
+            <tr>
+              <td>{{.Email}}</td>
+              <td><code>{{.KeyPrefix}}…</code></td>
+              <td>{{.Error}}</td>
+              <td>{{.FailedAt}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{if .MoreFailures}}<p class="text-muted">{{.MoreFailures}}</p>{{end}}
+    </details>
+    {{end}}
+  </div>
+  {{end}}
+
   <div class="card">
     <div class="tabs">
       <button class="tab-btn active" onclick="showTab('profiles', this)">{{T .Lang "admin.profiles"}}</button>
@@ -47,7 +82,10 @@
           <tbody>
             {{range .Profiles}}
             <tr>
-              <td><strong>{{.Name}}</strong></td>
+              <td>
+                <strong>{{.Name}}</strong>
+                {{with index $.LimitSync.PendingByProfile .ID}}<br><span class="badge badge-warn" title="{{T $.Lang "admin.sync.badge.help"}}">{{.}} {{T $.Lang "admin.sync.badge"}}</span>{{end}}
+              </td>
               <td>{{.Description}}</td>
               <td>
                 {{if .Models}}
