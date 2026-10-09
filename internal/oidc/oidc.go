@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -223,9 +222,8 @@ func (p *Provider) LogoutURL(idToken string) string {
 
 func generateState() string {
 	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		log.Fatalf("generate state: %v", err)
-	}
+	// Never fails since Go 1.24; a broken entropy source crashes the process.
+	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
 

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -65,7 +64,7 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("config: %v", err)
+		fatal("config", err)
 	}
 
 	// ── Database ──────────────────────────────────────────────────────────────
@@ -74,7 +73,7 @@ func main() {
 	// buying anything.
 	sqldb, err := sql.Open(sqliteshim.ShimName, "file:"+cfg.DBPath+"?cache=shared&_foreign_keys=on")
 	if err != nil {
-		log.Fatalf("open sqlite: %v", err)
+		fatal("open sqlite", err)
 	}
 	bunDB := bun.NewDB(sqldb, sqlitedialect.New())
 	defer bunDB.Close()
@@ -83,10 +82,10 @@ func main() {
 	ctx := context.Background()
 
 	if err := store.RunMigrations(ctx); err != nil {
-		log.Fatalf("migrations: %v", err)
+		fatal("migrations", err)
 	}
 	if err := store.SeedDefaultProfile(ctx); err != nil {
-		log.Fatalf("seed default profile: %v", err)
+		fatal("seed default profile", err)
 	}
 	if err := store.DeleteExpiredSessions(ctx); err != nil {
 		slog.Error("cleanup sessions", "err", err)
@@ -95,7 +94,7 @@ func main() {
 	// ── Dependencies ──────────────────────────────────────────────────────────
 	oidcProvider, err := oidcpkg.NewProvider(ctx, cfg, store)
 	if err != nil {
-		log.Fatalf("OIDC provider: %v", err)
+		fatal("OIDC provider", err)
 	}
 
 	sessions := session.NewManager(store, cfg.SessionDuration, cfg.CookieSecure)
@@ -104,7 +103,7 @@ func main() {
 	// invalidating every open page on each redeploy.
 	csrf, err := session.NewCSRF(cfg.CookieSecure, cfg.OIDCClientSecret)
 	if err != nil {
-		log.Fatalf("CSRF: %v", err)
+		fatal("CSRF", err)
 	}
 	// The adapter is what the handlers see; swapping gateways means writing a
 	// different keyprovider.Provider, not touching the handlers.
@@ -285,7 +284,7 @@ func main() {
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	select {
 	case err := <-serverErr:
-		log.Fatalf("server: %v", err)
+		fatal("server", err)
 	case <-quit:
 		slog.Info("shutting down")
 	}
@@ -298,4 +297,11 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("graceful shutdown", "err", err)
 	}
+}
+
+// fatal logs err at error level and exits. log.Fatal would go through slog's
+// default handler at INFO and hide the failure from level filters.
+func fatal(msg string, err error) {
+	slog.Error(msg, "err", err)
+	os.Exit(1)
 }
