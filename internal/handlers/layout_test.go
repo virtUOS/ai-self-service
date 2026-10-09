@@ -103,6 +103,17 @@ func TestCurlExampleWraps(t *testing.T) {
 	if !strings.Contains(rule, "word-break: break-word") {
 		t.Error("a long model name would push the card sideways")
 	}
+	if !strings.Contains(rule, "background: var(--code-bg)") {
+		t.Error("the code shares the panel background and blends into the prose around it")
+	}
+}
+
+// Everything copied verbatim shares one monospace. Courier New renders too
+// thin to set code apart from the prose around it.
+func TestOneMonospace(t *testing.T) {
+	if strings.Contains(stylesheet(t), "Courier New") {
+		t.Error("a rule still uses Courier New instead of var(--font-mono)")
+	}
 }
 
 // Pointer targets need 24x24 CSS px (WCAG 2.5.8). The help dot and the copy
