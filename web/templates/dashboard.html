@@ -41,6 +41,9 @@
 
   <div class="card">
     <h2>{{T .Lang "dash.account"}}</h2>
+    {{if .ProfileError}}
+    <div class="alert alert-danger" style="margin-bottom:1rem">{{T .Lang "dash.error.profile"}}</div>
+    {{end}}
     <dl class="info-grid">
       <dt>{{T .Lang "dash.name"}}</dt>  <dd>{{.User.Name}}</dd>
       <dt>{{T .Lang "dash.email"}}</dt> <dd>{{.User.Email}}</dd>
@@ -98,8 +101,10 @@
       </dl>
 
       <div class="btn-row">
-        {{/* A retired portal only lets users clean up; the successor issues keys now. */}}
-        {{if not .SuccessorURL}}
+        {{/* A retired portal only lets users clean up; the successor issues keys now.
+             Without the profile, extending and regenerating would fail: both take
+             the key's validity and limits from it. Deleting still works. */}}
+        {{if not (or .SuccessorURL .ProfileError)}}
         <form method="POST" action="/key/extend">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button type="submit" class="btn btn-secondary">{{T .Lang "dash.extend"}} ({{T .Lang "dash.extend.until"}} {{.ExtendUntil}})</button>
@@ -117,10 +122,15 @@
         </form>
       </div>
 
+    {{else if .KeyError}}
+
+      {{/* No generate button: a key that failed to load may well exist. */}}
+      <div class="alert alert-danger">{{T .Lang "dash.error.key"}}</div>
+
     {{else}}
 
       <p class="text-muted" style="margin-bottom:1.25rem">{{T .Lang "dash.nokey"}}</p>
-      {{if not .SuccessorURL}}
+      {{if not (or .SuccessorURL .ProfileError)}}
       <form method="POST" action="/key/generate">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button type="submit" class="btn btn-primary">{{T .Lang "dash.generate"}}</button>
@@ -139,6 +149,9 @@
   {{if .APIKey}}
   <div class="card">
     <h2>{{T .Lang "dash.usagestats"}}</h2>
+    {{if .Usage.Incomplete}}
+    <div class="alert alert-warning" style="margin-bottom:1rem">{{T .Lang "dash.error.usage"}}</div>
+    {{end}}
     <p class="text-muted" style="margin-bottom:1rem;font-size:.85rem">
       {{T .Lang "dash.usagestats.note"}}
     </p>
@@ -180,7 +193,8 @@
         {{T .Lang "dash.quota.resets"}}
         <span class="reset-at" data-reset="{{.Usage.ResetsAt.Format "2006-01-02T15:04:05Z"}}"></span>{{end}}
       </p>
-    {{else}}
+    {{else if not .Usage.Incomplete}}
+      {{/* Only when the gateway answered: a failed read is not "no limit". */}}
       <p class="text-muted" style="font-size:.85rem;margin-bottom:1rem">
         {{T .Lang "dash.quota.unlimited"}}
       </p>
@@ -234,7 +248,7 @@
         </table>
       </div>
       {{end}}
-    {{else}}
+    {{else if not .Usage.Incomplete}}
       <p class="text-muted">{{T .Lang "dash.usagestats.none"}}</p>
     {{end}}
   </div>

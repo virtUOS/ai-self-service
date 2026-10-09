@@ -23,10 +23,17 @@ var messages = map[string]map[Lang]string{
 	"dash.successor.title": {DE: "Dieses Portal ist nur zum Testen.", EN: "This portal is only for testing."},
 	"dash.successor.body":  {DE: "Bitte erzeugen Sie Ihren Schlüssel im neuen Portal:", EN: "Please create your key on the new portal:"},
 	"dash.account":         {DE: "Ihr Konto", EN: "Your account"},
-	"dash.name":            {DE: "Name", EN: "Name"},
-	"dash.email":           {DE: "E-Mail", EN: "Email"},
-	"dash.profile":         {DE: "Profil", EN: "Profile"},
-	"dash.profile.help":    {DE: "Ihr Profil bestimmt, welche Modelle Sie nutzen können, wie lange Ihr Schlüssel gilt und wie viel Sie pro Zeitraum verbrauchen dürfen. Es wird von der Administration zugewiesen.", EN: "Your profile decides which models you can use, how long your key lasts and how much you may use per period. An administrator assigns it."},
+
+	// Shown instead of silently falling back when part of the page could not
+	// be loaded.
+	"dash.error.profile": {DE: "Ihr Profil konnte gerade nicht geladen werden. Ihre Limits, die verfügbaren Modelle und das Verlängerungsdatum werden deshalb nicht angezeigt. Bitte laden Sie die Seite später neu.", EN: "Your profile could not be loaded just now, so your limits, the models you can use and the extension date are not shown. Please reload the page later."},
+	"dash.error.key":     {DE: "Ihr API-Schlüssel konnte gerade nicht geladen werden. Bitte laden Sie die Seite später neu.", EN: "Your API key could not be loaded just now. Please reload the page later."},
+	"dash.error.usage":   {DE: "Ein Teil Ihrer Verbrauchsdaten konnte gerade nicht abgerufen werden. Die Angaben unten sind daher möglicherweise unvollständig.", EN: "Some of your usage data could not be retrieved just now, so the figures below may be incomplete."},
+
+	"dash.name":         {DE: "Name", EN: "Name"},
+	"dash.email":        {DE: "E-Mail", EN: "Email"},
+	"dash.profile":      {DE: "Profil", EN: "Profile"},
+	"dash.profile.help": {DE: "Ihr Profil bestimmt, welche Modelle Sie nutzen können, wie lange Ihr Schlüssel gilt und wie viel Sie pro Zeitraum verbrauchen dürfen. Es wird von der Administration zugewiesen.", EN: "Your profile decides which models you can use, how long your key lasts and how much you may use per period. An administrator assigns it."},
 	// Four sentences rather than one: what happens at the deadline depends on
 	// what the administrator chose, and a notice promising the standard limits
 	// would be wrong for a user whose key is about to be deleted instead.

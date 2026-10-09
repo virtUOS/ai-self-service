@@ -49,7 +49,9 @@ func TestDashboardHasNoUntranslatedProse(t *testing.T) {
 		NewKey:        "sk-new",
 		CSRFToken:     "TOK",
 		PrivacyNotice: true,
+		ProfileError:  true,
 	}
+	data.Usage.Incomplete = true
 
 	var buf bytes.Buffer
 	if err := parseDashboardTemplate().Execute(&buf, data); err != nil {

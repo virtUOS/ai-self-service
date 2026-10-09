@@ -106,6 +106,14 @@ type dashboardData struct {
 	// PrivacyNotice reports that /privacy has a notice to show, so the page
 	// links it rather than a 404.
 	PrivacyNotice bool
+
+	// ProfileError and KeyError report that the user's profile or key could
+	// not be loaded. The page says so instead of falling back to defaults:
+	// the server-wide key validity or the gateway's full model list would
+	// look like this user's when they may not be, and a key that failed to
+	// load must not read as "you have no key".
+	ProfileError bool
+	KeyError     bool
 }
 
 // audit records a self-service action, attributing it to the user themselves.
@@ -131,7 +139,8 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	apiKey, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
-	if err != nil {
+	keyErr := err != nil
+	if keyErr {
 		slog.Error("dashboard: load key", "err", err)
 	}
 
@@ -139,25 +148,25 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 
 	// The dashboard advertises the extend duration and the fair-use quota, both
 	// of which come from the user's profile rather than the server default.
+	// The page only reads. Limits reach the gateway when a key is created and
+	// through the limit sync after an admin change, never from a page view.
 	profile, err := u.resolveProfile(r, su.User)
-	if err != nil {
+	profileErr := err != nil
+	if profileErr {
 		slog.Error("dashboard: resolve profile", "err", err)
 	}
 
-	// Limits are applied when a key is issued, but a user can be moved between
-	// profiles and a profile's quota can be edited afterwards. Re-apply them
-	// here so an existing key converges on its profile rather than keeping
-	// whatever it was created with — otherwise this page advertises a limit
-	// the gateway does not enforce.
-	//
-	// While a passed deadline is still on the row, the expiry job owns this
-	// user's limits: it may be pushing the reverted ones right now, and a push
-	// from here would race it and could leave the old limits enforced with no
-	// deadline left to correct them. The job clears the deadline when it
-	// succeeds, so this skip lasts at most one job interval.
+	// A deadline that has passed but that the expiry job has not handled yet:
+	// the page says the change is coming rather than showing a past date.
 	expiryPending := su.User.ProfileExpiresAt != nil && !su.User.ProfileExpiresAt.After(time.Now())
-	if !expiryPending {
-		u.syncKeyLimits(r.Context(), apiKey, profile, su.User.OIDCSub)
+
+	// Without the profile, the extend date and the model list would fall back
+	// to server-wide defaults that may not be this user's, so leave them out.
+	extendUntil := ""
+	var models []string
+	if !profileErr {
+		extendUntil = u.extendUntil(profile)
+		models = u.userModels(r.Context(), profile)
 	}
 
 	// The Admin link must agree with what the /admin gate will actually allow,
@@ -178,7 +187,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		NewKey:          newKey,
 		IsAdmin:         isAdmin,
 		APIBaseURL:      strings.TrimRight(u.cfg.LiteLLMBaseURL, "/") + "/v1",
-		ExtendUntil:     u.extendUntil(profile),
+		ExtendUntil:     extendUntil,
 		ExpiresInDays:   daysUntilExpiry(apiKey),
 		ExpiryUrgent:    isExpiryUrgent(apiKey),
 		ProfileName:     profileName(profile),
@@ -187,7 +196,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		BudgetUnit:      u.cfg.BudgetUnit,
 		SuccessorURL:    u.cfg.SuccessorURL,
 		PrivacyNotice:   privacyNotice(u.cfg, lang) != "",
-		Models:          u.userModels(r.Context(), profile),
+		Models:          models,
 		EmbeddingModels: u.models.Embeddings(r.Context()),
 		Usage:           u.userUsage(r.Context(), apiKey, su.User.OIDCSub, lang),
 		CSRFToken:       u.csrf.Token(w, r),
@@ -195,6 +204,8 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		Langs:           i18n.Supported,
 		Path:            r.URL.Path,
 		TitleKey:        "app.title",
+		ProfileError:    profileErr,
+		KeyError:        keyErr,
 	}); err != nil {
 		slog.Error("dashboard template", "err", err)
 	}
@@ -618,6 +629,11 @@ type usageReport struct {
 	// window is summed from it — the gateway tracks each window internally but
 	// does not report it. The card falls back to the single bar then.
 	Windows []quotaWindowView
+
+	// Incomplete is set when part of the report could not be read from the
+	// gateway. The card says so, rather than passing off a shorter report as
+	// the whole picture.
+	Incomplete bool
 }
 
 // quotaWindowView is one quota window as the dashboard renders it.
@@ -642,17 +658,20 @@ type quotaWindowView struct {
 // names the person, and the allowance enforced against them survives a
 // rotation, which is the figure users are actually held to.
 //
-// An empty report means "show nothing": no key, a gateway that cannot be
-// reached, or a provider that does not report usage at all.
+// An empty report means "show nothing": no key, or a provider that does not
+// report usage at all. A gateway that cannot be reached sets Incomplete.
 func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, lang i18n.Lang) usageReport {
 	if k == nil {
 		return usageReport{}
 	}
-	days := u.usage.Days(ctx, k.LiteLLMKey)
-
 	var rep usageReport
+	h, err := u.usage.History(ctx, k.LiteLLMKey)
+	if err != nil {
+		rep.Incomplete = true
+	}
+	days := h.Days
 	rep.Days = days
-	rep.Models = u.usage.Models(ctx, k.LiteLLMKey)
+	rep.Models = h.Models
 	for _, d := range days {
 		rep.Total += d.Tokens
 	}
@@ -664,13 +683,20 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 			}
 		}
 	}
-	if q, err := u.usage.Quota(ctx, k.LiteLLMKey, ownerID); err == nil && q.Limit > 0 {
+	q, err := u.usage.Quota(ctx, k.LiteLLMKey, ownerID)
+	if err != nil {
+		slog.Error("read quota", "err", err)
+		rep.Incomplete = true
+	} else if q.Limit > 0 {
 		rep.HasQuota = true
 		rep.Used, rep.Limit, rep.ResetsAt = q.Used, q.Limit, q.ResetsAt
 		rep.QuotaPct = quotaPct(q.Used, q.Limit)
 	}
 
-	rep.Windows = u.quotaWindows(ctx, k.LiteLLMKey, ownerID, lang)
+	rep.Windows, err = u.quotaWindows(ctx, k.LiteLLMKey, ownerID, lang)
+	if err != nil {
+		rep.Incomplete = true
+	}
 
 	// With per-window figures the headline should name the window that binds,
 	// not the widest one: a user is blocked by whichever allowance runs out
@@ -688,7 +714,10 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 	// No per-day rows. That may mean an unused key, or a gateway that records
 	// spend without keeping a per-request log — the two are indistinguishable
 	// here, so ask for the cumulative figure before reporting nothing.
-	if total := u.usage.TotalSpend(ctx, k.LiteLLMKey); total > 0 {
+	total, err := u.usage.TotalSpend(ctx, k.LiteLLMKey)
+	if err != nil {
+		rep.Incomplete = true
+	} else if total > 0 {
 		rep.TotalSpend, rep.TotalOnly = total, true
 	}
 	return rep
@@ -724,28 +753,6 @@ func (u *UI) resolveProfile(r *http.Request, user *database.User) (*database.Pro
 	return u.store.GetDefaultProfile(r.Context())
 }
 
-// syncKeyLimits re-applies a profile's limits to an existing key and to the
-// allowance held against its owner, so a profile edit takes effect without the
-// user regenerating.
-//
-// A failure is logged and swallowed: the dashboard is a read path, and a
-// gateway blip must not stop the user seeing their key. The next page load
-// retries, so the key converges rather than staying stale.
-func (u *UI) syncKeyLimits(ctx context.Context, k *database.APIKey, p *database.Profile, ownerID string) {
-	if k == nil {
-		return
-	}
-	limiter, ok := u.keys.(interface {
-		UpdateLimits(context.Context, string, string, keyprovider.Limits) error
-	})
-	if !ok {
-		return
-	}
-	if err := limiter.UpdateLimits(ctx, k.LiteLLMKey, ownerID, p.Limits()); err != nil {
-		slog.Error("re-apply profile limits", "key_prefix", k.KeyPrefix, "err", err)
-	}
-}
-
 // quotaPct is consumption as a percentage of an allowance, clamped to 100 so
 // an over-spent window renders as full rather than overflowing its bar.
 func quotaPct(used, limit float64) int {
@@ -767,16 +774,17 @@ func quotaPct(used, limit float64) int {
 // Returns nothing when the provider cannot report per-window figures, or when
 // consumption is unknown for any window — spend logging can be switched off,
 // and a bar drawn from a silent zero would promise an allowance the user may
-// not have. The card falls back to the single gateway-reported bar then.
-func (u *UI) quotaWindows(ctx context.Context, ref, ownerID string, lang i18n.Lang) []quotaWindowView {
+// not have. The card falls back to the single gateway-reported bar then. An
+// error means the gateway could not be read.
+func (u *UI) quotaWindows(ctx context.Context, ref, ownerID string, lang i18n.Lang) ([]quotaWindowView, error) {
 	reporter, ok := u.keys.(keyprovider.UsageReporter)
 	if !ok || ref == "" {
-		return nil
+		return nil, nil
 	}
 	windows, err := reporter.Windows(ctx, ref, ownerID)
 	if err != nil {
 		slog.Error("read quota windows", "err", err)
-		return nil
+		return nil, err
 	}
 
 	out := make([]quotaWindowView, 0, len(windows))
@@ -787,7 +795,7 @@ func (u *UI) quotaWindows(ctx context.Context, ref, ownerID string, lang i18n.La
 		if !w.UsedKnown {
 			// One unknown window makes the whole set untrustworthy: the others
 			// would imply this one is fine. Fall back rather than mislead.
-			return nil
+			return nil, nil
 		}
 		out = append(out, quotaWindowView{
 			Period:   w.Period,
@@ -798,7 +806,7 @@ func (u *UI) quotaWindows(ctx context.Context, ref, ownerID string, lang i18n.La
 			ResetsAt: w.ResetsAt,
 		})
 	}
-	return out
+	return out, nil
 }
 
 // bindingWindow is the window closest to being exhausted — the one that will

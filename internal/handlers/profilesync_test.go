@@ -6,23 +6,37 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/ai-self-service/internal/i18n"
 )
 
-// Changing a profile must reach keys that already exist. Limits were applied
-// only at creation, so a profile edit — or moving a user between profiles —
-// left the old key unrestricted while the dashboard advertised the new limit.
-func TestDashboardReappliesProfileLimits(t *testing.T) {
-	ui, fake, store, user := newTestUI(t, "psync1")
+// getPage issues an authenticated GET the way a browser would.
+func getPage(t *testing.T, ui *UI, h http.HandlerFunc, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: os.Getenv("SESSION_TOKEN")})
+	rec := httptest.NewRecorder()
+	h(rec, req)
+	return rec
+}
+
+// dashboardLang is the language getPage's requests render in.
+func dashboardLang() i18n.Lang {
+	return i18n.FromRequest(httptest.NewRequest(http.MethodGet, "/", nil))
+}
+
+// The dashboard only reads. Limits reach the gateway when a key is created
+// and through the limit sync after an admin change; a page view pushing them
+// once meant a failed profile lookup could push empty, unlimited, limits.
+func TestDashboardNeverPushesLimits(t *testing.T) {
+	ui, fake, store, user := newTestUI(t, "psync-read")
 	ctx := context.Background()
-
-	// A key issued with no quota.
 	post(t, ui, ui.GenerateKey, "/key/generate")
-	k, _ := store.GetAPIKeyByUser(ctx, user.ID)
 
-	// The user is then put on a profile that does have one.
+	// Move the user to a profile with different limits, as an admin would.
 	p := &database.Profile{Name: "test quota"}
 	if err := store.CreateProfile(ctx, p); err != nil {
 		t.Fatal(err)
@@ -36,67 +50,76 @@ func TestDashboardReappliesProfileLimits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	getPage(t, ui, ui.Dashboard, "/")
-
-	got, ok := fake.LimitsByRef[k.LiteLLMKey]
-	if !ok {
-		t.Fatal("dashboard did not push limits to the existing key")
+	before := len(fake.Relimited)
+	if rec := getPage(t, ui, ui.Dashboard, "/"); rec.Code != http.StatusOK {
+		t.Fatalf("dashboard returned %d", rec.Code)
 	}
-	if len(got.Quotas) != 1 || got.Quotas[0].Budget != 0.01 || got.Quotas[0].Period != "1h" {
-		t.Errorf("pushed %+v, want one window of 0.01/1h", got)
+	if len(fake.Relimited) != before {
+		t.Error("loading the dashboard pushed limits to the gateway")
 	}
 }
 
-// A failed sync must not break the dashboard: the page still has to render.
-func TestDashboardSurvivesFailedLimitSync(t *testing.T) {
-	ui, fake, _, _ := newTestUI(t, "psync2")
+// A profile that cannot be loaded is reported, not papered over. The extend
+// date and the model list would otherwise show server-wide defaults as if
+// they were this user's.
+func TestDashboardReportsAProfileItCannotLoad(t *testing.T) {
+	ui, fake, store, _ := newTestUI(t, "psync-noprofile")
+	ctx := context.Background()
 	post(t, ui, ui.GenerateKey, "/key/generate")
+	fake.AvailableModels = []string{"every-model-on-the-gateway"}
 
-	fake.LimitsErr = errors.New("gateway down")
+	// The user has no profile of their own, so without a default the lookup
+	// fails.
+	if err := store.ExecRaw(ctx, "UPDATE profiles SET is_default = 0"); err != nil {
+		t.Fatal(err)
+	}
+
 	rec := getPage(t, ui, ui.Dashboard, "/")
 	if rec.Code != http.StatusOK {
-		t.Errorf("dashboard returned %d when the limit sync failed", rec.Code)
+		t.Fatalf("dashboard returned %d", rec.Code)
+	}
+	body, lang := rec.Body.String(), dashboardLang()
+	if !strings.Contains(body, i18n.T(lang, "dash.error.profile")) {
+		t.Error("the page does not say the profile could not be loaded")
+	}
+	// Both need the profile and would fail; deleting does not.
+	for _, action := range []string{`action="/key/extend"`, `action="/key/generate"`} {
+		if strings.Contains(body, action) {
+			t.Errorf("the page still offers %s", action)
+		}
+	}
+	if !strings.Contains(body, `action="/key/delete"`) {
+		t.Error("the page no longer offers to delete the key")
+	}
+	if strings.Contains(body, "every-model-on-the-gateway") {
+		t.Error("the page lists the gateway's models as if the user could use them all")
 	}
 }
 
-// getPage issues an authenticated GET the way a browser would.
-func getPage(t *testing.T, ui *UI, h http.HandlerFunc, path string) *httptest.ResponseRecorder {
-	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, path, nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: os.Getenv("SESSION_TOKEN")})
-	rec := httptest.NewRecorder()
-	h(rec, req)
-	return rec
-}
-
-// A profile with several windows must push all of them, so the gateway can
-// enforce each independently.
-func TestDashboardPushesStackedWindows(t *testing.T) {
-	ui, fake, store, user := newTestUI(t, "psync3")
+// A key that cannot be loaded must not read as "you have no key", and must not
+// invite the user to generate one.
+func TestDashboardReportsAKeyItCannotLoad(t *testing.T) {
+	ui, _, store, _ := newTestUI(t, "psync-nokey")
 	ctx := context.Background()
-
 	post(t, ui, ui.GenerateKey, "/key/generate")
-	k, _ := store.GetAPIKeyByUser(ctx, user.ID)
 
-	p := &database.Profile{Name: "stacked"}
-	if err := store.CreateProfile(ctx, p); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.SetProfileQuotas(ctx, p.ID, []database.ProfileQuota{
-		{Budget: 0.01, Period: "24h"},
-		{Budget: 0.1, Period: "30d"},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.SetUserProfile(ctx, user.ID, &p.ID); err != nil {
+	if err := store.ExecRaw(ctx, "ALTER TABLE api_keys RENAME TO api_keys_gone"); err != nil {
 		t.Fatal(err)
 	}
 
-	getPage(t, ui, ui.Dashboard, "/")
-
-	got := fake.LimitsByRef[k.LiteLLMKey]
-	if len(got.Quotas) != 2 {
-		t.Fatalf("pushed %d windows, want 2", len(got.Quotas))
+	rec := getPage(t, ui, ui.Dashboard, "/")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("dashboard returned %d", rec.Code)
+	}
+	body, lang := rec.Body.String(), dashboardLang()
+	if !strings.Contains(body, i18n.T(lang, "dash.error.key")) {
+		t.Error("the page does not say the key could not be loaded")
+	}
+	if strings.Contains(body, i18n.T(lang, "dash.nokey")) {
+		t.Error("the page claims the user has no key")
+	}
+	if strings.Contains(body, i18n.T(lang, "dash.generate")) {
+		t.Error("the page offers to generate a key")
 	}
 }
 
@@ -112,5 +135,23 @@ func TestGeneratedKeyIsNotPendingForTheLimitSync(t *testing.T) {
 	}
 	if st.Pending != 0 {
 		t.Errorf("pending = %d after generating a key, want 0", st.Pending)
+	}
+}
+
+// When the gateway cannot be read, the usage card says so and makes no claim
+// it cannot back: neither "no usage limit" nor "no usage recorded".
+func TestDashboardUsageCardAdmitsAFailedRead(t *testing.T) {
+	ui, fake, _, _ := newTestUI(t, "psync-usagefail")
+	post(t, ui, ui.GenerateKey, "/key/generate")
+	fake.UsageErr = errors.New("gateway down")
+
+	body, lang := getPage(t, ui, ui.Dashboard, "/").Body.String(), dashboardLang()
+	if !strings.Contains(body, i18n.T(lang, "dash.error.usage")) {
+		t.Error("the usage card does not say the read failed")
+	}
+	for _, key := range []string{"dash.quota.unlimited", "dash.usagestats.none"} {
+		if strings.Contains(body, i18n.T(lang, key)) {
+			t.Errorf("the usage card claims %q although the read failed", i18n.T(lang, key))
+		}
 	}
 }
