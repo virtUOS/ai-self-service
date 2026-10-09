@@ -38,8 +38,9 @@ Phases 1–6 of the original assessment all shipped:
   accepts mail from known hosts without credentials. Verified end to end.
 - **Dashboard usage** — the models a key may use (click to copy), what it has
   consumed per day over 30 days, and what is left of the enforced quota.
-- **Profile sync** — a profile's limits are re-applied to existing keys on
-  every dashboard load, so an edit takes effect without regenerating.
+- **Limit sync** — a change to a profile or an assignment reaches every
+  affected key from a background sync, with its progress in the admin panel.
+  The dashboard no longer pushes limits.
 - **Local dev** — an OIDC mock (`--profile mock`, which `.env.example` targets
   out of the box), or Keycloak under `--profile keycloak`.
 - **Stacked quota windows** — a profile holds several allowances at once
@@ -239,6 +240,31 @@ and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
 needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
+
+### Unreleased: limit sync
+
+Profile changes reached existing keys only when their owner opened the
+dashboard, which pushed the limits on every page view. An admin's change was
+therefore not enforced for anyone who only used the API, and a failed profile
+lookup on the dashboard pushed empty limits, which the gateway reads as
+"unlimited".
+
+Admin changes now start a background sync instead, which works out which keys
+are out of date from a revision number on each profile and the revision each
+key last received. It runs one update at a time by default
+(`LIMIT_SYNC_WORKERS`), retries failures every `LIMIT_SYNC_INTERVAL`, and shows
+its progress to every admin. The profile-expiry job only changes the profile
+and leaves the push to the sync. `ai-self-service -resync-limits` marks every
+key as out of date, to undo changes made directly in the gateway.
+
+The dashboard only reads now, and says when it could not load the profile, the
+key or the usage, instead of falling back to defaults.
+
+Schema change: migration 20240010 adds `profiles.limits_rev` and four
+`api_keys.sync*` columns. **The first run after upgrading updates every key
+once** (about 25 minutes for 5,000 keys with one worker), which also moves keys
+issued before #26 onto the per-user allowance. SQLite now runs in WAL mode;
+keep the database on a local disk, not NFS.
 
 ### Released as v0.8.1 (2026-10-09)
 

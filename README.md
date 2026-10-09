@@ -24,6 +24,8 @@ A self-service web portal that lets users generate, manage, and renew their own 
 - **OIDC authentication** — login, logout, and back-channel logout support
 - **SQLite storage** — single file, no separate database server
 - **Admin panel** — manage profiles and assign them to users
+- **Limit sync** — a change to a profile or an assignment reaches every
+  affected key in the background, with its progress shown to all admins
 - **Admin rights from the panel** — admins can grant and withdraw the admin
   panel for other users without a redeploy; `ADMIN_IDS` still always grants and
   cannot be removed there, so a lockout is always recoverable
@@ -62,6 +64,8 @@ for local development against the OIDC mock in `dev/`, so for that only
 | `SMTP_USERNAME`      | no       | —           | Only if the relay requires authentication                          |
 | `SMTP_PASSWORD`      | no       | —           | Only if the relay requires authentication                          |
 | `LOG_LEVEL`          | no       | `info`      | `debug`, `info`, `warn` or `error`                                 |
+| `LIMIT_SYNC_WORKERS` | no       | `1`         | How many limit updates the portal sends to the gateway at once. One is gentle on the gateway but slow for large changes: about 25 minutes for 5,000 keys |
+| `LIMIT_SYNC_INTERVAL` | no      | `5m`        | How often the limit sync retries keys whose update failed. Admin changes start a run straight away and do not wait for it |
 
 ## Running
 
@@ -144,6 +148,11 @@ over emails above. The admin panel at `/admin` provides:
 - **Audit log** — the 50 most recent key and profile changes, recording who did
   what to whom. Rows outlive the key and user they describe, so revoking does
   not erase the history.
+- **Limit sync status** — a card above the tabs says whether all keys
+  carry their profile's current limits yet. If not, it shows how many are still
+  waiting, whether an update is running, which keys failed and why, and each
+  profile shows how many of its keys are waiting. See
+  [How profile changes reach existing keys](#how-profile-changes-reach-existing-keys).
 
 Profile fields:
 
@@ -200,15 +209,59 @@ and ignored it.
 
 ### How profile changes reach existing keys
 
-Limits are pushed to the gateway when a key is issued, and re-applied every
-time the owner loads the dashboard. Editing a profile's quota, or moving a user
-to a different profile, therefore takes effect on their next page load rather
-than requiring them to regenerate.
+Limits are pushed to the gateway when a key is issued. After that, a background
+**limit sync** keeps every key in line with its owner's profile. It reacts to
+everything that can change what a key should enforce:
 
-This matters because the two can disagree: the portal reads limits from its own
-database to render the page, while the gateway enforces whatever was last
-pushed to the key. Without the re-apply, the dashboard would advertise a quota
-that nothing enforced.
+- an admin edits a profile's models, TPM/RPM limits or quota windows,
+- an admin moves a user to another profile,
+- another profile becomes the default (this affects every user without a
+  profile of their own),
+- a time-limited assignment runs out.
+
+Renaming a profile, rewording its description or changing its key validity
+does not touch any key, because none of that changes what the gateway
+enforces.
+
+**How it works.** Each profile has a revision number that goes up whenever its
+limits change, and each key records the profile and revision it was last
+updated with. A key whose owner's profile differs from that record is out of
+date. The sync works through the out-of-date keys one at a time (more with
+`LIMIT_SYNC_WORKERS`). An admin change starts it immediately; the admin's page
+does not wait for it. One update takes three calls to the gateway, so a change
+to a profile with 5,000 users takes about 25 minutes with the default single
+worker.
+
+There is no queue of changes. A key always receives what its owner's profile
+says at the moment it is updated, so if a profile is saved twice in quick
+succession, keys not reached yet only ever see the second version, and keys
+that already got the first are updated again.
+
+**Failures.** An update that fails, for example because the gateway is down,
+is retried every `LIMIT_SYNC_INTERVAL`. The admin panel lists failed keys with
+the gateway's error. A key whose owner has no profile at all, because no
+default profile exists, is never updated with empty limits, which the gateway
+would read as "unlimited"; it is reported as failed instead.
+
+**After upgrading** to the version that introduced the sync, every existing
+key counts as out of date once, so the first run updates all keys. With many
+users this takes a while; the admin panel shows the progress.
+
+**Changes made directly in the gateway** are invisible to the portal. To undo
+them, mark every key as out of date:
+
+```bash
+ai-self-service -resync-limits
+```
+
+The command needs only `DB_PATH`, changes nothing in the gateway itself, and
+exits at once; the running server then updates every key on its next run,
+within `LIMIT_SYNC_INTERVAL`. It must run where the database is, so against a
+container use `docker exec <container> ai-self-service -resync-limits`, or
+`kubectl exec` into the pod. Run it from cron to do this nightly.
+
+The dashboard never pushes limits. It only reads, and when it cannot load the
+user's profile, key or usage, it says so rather than showing defaults.
 
 Clearing a quota sends an explicit `null`. LiteLLM leaves an omitted field
 untouched, so a profile that loses its allowance would otherwise keep enforcing
