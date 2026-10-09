@@ -39,25 +39,30 @@ func TestUserUsageReportsCurrentKey(t *testing.T) {
 	}
 }
 
-// No key, an unreachable gateway, or a provider that cannot report usage must
-// all yield an empty report so the dashboard omits the card.
-func TestUserUsageDegradesQuietly(t *testing.T) {
+// No key, or a provider that cannot report usage, yields an empty report so
+// the dashboard omits the card. An unreachable gateway yields no figures too,
+// but flags the report as incomplete so the card says why it is empty.
+func TestUserUsageWithoutFigures(t *testing.T) {
 	fake := keyprovider.NewFake()
 	fake.UsageByRef = map[string][]keyprovider.DailyUsage{"sk-live": {{Day: "2026-08-01", Tokens: 5}}}
 
-	if got := usageUI(t, fake).userUsage(context.Background(), nil, "", i18n.EN); got.Total != 0 || len(got.Days) != 0 {
-		t.Errorf("no key = %+v, want empty", got)
+	if got := usageUI(t, fake).userUsage(context.Background(), nil, "", i18n.EN); got.Total != 0 || len(got.Days) != 0 || got.Incomplete {
+		t.Errorf("no key = %+v, want empty and complete", got)
 	}
 
 	failing := keyprovider.NewFake()
 	failing.UsageErr = errors.New("gateway down")
-	if got := usageUI(t, failing).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN); got.Total != 0 {
-		t.Errorf("gateway down = %+v, want empty", got)
+	got := usageUI(t, failing).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN)
+	if got.Total != 0 {
+		t.Errorf("gateway down = %+v, want no figures", got)
+	}
+	if !got.Incomplete {
+		t.Error("gateway down: the report is not flagged as incomplete")
 	}
 
 	u := &UI{usage: newUsageCache(nil)}
-	if got := u.userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN); got.Total != 0 {
-		t.Errorf("no reporter = %+v, want empty", got)
+	if got := u.userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN); got.Total != 0 || got.Incomplete {
+		t.Errorf("no reporter = %+v, want empty and complete", got)
 	}
 }
 

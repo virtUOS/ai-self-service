@@ -24,9 +24,10 @@ const usageCacheTTL = 60 * time.Second
 // Keyed by the key's ref, so a rotation naturally misses the cache and reports
 // the new key rather than serving the old one's history.
 //
-// Every accessor holds the same invariant: a failed refresh returns nothing
-// rather than a stale figure, and leaves no entry behind for a later read to
-// pick up.
+// Every accessor holds the same invariant: a failed refresh returns the error
+// and no figure rather than a stale one, and leaves no entry behind for a
+// later read to pick up. The dashboard says so instead of showing a silently
+// shorter report.
 type usageCache struct {
 	reporter keyprovider.UsageReporter
 	// windowDays is how far back History reaches.
@@ -56,67 +57,55 @@ func newUsageCache(r keyprovider.UsageReporter) *usageCache {
 	}
 }
 
-// history returns the cached per-day and per-model usage for a key, refreshing
+// History returns the cached per-day and per-model usage for a key, refreshing
 // when stale.
 //
 // Both halves come from one upstream read, so they are cached as one entry and
 // can never disagree about the window they cover. A failed refresh returns an
-// empty History and caches nothing, and every accessor checks freshness
-// through here, so none of them can serve a stale figure an earlier call left
-// behind.
-func (c *usageCache) history(ctx context.Context, ref string) keyprovider.History {
+// empty History with the error and caches nothing.
+func (c *usageCache) History(ctx context.Context, ref string) (keyprovider.History, error) {
 	if c.reporter == nil || ref == "" {
-		return keyprovider.History{}
+		return keyprovider.History{}, nil
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if e, ok := c.entries[ref]; ok && time.Since(e.fetchedAt) < usageCacheTTL {
-		return e.history
+		return e.history, nil
 	}
 
 	h, err := c.reporter.History(ctx, ref, c.windowDays)
 	if err != nil {
 		slog.Error("read key usage", "err", err)
-		return keyprovider.History{}
+		return keyprovider.History{}, err
 	}
 	c.entries[ref] = usageEntry{history: h, fetchedAt: time.Now()}
-	return h
-}
-
-// Days returns the per-day usage for a key.
-func (c *usageCache) Days(ctx context.Context, ref string) []keyprovider.DailyUsage {
-	return c.history(ctx, ref).Days
-}
-
-// Models returns the per-model totals, over the same window as Days.
-func (c *usageCache) Models(ctx context.Context, ref string) []keyprovider.ModelUsage {
-	return c.history(ctx, ref).Models
+	return h, nil
 }
 
 // TotalSpend returns the key's cumulative spend, the coarse figure that
 // survives when per-request logging is unavailable. Cached alongside the
-// per-day rows and on the same terms: a failed read reports nothing.
-func (c *usageCache) TotalSpend(ctx context.Context, ref string) float64 {
+// per-day rows and on the same terms: a failed read reports no figure.
+func (c *usageCache) TotalSpend(ctx context.Context, ref string) (float64, error) {
 	if c.reporter == nil || ref == "" {
-		return 0
+		return 0, nil
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if e, ok := c.totals[ref]; ok && time.Since(e.fetchedAt) < usageCacheTTL {
-		return e.spend
+		return e.spend, nil
 	}
 
 	total, err := c.reporter.TotalSpend(ctx, ref)
 	if err != nil {
 		slog.Error("read key total spend", "err", err)
-		return 0
+		return 0, err
 	}
 	c.totals[ref] = totalEntry{spend: total, fetchedAt: time.Now()}
-	return total
+	return total, nil
 }
 
 // Quota returns consumption against the enforced allowance, for the key and
