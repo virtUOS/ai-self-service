@@ -47,7 +47,7 @@ for local development against the OIDC mock in `dev/`, so for that only
 | `ADMIN_ROLE`         | no       | —           | IdP role that grants the admin panel; supersedes `ADMIN_IDS` and grants made in the panel |
 | `ADMIN_IDS`          | no       | —           | Comma-separated admins, each an OIDC subject **or** an email. Always grant, and cannot be removed from the panel — this is the recovery path if the last admin is removed |
 | `ADMIN_EMAILS`       | no       | —           | Deprecated alias for `ADMIN_IDS`; still read, email entries only   |
-| `DB_PATH`            | no       | `./data.db` | Path to the SQLite database file                                   |
+| `DB_PATH`            | no       | `./data.db` | Path to the SQLite database file. It runs in WAL mode, so `-wal` and `-shm` files sit next to it; keep the directory on a local filesystem (not NFS), and back up with `sqlite3 data.db .backup` rather than copying the file |
 | `LISTEN_ADDR`        | no       | `:8080`     | Address and port to listen on                                      |
 | `COOKIE_SECURE`      | no       | `false`     | Set `true` when serving over HTTPS                                 |
 | `SESSION_DURATION`   | no       | `24h`       | How long a login session lasts                                     |

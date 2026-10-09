@@ -232,10 +232,10 @@ func (s *Store) updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile, mode
 
 // DeleteProfile removes a profile and the quota windows belonging to it.
 //
-// The windows are deleted explicitly rather than left to ON DELETE CASCADE:
-// SQLite ignores foreign keys unless PRAGMA foreign_keys is set on every
-// connection, so the constraint alone leaves orphaned rows behind — and a
-// reused profile id would inherit them.
+// Open enables foreign keys, so ON DELETE CASCADE would remove the windows on
+// its own. They are still deleted explicitly so that a handle opened without
+// the pragma, as the tests do, does not leave orphaned rows behind for a
+// reused profile id to inherit.
 func (s *Store) DeleteProfile(ctx context.Context, id int64) error {
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		if _, err := tx.NewDelete().Model((*ProfileQuota)(nil)).
