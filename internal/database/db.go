@@ -533,7 +533,7 @@ func (s *Store) ListAuditEvents(ctx context.Context, limit int) ([]AuditEvent, e
 	var events []AuditEvent
 	err := s.db.NewSelect().Model(&events).
 		OrderExpr("created_at DESC, id DESC").
-		Limit(limit).
+		Limit(int64(limit)).
 		Scan(ctx)
 	return events, err
 }
