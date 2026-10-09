@@ -128,10 +128,11 @@ var messages = map[string]map[Lang]string{
 	"admin.audit":    {DE: "Audit-Log", EN: "Audit log"},
 
 	// The limit sync card: whether keys carry their profiles' current limits.
-	"admin.sync.title":       {DE: "Limits im Gateway", EN: "Limits in the gateway"},
+	"admin.sync.title":       {DE: "Aktualisierung der API-Schlüssel", EN: "API Key Updates"},
+	"admin.sync.queue":       {DE: "Warteschlange", EN: "Update queue"},
 	"admin.sync.ok":          {DE: "Alle Schlüssel haben die aktuellen Limits ihres Profils.", EN: "All keys carry their profile's current limits."},
 	"admin.sync.pending":     {DE: "%d Schlüssel warten noch auf die aktuellen Limits ihres Profils.", EN: "%d keys are still waiting for their profile's current limits."},
-	"admin.sync.pending.one": {DE: "1 Schlüssel wartet noch auf die aktuellen Limits seines Profils.", EN: "1 key is still waiting for its profile's current limits."},
+	"admin.sync.pending.one": {DE: "%d Schlüssel wartet noch auf die aktuellen Limits seines Profils.", EN: "%d key is still waiting for its profile's current limits."},
 	"admin.sync.running":     {DE: "Die Übertragung läuft gerade.", EN: "The update is running now."},
 	"admin.sync.next":        {DE: "Der nächste Durchlauf beginnt spätestens in %s.", EN: "The next run starts within %s."},
 	"admin.sync.failed":      {DE: "Bei %d davon ist der letzte Versuch fehlgeschlagen; sie werden automatisch erneut versucht.", EN: "%d of them failed on the last attempt and are retried automatically."},

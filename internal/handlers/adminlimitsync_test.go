@@ -142,8 +142,13 @@ func renderPanel(t *testing.T, a *Admin, token string) (string, i18n.Lang) {
 func TestPanelSaysWhenAllKeysAreUpToDate(t *testing.T) {
 	a, _, token, _ := newSyncTestAdmin(t, "alsync-ok")
 	body, lang := renderPanel(t, a, token)
-	if !strings.Contains(body, i18n.T(lang, "admin.sync.ok")) {
-		t.Error("panel does not say that every key is up to date")
+	for _, want := range []string{
+		i18n.T(lang, "admin.sync.title"),
+		i18n.T(lang, "admin.sync.queue") + ": " + i18n.T(lang, "admin.sync.ok"),
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("panel lacks %q", want)
+		}
 	}
 }
 
@@ -195,5 +200,38 @@ func TestFormatInterval(t *testing.T) {
 		if got := formatInterval(d); got != want {
 			t.Errorf("formatInterval(%v) = %q, want %q", d, got, want)
 		}
+	}
+}
+
+// One pending key gets the singular sentence, with the count filled in.
+func TestPanelWordsASinglePendingKey(t *testing.T) {
+	a, store, token, _ := newSyncTestAdmin(t, "alsync-one")
+	ctx := context.Background()
+	u, err := store.GetOrCreateUser(ctx, "a", "a@uni-osnabrueck.de", "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	k := &database.APIKey{UserID: u.ID, LiteLLMKey: "sk-a", KeyPrefix: "sk-a",
+		ExpiresAt: time.Now().Add(time.Hour)}
+	if err := store.ReplaceAPIKey(ctx, k); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MarkLimitSyncFailed(ctx, k.ID, "boom", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	body, lang := renderPanel(t, a, token)
+	for _, want := range []string{
+		fmt.Sprintf(i18n.T(lang, "admin.sync.pending.one"), 1),
+		fmt.Sprintf(i18n.T(lang, "admin.sync.failed.one"), 1),
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("panel lacks %q", want)
+		}
+	}
+	// A message whose placeholders do not match its arguments renders Go's
+	// formatting error instead of text.
+	if strings.Contains(body, "%!") {
+		t.Error("the panel shows a formatting error")
 	}
 }

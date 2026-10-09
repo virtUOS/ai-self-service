@@ -18,13 +18,16 @@
 
   {{with .LimitSync}}
   <div id="limit-sync" class="alert {{if .Unavailable}}alert-danger{{else if .OK}}alert-success{{else if .Failures}}alert-warning{{else}}alert-info{{end}}">
-    <strong>{{T $.Lang "admin.sync.title"}}:</strong> {{.Summary}}
+    <strong style="display:block;margin-bottom:.25rem">{{T $.Lang "admin.sync.title"}}</strong>
+    {{T $.Lang "admin.sync.queue"}}: {{.Summary}}
     {{range .Details}}<br>{{.}}{{end}}
     {{if .Failures}}
     <details style="margin-top:.5rem">
       <summary>{{T $.Lang "admin.sync.failures"}}</summary>
       <div class="table-wrap">
-        <table>
+        {{/* Unlike the other tables this one may wrap: the error text is long, and
+             max-content would push it off the side. */}}
+        <table style="min-width:0">
           <thead>
             <tr>
               <th>{{T $.Lang "admin.col.email"}}</th>
@@ -36,10 +39,10 @@
           <tbody>
             {{range .Failures}}
             <tr>
-              <td>{{.Email}}</td>
-              <td><code>{{.KeyPrefix}}…</code></td>
+              <td style="white-space:nowrap">{{.Email}}</td>
+              <td style="white-space:nowrap"><code>{{.KeyPrefix}}…</code></td>
               <td style="white-space:normal;word-break:break-word;min-width:16rem">{{.Error}}</td>
-              <td>{{.FailedAt}}</td>
+              <td style="white-space:nowrap">{{.FailedAt}}</td>
             </tr>
             {{end}}
           </tbody>
