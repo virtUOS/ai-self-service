@@ -246,46 +246,42 @@
   {{if or .APIKey (not .SuccessorURL)}}
   <div class="card">
     <h2>{{T .Lang "dash.usage"}}</h2>
-    <p class="text-muted" style="margin-bottom:.75rem;font-size:.9rem">
+    <p class="text-muted" style="margin-bottom:1.25rem;font-size:.9rem">
       {{if .APIKey}}{{T .Lang "dash.usage.note"}}{{else}}{{T .Lang "dash.usage.nokey"}}{{end}}
     </p>
-    <dl class="info-grid">
-      <dt>{{T .Lang "dash.baseurl"}} <button type="button" class="help" data-help="{{T .Lang "dash.baseurl.help"}}">?</button></dt>
-      <dd>
-        <div class="key-box">
-          <span id="base-url-val">{{.APIBaseURL}}</span>
-          <button class="copy-btn" onclick="copyText('base-url-val', this)">{{T .Lang "dash.copy"}}</button>
-        </div>
-      </dd>
-      {{if .Models}}
-      <dt>{{T .Lang "dash.models"}} <button type="button" class="help" data-help="{{T .Lang "dash.models.help"}}">?</button></dt>
-      <dd>
-        <ul class="model-list">
-          {{range .Models}}
-          <li><button type="button" class="model-copy" data-model="{{.}}"
-                      onclick="copyModel(this)"><code>{{.}}</code></button></li>
-          {{end}}
-        </ul>
-        {{/* Clicking a chip copies the bare name — what someone pasting into
-             an SDK or a config file needs — and switches the example below to
-             that model. The example is on show from the start, for the first
-             model: tucked behind a click, nobody found it. */}}
-        <div id="curl-panel" class="curl-panel">
-          <div class="curl-panel-head">
-            <span class="text-muted">{{T $.Lang "dash.models.curltitle"}}
-              <code id="curl-model"></code></span>
-            <span class="example-tabs" role="group">
-              <button type="button" data-lang="curl" aria-pressed="true" onclick="setExampleLang('curl')">curl</button>
-              <button type="button" data-lang="python" aria-pressed="false" onclick="setExampleLang('python')">Python</button>
-            </span>
-            <button type="button" class="copy-btn" onclick="copyCurl(this)">{{T $.Lang "dash.copy"}}</button>
-          </div>
-          <pre id="curl-code" class="curl-code"></pre>
-          <p class="text-muted curl-note">{{T $.Lang "dash.models.curlnote"}}</p>
-        </div>
-      </dd>
+    {{/* Headings above rather than labels beside: the URL and the example
+         get the card's full width, so code wraps far less. */}}
+    <h3>{{T .Lang "dash.baseurl"}} <button type="button" class="help" data-help="{{T .Lang "dash.baseurl.help"}}">?</button></h3>
+    <div class="key-box">
+      <span id="base-url-val">{{.APIBaseURL}}</span>
+      <button class="copy-btn" onclick="copyText('base-url-val', this)">{{T .Lang "dash.copy"}}</button>
+    </div>
+    {{if .Models}}
+    <h3 style="margin-top:1.5rem">{{T .Lang "dash.models"}} <button type="button" class="help" data-help="{{T .Lang "dash.models.help"}}">?</button></h3>
+    <ul class="model-list">
+      {{range .Models}}
+      <li><button type="button" class="model-copy" data-model="{{.}}"
+                  onclick="copyModel(this)"><code>{{.}}</code></button></li>
       {{end}}
-    </dl>
+    </ul>
+    {{/* Clicking a chip copies the bare name — what someone pasting into
+         an SDK or a config file needs — and switches the example below to
+         that model. The example is on show from the start, for the first
+         model: tucked behind a click, nobody found it. */}}
+    <div id="curl-panel" class="curl-panel">
+      <div class="curl-panel-head">
+        <span class="text-muted">{{T $.Lang "dash.models.curltitle"}}
+          <code id="curl-model"></code></span>
+        <span class="example-tabs" role="group">
+          <button type="button" data-lang="curl" aria-pressed="true" onclick="setExampleLang('curl')">curl</button>
+          <button type="button" data-lang="python" aria-pressed="false" onclick="setExampleLang('python')">Python</button>
+        </span>
+        <button type="button" class="copy-btn" onclick="copyCurl(this)">{{T $.Lang "dash.copy"}}</button>
+      </div>
+      <pre id="curl-code" class="curl-code"></pre>
+      <p class="text-muted curl-note">{{T $.Lang "dash.models.curlnote"}}</p>
+    </div>
+    {{end}}
   </div>
   {{end}}
 

@@ -17,6 +17,11 @@
   --key-border:       #c9d8ff;
   --key-new-bg:       #e8f5e9;
   --key-new-border:   #81c784;
+  --code-bg:          #ffffff;
+
+  /* One monospace for everything copied verbatim: key, URL, model names,
+     example code. A thin typewriter face is too faint to tell apart from prose. */
+  --font-mono:        ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;
 
   --alert-info-bg:    #e3f2fd; --alert-info-border:   #90caf9; --alert-info-text:   #0d47a1;
   --alert-warn-bg:    #fff8e1; --alert-warn-border:   #ffe082; --alert-warn-text:   #7a5c00;
@@ -55,6 +60,7 @@
     --key-border:       #2d4080;
     --key-new-bg:       #172817;
     --key-new-border:   #2e5c2e;
+    --code-bg:          #131829;
 
     --alert-info-bg:    #0d2037; --alert-info-border:   #1e4a7a; --alert-info-text:   #90caf9;
     --alert-warn-bg:    #251e00; --alert-warn-border:   #5c4a00; --alert-warn-text:   #ffd54f;
@@ -230,7 +236,7 @@ main {
 
 /* ── Key display ─────────────────────────────────────────── */
 .key-box {
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
   font-size: .9rem;
   background: var(--key-bg);
   border: 1px solid var(--key-border);
@@ -505,7 +511,7 @@ tr:hover td { background: var(--tr-hover); }
 }
 
 .model-option span {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: .8rem;
   word-break: break-all;
 }
@@ -561,7 +567,7 @@ tr:hover td { background: var(--tr-hover); }
 
 .model-copy code {
   display: inline-block;
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
   font-size: .85rem;
   background: var(--key-bg);
   border: 1px solid var(--key-border);
@@ -657,13 +663,14 @@ tr:hover td { background: var(--tr-hover); }
 /* ── Example request ────────────────────────────────────── */
 /* Shown under the model list, for the first model until another is clicked.
    The chip copies the bare name; this shows the request around it, so wanting
-   one does not cost the other. */
+   one does not cost the other. Header, code and note are separate bands, the
+   code on its own background, so the command reads apart from the prose. */
 .curl-panel {
   margin-top: .75rem;
   border: 1px solid var(--key-border);
   border-radius: 6px;
   background: var(--key-bg);
-  padding: .6rem .8rem;
+  overflow: hidden;
 }
 
 .curl-panel-head {
@@ -672,12 +679,13 @@ tr:hover td { background: var(--tr-hover); }
   justify-content: space-between;
   gap: .75rem;
   font-size: .8rem;
-  margin-bottom: .5rem;
+  padding: .55rem 1rem;
+  border-bottom: 1px solid var(--key-border);
   flex-wrap: wrap;
 }
 
 .curl-panel-head code {
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
   word-break: break-all;
 }
 /* The title takes the free space, so the language switch sits beside the
@@ -704,9 +712,11 @@ tr:hover td { background: var(--tr-hover); }
 
 .curl-code {
   margin: 0;
-  font-family: 'Courier New', monospace;
-  font-size: .8rem;
+  font-family: var(--font-mono);
+  font-size: .85rem;
   line-height: 1.5;
+  background: var(--code-bg);
+  padding: 1rem 1.25rem;
   /* The command is pre-wrapped with backslash continuations, so it must keep
      its line breaks; long model names still need to wrap rather than force the
      card to scroll sideways. */
@@ -714,7 +724,17 @@ tr:hover td { background: var(--tr-hover); }
   word-break: break-word;
   overflow-x: auto;
 }
+/* Here rather than in the mobile block above, which this rule would override. */
+@media (max-width: 600px) {
+  .curl-code { padding: .75rem .9rem; }
+}
 
-/* Prose, not an identifier: undo the break-all it inherits from the info grid,
-   which split words mid-way on a phone. */
-.curl-note { margin: .5rem 0 0; font-size: .75rem; word-break: normal; overflow-wrap: anywhere; }
+/* Prose, not an identifier: wrap at words, never mid-way as the identifiers
+   around it do. */
+.curl-note {
+  padding: .55rem 1rem;
+  border-top: 1px solid var(--key-border);
+  font-size: .75rem;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
