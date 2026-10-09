@@ -174,7 +174,7 @@ func TestPanelShowsPendingAndFailedKeys(t *testing.T) {
 	for _, want := range []string{
 		fmt.Sprintf(i18n.T(lang, "admin.sync.pending"), 2),
 		i18n.T(lang, "admin.sync.running"),
-		fmt.Sprintf(i18n.T(lang, "admin.sync.failed"), 1),
+		fmt.Sprintf(i18n.T(lang, "admin.sync.failed.one"), 1),
 		"b@uni-osnabrueck.de",
 		"gateway said 500",
 		"2 " + i18n.T(lang, "admin.sync.badge"),
