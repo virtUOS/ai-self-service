@@ -29,7 +29,15 @@ type Profile struct {
 	// binds — LiteLLM enforces each independently.
 	Quotas []ProfileQuota `bun:"rel:has-many,join:id=profile_id"`
 
-	IsDefault bool      `bun:"is_default,notnull"`
+	IsDefault bool `bun:"is_default,notnull"`
+
+	// LimitsRev goes up whenever the limits a key carries change: the models,
+	// the TPM/RPM limits or the quota windows. Keys record the revision they
+	// were last pushed with, so a key is out of date exactly when its owner's
+	// profile has moved past it. Name, description and key validity do not
+	// count, because they change nothing upstream.
+	LimitsRev int64 `bun:"limits_rev,notnull"`
+
 	CreatedAt time.Time `bun:"created_at,notnull"`
 	UpdatedAt time.Time `bun:"updated_at,notnull"`
 }
@@ -84,6 +92,17 @@ type APIKey struct {
 	KeyPrefix  string    `bun:"key_prefix,notnull"`
 	ExpiresAt  time.Time `bun:"expires_at,notnull"`
 	CreatedAt  time.Time `bun:"created_at,notnull"`
+
+	// SyncedProfileID and SyncedRev are the profile and its LimitsRev whose
+	// limits this key last received upstream. Null means never, and the key
+	// is then pending like any other out-of-date key.
+	SyncedProfileID *int64 `bun:"synced_profile_id"`
+	SyncedRev       *int64 `bun:"synced_rev"`
+
+	// SyncError and SyncFailedAt describe the last failed push. Both are
+	// cleared when a push succeeds.
+	SyncError    string     `bun:"sync_error,notnull"`
+	SyncFailedAt *time.Time `bun:"sync_failed_at"`
 }
 
 type Session struct {
@@ -164,11 +183,11 @@ type AdminGrant struct {
 // Limits maps a profile onto the provider-neutral limits applied to a key.
 //
 // It lives here, on the profile, because two callers need it and they must not
-// disagree: the dashboard re-applies limits on every load, and the expiry job
-// applies them when an assignment runs out. Two copies would drift the moment
-// a field was added to keyprovider.Limits and wired into only one of them, and
-// the same user would then get different limits depending on which path last
-// touched their key.
+// disagree: key creation applies limits to a new key, and the limit sync
+// re-applies them when a profile or assignment changes. Two copies would drift
+// the moment a field was added to keyprovider.Limits and wired into only one
+// of them, and the same user would then get different limits depending on
+// which path last touched their key.
 //
 // A nil profile means no restriction, which is what an unassigned user gets.
 func (p *Profile) Limits() keyprovider.Limits {
