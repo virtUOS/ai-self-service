@@ -99,3 +99,18 @@ func TestDashboardPushesStackedWindows(t *testing.T) {
 		t.Fatalf("pushed %d windows, want 2", len(got.Quotas))
 	}
 }
+
+// A new key already carries its profile's limits, so the limit sync must not
+// push them a second time.
+func TestGeneratedKeyIsNotPendingForTheLimitSync(t *testing.T) {
+	ui, _, store, _ := newTestUI(t, "psync-gen")
+	post(t, ui, ui.GenerateKey, "/key/generate")
+
+	st, err := store.GetLimitSyncStatus(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Pending != 0 {
+		t.Errorf("pending = %d after generating a key, want 0", st.Pending)
+	}
+}

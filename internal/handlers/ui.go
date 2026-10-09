@@ -390,11 +390,16 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	if len(prefix) > 12 {
 		prefix = prefix[:12]
 	}
+	// Record what the key was created with, so the limit sync leaves it alone.
+	// If an admin changed the profile since it was read above, the key is out
+	// of date the moment it is stored, and the sync pushes the newer limits.
 	if err := u.store.ReplaceAPIKey(r.Context(), &database.APIKey{
-		UserID:     su.User.ID,
-		LiteLLMKey: result.Ref,
-		KeyPrefix:  prefix,
-		ExpiresAt:  expiresAt,
+		UserID:          su.User.ID,
+		LiteLLMKey:      result.Ref,
+		KeyPrefix:       prefix,
+		ExpiresAt:       expiresAt,
+		SyncedProfileID: &profile.ID,
+		SyncedRev:       &profile.LimitsRev,
 	}); err != nil {
 		// The key exists upstream but could not be recorded, so nothing can
 		// ever revoke it through this app. Revoke it now rather than leaking it.

@@ -74,6 +74,15 @@ type Config struct {
 	// With neither set the portal has no privacy page.
 	PrivacyNoticeDE string
 	PrivacyNoticeEN string
+
+	// LimitSyncWorkers is how many pushes the limit sync sends to the gateway
+	// at once. One is deliberately gentle: a change to a large profile then
+	// takes a while to reach every key, but never floods the gateway.
+	LimitSyncWorkers int
+
+	// LimitSyncInterval is how often the limit sync retries keys whose push
+	// failed. Admin changes start a run straight away and do not wait for it.
+	LimitSyncInterval time.Duration
 }
 
 func Load() (*Config, error) {
@@ -137,6 +146,18 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("KEY_DURATION_DAYS must be an integer: %w", err)
 	}
 	cfg.KeyDurationDays = days
+
+	workers, err := strconv.Atoi(envOr("LIMIT_SYNC_WORKERS", "1"))
+	if err != nil || workers < 1 {
+		return nil, fmt.Errorf("LIMIT_SYNC_WORKERS must be a positive integer")
+	}
+	cfg.LimitSyncWorkers = workers
+
+	interval, err := time.ParseDuration(envOr("LIMIT_SYNC_INTERVAL", "5m"))
+	if err != nil || interval <= 0 {
+		return nil, fmt.Errorf("LIMIT_SYNC_INTERVAL must be a positive duration such as 5m")
+	}
+	cfg.LimitSyncInterval = interval
 
 	for _, n := range []struct {
 		env string
