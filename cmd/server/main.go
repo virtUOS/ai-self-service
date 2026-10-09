@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -16,9 +15,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
-	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
@@ -71,11 +67,10 @@ func main() {
 	// SQLite only. The dataset is a few thousand rows at most (one key per
 	// user), so a separate database server would add operational cost without
 	// buying anything.
-	sqldb, err := sql.Open(sqliteshim.ShimName, "file:"+cfg.DBPath+"?cache=shared&_foreign_keys=on")
+	bunDB, err := database.Open(cfg.DBPath)
 	if err != nil {
-		fatal("open sqlite", err)
+		fatal("database", err)
 	}
-	bunDB := bun.NewDB(sqldb, sqlitedialect.New())
 	defer bunDB.Close()
 
 	store := database.NewStore(bunDB)
