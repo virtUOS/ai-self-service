@@ -38,8 +38,10 @@ VOLUME ["/data"]
 USER app
 EXPOSE 8080
 
-# Matches the /healthz route; keeps orchestrators from routing to a dead process.
+# Docker health status via the binary's own /healthz probe; it follows
+# LISTEN_ADDR and needs no shell. Kubernetes ignores this and uses its own
+# probes on /healthz and /readyz.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
+    CMD ["/usr/local/bin/ai-self-service", "-healthcheck"]
 
 ENTRYPOINT ["/usr/local/bin/ai-self-service"]

@@ -95,7 +95,7 @@ func Load() (*Config, error) {
 		SMTPUsername: os.Getenv("SMTP_USERNAME"),
 		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
 
-		ListenAddr: envOr("LISTEN_ADDR", ":8080"),
+		ListenAddr: ListenAddr(),
 		BudgetUnit: envOr("BUDGET_UNIT", "$"),
 
 		SuccessorURL: strings.TrimSpace(os.Getenv("SUCCESSOR_URL")),
@@ -222,6 +222,12 @@ func requireEnv(key string) string {
 		os.Exit(1)
 	}
 	return v
+}
+
+// ListenAddr is the address the server listens on. The -healthcheck mode
+// reads it without loading the rest of the configuration.
+func ListenAddr() string {
+	return envOr("LISTEN_ADDR", ":8080")
 }
 
 func envOr(key, def string) string {
