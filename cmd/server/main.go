@@ -31,6 +31,7 @@ import (
 
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "check /healthz of the running server and exit")
+	resync := flag.Bool("resync-limits", false, "mark every key for a limit resync by the running server and exit")
 	flag.Parse()
 
 	_ = godotenv.Load()
@@ -45,6 +46,17 @@ func main() {
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "unhealthy: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	// Undo changes made directly in the gateway: the running server pushes
+	// every key's limits again. Needs only DB_PATH, like -healthcheck needs
+	// only LISTEN_ADDR, so a cron job can run it with a minimal environment.
+	if *resync {
+		if err := resyncLimits(context.Background(), config.DBPath(), os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "resync failed: %v\n", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
