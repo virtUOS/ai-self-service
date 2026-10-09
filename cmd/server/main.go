@@ -19,6 +19,7 @@ import (
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
 	"github.com/virtuos/ai-self-service/internal/handlers"
+	"github.com/virtuos/ai-self-service/internal/limitsync"
 	"github.com/virtuos/ai-self-service/internal/litellm"
 	"github.com/virtuos/ai-self-service/internal/metrics"
 	"github.com/virtuos/ai-self-service/internal/notify"
@@ -115,6 +116,10 @@ func main() {
 			slog.Warn("model is unpriced; quotas do not bind on it", "model", m)
 		}
 	}
+
+	// Pushes profile limits to keys that are out of date, in the background:
+	// one admin change can affect thousands of keys.
+	syncer := limitsync.New(store, keys, cfg.LimitSyncWorkers)
 
 	ui := handlers.NewUI(cfg, store, sessions, oidcProvider, keys, csrf)
 	admin := handlers.NewAdmin(cfg, store, sessions, keys, csrf)
@@ -227,6 +232,15 @@ func main() {
 	expiryCtx, stopExpiry := context.WithCancel(context.Background())
 	go profileexpiry.NewRunner(store, keys).Start(expiryCtx, 15*time.Minute)
 
+	// Bring keys in line with their profiles. Runs at startup, whenever an
+	// admin change asks for it, and on the interval to retry failed pushes.
+	syncCtx, stopSync := context.WithCancel(context.Background())
+	syncDone := make(chan struct{})
+	go func() {
+		defer close(syncDone)
+		syncer.Start(syncCtx, cfg.LimitSyncInterval)
+	}()
+
 	// Refresh key gauges alongside the other periodic work. Reading them from
 	// the database keeps them correct across restarts.
 	refreshGauges := func() {
@@ -292,6 +306,11 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("graceful shutdown", "err", err)
 	}
+
+	// The sync stops after the push in flight. Wait for it so the database is
+	// not closed under it; anything not reached stays pending for next time.
+	stopSync()
+	<-syncDone
 }
 
 // fatal logs err at error level and exits. log.Fatal would go through slog's
