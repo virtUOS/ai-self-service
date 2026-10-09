@@ -29,7 +29,9 @@ RUN apk add --no-cache ca-certificates tzdata \
 
 COPY --from=build /out/ai-self-service /usr/local/bin/ai-self-service
 
-# The SQLite database lives here; mount a volume when DB_TYPE=sqlite.
+# The SQLite database lives on /data; mount a volume there to keep it. An
+# explicitly set DB_PATH still wins over this default.
+ENV DB_PATH=/data/data.db
 RUN mkdir -p /data && chown app:app /data
 VOLUME ["/data"]
 
