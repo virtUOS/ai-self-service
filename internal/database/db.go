@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/uptrace/bun"
@@ -68,6 +69,7 @@ func (s *Store) SeedDefaultProfile(ctx context.Context) error {
 		Description: "Default profile — no rate or budget limits.",
 		Models:      []string{},
 		IsDefault:   true,
+		LimitsRev:   1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -115,34 +117,68 @@ func (s *Store) GetProfile(ctx context.Context, id int64) (*Profile, error) {
 // SetProfileQuotas replaces a profile's allowance windows.
 //
 // Replace rather than merge: a window an admin removed must stop being
-// enforced, and the upstream key is rebuilt from this set on the next
-// dashboard load. Done in one transaction so a profile is never briefly
-// unlimited.
+// enforced. Done in one transaction so a profile is never briefly unlimited.
+//
+// A set that differs from the stored one raises the profile's LimitsRev, which
+// marks every key on the profile for the limit sync. Saving the same windows
+// again does not, so re-saving a profile for an unrelated edit does not push
+// to every key it covers.
 func (s *Store) SetProfileQuotas(ctx context.Context, profileID int64, quotas []ProfileQuota) error {
+	rows := make([]ProfileQuota, 0, len(quotas))
+	for _, q := range quotas {
+		if q.Budget <= 0 || q.Period == "" {
+			continue
+		}
+		q.ID, q.ProfileID = 0, profileID
+		rows = append(rows, q)
+	}
+
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		var current []ProfileQuota
+		if err := tx.NewSelect().Model(&current).
+			Where("profile_id = ?", profileID).Scan(ctx); err != nil {
+			return fmt.Errorf("read profile quotas: %w", err)
+		}
+		if sameQuotaWindows(current, rows) {
+			return nil
+		}
+
 		if _, err := tx.NewDelete().Model((*ProfileQuota)(nil)).
 			Where("profile_id = ?", profileID).Exec(ctx); err != nil {
 			return fmt.Errorf("clear profile quotas: %w", err)
 		}
-		if len(quotas) == 0 {
-			return nil
-		}
-		rows := make([]ProfileQuota, 0, len(quotas))
-		for _, q := range quotas {
-			if q.Budget <= 0 || q.Period == "" {
-				continue
+		if len(rows) > 0 {
+			if _, err := tx.NewInsert().Model(&rows).Exec(ctx); err != nil {
+				return fmt.Errorf("insert profile quotas: %w", err)
 			}
-			q.ID, q.ProfileID = 0, profileID
-			rows = append(rows, q)
 		}
-		if len(rows) == 0 {
-			return nil
-		}
-		if _, err := tx.NewInsert().Model(&rows).Exec(ctx); err != nil {
-			return fmt.Errorf("insert profile quotas: %w", err)
+		if _, err := tx.NewUpdate().Model((*Profile)(nil)).
+			Set("limits_rev = limits_rev + 1").
+			Where("id = ?", profileID).Exec(ctx); err != nil {
+			return fmt.Errorf("bump limits revision: %w", err)
 		}
 		return nil
 	})
+}
+
+// sameQuotaWindows reports whether two sets of windows enforce the same thing,
+// regardless of order.
+func sameQuotaWindows(a, b []ProfileQuota) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	key := func(q ProfileQuota) string { return fmt.Sprintf("%s/%g", q.Period, q.Budget) }
+	counts := make(map[string]int, len(a))
+	for _, q := range a {
+		counts[key(q)]++
+	}
+	for _, q := range b {
+		if counts[key(q)] == 0 {
+			return false
+		}
+		counts[key(q)]--
+	}
+	return true
 }
 
 // GetDefaultProfile returns the fallback profile, with its quota windows.
@@ -166,6 +202,9 @@ func (s *Store) CreateProfile(ctx context.Context, p *Profile) error {
 	now := time.Now()
 	p.CreatedAt = now
 	p.UpdatedAt = now
+	if p.LimitsRev == 0 {
+		p.LimitsRev = 1
+	}
 	modelsJSON, err := json.Marshal(p.Models)
 	if err != nil {
 		return err
@@ -197,6 +236,10 @@ func clearDefaultProfile(ctx context.Context, tx bun.Tx, keepID int64) error {
 
 // UpdateProfile saves a profile, demoting any other default when this one is
 // marked as such.
+//
+// A change to the models or the TPM/RPM limits raises LimitsRev, which marks
+// every key on the profile for the limit sync. The quota windows are saved
+// separately, by SetProfileQuotas, which does the same for them.
 func (s *Store) UpdateProfile(ctx context.Context, p *Profile) error {
 	p.UpdatedAt = time.Now()
 	modelsJSON, err := json.Marshal(p.Models)
@@ -204,6 +247,19 @@ func (s *Store) UpdateProfile(ctx context.Context, p *Profile) error {
 		return err
 	}
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		var current Profile
+		if err := tx.NewSelect().Model(&current).
+			Column("models", "tpm_limit", "rpm_limit", "limits_rev").
+			Where("id = ?", p.ID).Scan(ctx); err != nil {
+			return fmt.Errorf("read profile: %w", err)
+		}
+		p.LimitsRev = current.LimitsRev
+		if !slices.Equal(current.Models, p.Models) ||
+			!sameLimit(current.TPMLimit, p.TPMLimit) ||
+			!sameLimit(current.RPMLimit, p.RPMLimit) {
+			p.LimitsRev++
+		}
+
 		if p.IsDefault {
 			if err := clearDefaultProfile(ctx, tx, p.ID); err != nil {
 				return err
@@ -211,6 +267,14 @@ func (s *Store) UpdateProfile(ctx context.Context, p *Profile) error {
 		}
 		return s.updateProfileTx(ctx, tx, p, string(modelsJSON))
 	})
+}
+
+// sameLimit compares two optional limits, where nil means unlimited.
+func sameLimit(a, b *int64) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 func (s *Store) updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile, modelsJSON string) error {
@@ -224,6 +288,7 @@ func (s *Store) updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile, mode
 		Set("budget_duration = ?", p.BudgetDuration).
 		Set("key_duration_days = ?", p.KeyDurationDays).
 		Set("is_default = ?", p.IsDefault).
+		Set("limits_rev = ?", p.LimitsRev).
 		Set("updated_at = ?", p.UpdatedAt).
 		Where("id = ?", p.ID).
 		Exec(ctx)
