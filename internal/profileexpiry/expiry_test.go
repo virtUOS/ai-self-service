@@ -50,7 +50,7 @@ func TestRunLeavesFutureDeadlines(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := NewRunner(store, keyprovider.NewFake()).Run(ctx); err != nil {
+	if err := NewRunner(store, keyprovider.NewFake(), nil).Run(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -81,7 +81,7 @@ func TestRunRevertsToTheDefaultProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := NewRunner(store, keyprovider.NewFake()).Run(ctx); err != nil {
+	if err := NewRunner(store, keyprovider.NewFake(), nil).Run(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -118,7 +118,7 @@ func TestRunRevertsToTheChosenProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := NewRunner(store, keyprovider.NewFake()).Run(ctx); err != nil {
+	if err := NewRunner(store, keyprovider.NewFake(), nil).Run(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -131,21 +131,18 @@ func TestRunRevertsToTheChosenProfile(t *testing.T) {
 	}
 }
 
-// The new limits must reach the gateway without waiting for a dashboard load,
-// or a user who stops visiting keeps the elevated limits on a live key.
-func TestRunPushesNewLimitsUpstream(t *testing.T) {
+// The job only switches the profile. The new limits reach the gateway through
+// the limit sync, which the job starts at once: the key is out of date from
+// the moment the profile changes, and that state survives a failed push.
+func TestRunLeavesThePushToTheLimitSync(t *testing.T) {
 	store := testStore(t, "job4")
 	ctx := context.Background()
 	u, err := store.GetOrCreateUser(ctx, "sub-4", "d@uni-osnabrueck.de", "D")
 	if err != nil {
 		t.Fatal(err)
 	}
-	rpm := int64(30)
 	from := &database.Profile{Name: "raised"}
-	// The destination carries limits nothing else in this test has, so the
-	// assertion below distinguishes "pushed the right profile" from merely
-	// "pushed something".
-	to := &database.Profile{Name: "restricted", Models: []string{"small-model"}, RPMLimit: &rpm}
+	to := &database.Profile{Name: "restricted"}
 	if err := store.CreateProfile(ctx, from); err != nil {
 		t.Fatal(err)
 	}
@@ -163,22 +160,27 @@ func TestRunPushesNewLimitsUpstream(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fake := keyprovider.NewFake()
-	if err := NewRunner(store, fake).Run(ctx); err != nil {
+	kicks := 0
+	if err := NewRunner(store, keyprovider.NewFake(), func() { kicks++ }).Run(ctx); err != nil {
 		t.Fatal(err)
 	}
+	if kicks != 1 {
+		t.Errorf("kicks = %d, want 1 so the new limits go out right away", kicks)
+	}
+	st, err := store.GetLimitSyncStatus(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.PendingByProfile[to.ID] != 1 {
+		t.Errorf("pending by profile = %v, want the key waiting for the destination %d", st.PendingByProfile, to.ID)
+	}
 
-	got, ok := fake.LimitsByRef["sk-live"]
-	if !ok {
-		t.Fatal("the job did not push the reverted limits to the gateway")
+	// Nothing left to revert, so a second run starts no sync.
+	if err := NewRunner(store, keyprovider.NewFake(), func() { kicks++ }).Run(ctx); err != nil {
+		t.Fatal(err)
 	}
-	// By value, not just presence: pushing the old profile's limits would
-	// leave the elevated allowance enforced with no deadline left to correct it.
-	if len(got.Models) != 1 || got.Models[0] != "small-model" {
-		t.Errorf("pushed Models = %#v, want the destination profile's", got.Models)
-	}
-	if got.RequestsPerMinute == nil || *got.RequestsPerMinute != 30 {
-		t.Errorf("pushed RequestsPerMinute = %v, want 30", got.RequestsPerMinute)
+	if kicks != 1 {
+		t.Errorf("kicks after an idle run = %d, want still 1", kicks)
 	}
 }
 
@@ -210,7 +212,7 @@ func TestRunRevokesTheKeyWhenAsked(t *testing.T) {
 	fake := keyprovider.NewFake()
 	fake.Keys["sk-doomed"] = keyprovider.KeyRequest{}
 
-	if err := NewRunner(store, fake).Run(ctx); err != nil {
+	if err := NewRunner(store, fake, nil).Run(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -249,7 +251,7 @@ func TestRunIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := NewRunner(store, keyprovider.NewFake())
+	r := NewRunner(store, keyprovider.NewFake(), nil)
 	if err := r.Run(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +299,7 @@ func TestRunKeepsTheDeadlineWhenTheGatewayFails(t *testing.T) {
 	fake := keyprovider.NewFake()
 	fake.DeleteErr = errors.New("gateway unavailable")
 	// The run reports the failure but must not panic or abort the batch.
-	_ = NewRunner(store, fake).Run(ctx)
+	_ = NewRunner(store, fake, nil).Run(ctx)
 
 	got, err := store.GetUserByID(ctx, u.ID)
 	if err != nil {
