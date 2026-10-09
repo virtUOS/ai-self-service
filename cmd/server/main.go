@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"flag"
 	"fmt"
 	"log"
 	"log/slog"
@@ -33,7 +34,25 @@ import (
 )
 
 func main() {
+	healthcheck := flag.Bool("healthcheck", false, "check /healthz of the running server and exit")
+	flag.Parse()
+
 	_ = godotenv.Load()
+
+	// Container health check: the image has no shell or wget, so the binary
+	// probes itself. Runs before config.Load so it needs none of the required
+	// settings, only LISTEN_ADDR.
+	if *healthcheck {
+		url, err := healthcheckURL(config.ListenAddr())
+		if err == nil {
+			err = checkHealth(url)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "unhealthy: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 
 	// Structured logs so the aggregator can filter on fields rather than
 	// grepping formatted strings. LOG_LEVEL raises or lowers verbosity without
