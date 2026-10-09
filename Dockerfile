@@ -20,7 +20,7 @@ COPY . .
 RUN go build -trimpath -ldflags='-s -w' -o /out/ai-self-service ./cmd/server
 
 # Runtime
-FROM alpine:3.21
+FROM alpine:3.24
 
 # ca-certificates: outbound TLS to LiteLLM and the OIDC provider.
 # tzdata: SESSION_DURATION and key expiry render in local time.
