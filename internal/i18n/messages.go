@@ -120,6 +120,23 @@ var messages = map[string]map[Lang]string{
 	"admin.users":    {DE: "Benutzende", EN: "Users"},
 	"admin.audit":    {DE: "Audit-Log", EN: "Audit log"},
 
+	// The limit sync card: whether keys carry their profiles' current limits.
+	"admin.sync.title":       {DE: "Limits im Gateway", EN: "Limits in the gateway"},
+	"admin.sync.ok":          {DE: "Alle Schlüssel haben die aktuellen Limits ihres Profils.", EN: "All keys carry their profile's current limits."},
+	"admin.sync.pending":     {DE: "%d Schlüssel warten noch auf die aktuellen Limits ihres Profils.", EN: "%d keys are still waiting for their profile's current limits."},
+	"admin.sync.running":     {DE: "Die Übertragung läuft gerade.", EN: "The update is running now."},
+	"admin.sync.next":        {DE: "Der nächste Durchlauf beginnt spätestens in %s.", EN: "The next run starts within %s."},
+	"admin.sync.failed":      {DE: "Bei %d davon ist der letzte Versuch fehlgeschlagen; sie werden automatisch erneut versucht.", EN: "%d of them failed on the last attempt and are retried automatically."},
+	"admin.sync.last":        {DE: "Letzter Durchlauf beendet: %s", EN: "Last run finished: %s"},
+	"admin.sync.unavailable": {DE: "Der Stand der Übertragung konnte nicht geladen werden.", EN: "The update status could not be loaded."},
+	"admin.sync.failures":    {DE: "Fehlgeschlagene Schlüssel", EN: "Failed keys"},
+	"admin.sync.col.key":     {DE: "Schlüssel", EN: "Key"},
+	"admin.sync.col.error":   {DE: "Fehler", EN: "Error"},
+	"admin.sync.col.when":    {DE: "Zeitpunkt", EN: "When"},
+	"admin.sync.more":        {DE: "… und %d weitere", EN: "… and %d more"},
+	"admin.sync.badge":       {DE: "ausstehend", EN: "pending"},
+	"admin.sync.badge.help":  {DE: "So viele Schlüssel mit diesem Profil haben die aktuellen Limits noch nicht erhalten.", EN: "This many keys on this profile have not received the current limits yet."},
+
 	"admin.col.name":          {DE: "Name", EN: "Name"},
 	"admin.col.description":   {DE: "Beschreibung", EN: "Description"},
 	"admin.col.models":        {DE: "Modelle", EN: "Models"},

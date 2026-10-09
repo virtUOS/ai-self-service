@@ -31,6 +31,25 @@ type Admin struct {
 	models   *modelCache
 	tmpl     *template.Template
 	csrf     *session.CSRF
+	sync     LimitSync
+}
+
+// LimitSync is the background limit sync, as the admin pages use it: they
+// start a run after a change, and report how far it has got.
+type LimitSync interface {
+	Kick()
+	Status() (running bool, lastFinished time.Time)
+}
+
+// kickSync starts a limit sync run after a change that may affect what keys
+// enforce. A run that finds nothing out of date costs one query, so handlers
+// kick on every save rather than working out whether limits changed. They
+// defer it, so a save that failed halfway still pushes the part that reached
+// the database.
+func (a *Admin) kickSync() {
+	if a.sync != nil {
+		a.sync.Kick()
+	}
 }
 
 // formatPeriod renders a reset window as words, so the table reads
@@ -60,13 +79,13 @@ func parseAdminTemplate() *template.Template {
 		ParseFS(web.TemplateFS, "templates/admin.html", "templates/layout.html"))
 }
 
-func NewAdmin(cfg *config.Config, store *database.Store, sessions *session.Manager, keys keyprovider.Provider, csrf *session.CSRF) *Admin {
+func NewAdmin(cfg *config.Config, store *database.Store, sessions *session.Manager, keys keyprovider.Provider, csrf *session.CSRF, sync LimitSync) *Admin {
 	tmpl := parseAdminTemplate()
 	// Only some gateways can enumerate models; the form degrades to free text
 	// when the provider cannot.
 	lister, _ := keys.(keyprovider.ModelLister)
 	return &Admin{cfg: cfg, store: store, sessions: sessions, keys: keys,
-		models: newModelCache(lister), tmpl: tmpl, csrf: csrf}
+		models: newModelCache(lister), tmpl: tmpl, csrf: csrf, sync: sync}
 }
 
 // actorEmail identifies the admin performing the current request, for audit.
@@ -204,6 +223,9 @@ type adminData struct {
 	// admins too without being able to list them.
 	Admins        []adminRow
 	AdminRoleName string
+	// LimitSync is the card saying whether keys carry their profiles'
+	// limits yet.
+	LimitSync limitSyncView
 }
 
 // Panel renders the admin page with profile and user lists.
@@ -287,6 +309,7 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 		BudgetUnit:      a.cfg.BudgetUnit,
 		Admins:          adminRows(a.cfg, grants, actor, rawUsers),
 		AdminRoleName:   a.cfg.AdminRole,
+		LimitSync:       a.limitSyncStatus(r.Context(), lang),
 	}); err != nil {
 		slog.Error("admin template", "err", err)
 	}
@@ -294,6 +317,8 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 
 // CreateProfile handles POST /admin/profiles.
 func (a *Admin) CreateProfile(w http.ResponseWriter, r *http.Request) {
+	defer a.kickSync()
+
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
@@ -334,6 +359,8 @@ func (a *Admin) CreateProfile(w http.ResponseWriter, r *http.Request) {
 
 // UpdateProfile handles POST /admin/profiles/{id}.
 func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	defer a.kickSync()
+
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
@@ -377,6 +404,8 @@ func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 
 // DeleteProfile handles POST /admin/profiles/{id}/delete.
 func (a *Admin) DeleteProfile(w http.ResponseWriter, r *http.Request) {
+	defer a.kickSync()
+
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
@@ -392,6 +421,8 @@ func (a *Admin) DeleteProfile(w http.ResponseWriter, r *http.Request) {
 
 // SetUserProfile handles POST /admin/users/{id}/profile.
 func (a *Admin) SetUserProfile(w http.ResponseWriter, r *http.Request) {
+	defer a.kickSync()
+
 	userID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		http.Error(w, "invalid user id", http.StatusBadRequest)
