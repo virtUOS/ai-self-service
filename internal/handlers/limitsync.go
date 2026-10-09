@@ -55,7 +55,7 @@ func (a *Admin) limitSyncStatus(ctx context.Context, lang i18n.Lang) limitSyncVi
 		v.OK = true
 		v.Summary = i18n.T(lang, "admin.sync.ok")
 	} else {
-		v.Summary = fmt.Sprintf(i18n.T(lang, "admin.sync.pending"), st.Pending)
+		v.Summary = fmt.Sprintf(i18n.T(lang, countKey("admin.sync.pending", st.Pending)), st.Pending)
 		if running {
 			v.Details = append(v.Details, i18n.T(lang, "admin.sync.running"))
 		} else {
@@ -63,7 +63,7 @@ func (a *Admin) limitSyncStatus(ctx context.Context, lang i18n.Lang) limitSyncVi
 				fmt.Sprintf(i18n.T(lang, "admin.sync.next"), formatInterval(a.cfg.LimitSyncInterval)))
 		}
 		if st.Failed > 0 {
-			v.Details = append(v.Details, fmt.Sprintf(i18n.T(lang, "admin.sync.failed"), st.Failed))
+			v.Details = append(v.Details, fmt.Sprintf(i18n.T(lang, countKey("admin.sync.failed", st.Failed)), st.Failed))
 		}
 	}
 	if !finished.IsZero() {
@@ -83,6 +83,16 @@ func (a *Admin) limitSyncStatus(ctx context.Context, lang i18n.Lang) limitSyncVi
 		v.MoreFailures = fmt.Sprintf(i18n.T(lang, "admin.sync.more"), more)
 	}
 	return v
+}
+
+// countKey picks the singular form of a message for a count of one. The
+// sentences differ in more than the noun ("1 key is" against "2 keys are"),
+// so each form is a whole message of its own.
+func countKey(key string, n int) string {
+	if n == 1 {
+		return key + ".one"
+	}
+	return key
 }
 
 // formatInterval renders the retry interval for people: "5 min", not "5m0s".
