@@ -17,7 +17,7 @@ updates:
       github-actions:
         patterns: ["*"]
 
-  # Base images of the published container (golang build stage, alpine runtime).
+  # Base images of the published container (golang build stage, distroless runtime).
   - package-ecosystem: docker
     directory: /
     schedule:
