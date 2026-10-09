@@ -19,23 +19,27 @@ COPY . .
 # resulting binary is self-contained.
 RUN go build -trimpath -ldflags='-s -w' -o /out/ai-self-service ./cmd/server
 
-# Runtime
-FROM alpine:3.24
+# The runtime image has no shell, so the data directory is created here.
+RUN mkdir /out/data
 
-# ca-certificates: outbound TLS to LiteLLM and the OIDC provider.
-# tzdata: SESSION_DURATION and key expiry render in local time.
-RUN apk add --no-cache ca-certificates tzdata \
-    && adduser -D -H -u 10001 app
+# Runtime
+# The binary is static, so it needs no libc or shell. Distroless static still
+# ships CA certificates (outbound TLS to LiteLLM and the OIDC provider) and
+# time zone data (times render in the zone set via TZ). Pinned by digest of
+# the multi-arch index; Dependabot keeps it current.
+FROM gcr.io/distroless/static-debian13:latest@sha256:58133991db06659feaabe0f4e97a35cebf15ef4ea08f8a4c6d2ee5f75e4aa6a0
 
 COPY --from=build /out/ai-self-service /usr/local/bin/ai-self-service
 
 # The SQLite database lives on /data; mount a volume there to keep it. An
 # explicitly set DB_PATH still wins over this default.
 ENV DB_PATH=/data/data.db
-RUN mkdir -p /data && chown app:app /data
+COPY --from=build --chown=10001:10001 /out/data /data
 VOLUME ["/data"]
 
-USER app
+# Same uid as the former Alpine image, so existing /data volumes stay
+# writable. A static Go binary needs no passwd entry for it.
+USER 10001:10001
 EXPOSE 8080
 
 # Docker health status via the binary's own /healthz probe; it follows
