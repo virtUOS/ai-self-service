@@ -12,7 +12,7 @@ the things that are surprising enough to waste an afternoon rediscovering.
 | App repo | GitHub `virtUOS/ai-self-service` (Actions → GHCR) |
 | Deployment | GitLab `…/digitale-dienste/ki/ai-self-service-setup` (Ansible) |
 | Dashboard | Grafana “AI Self-Service”, datasource `virtuos-prometheus` |
-| Latest release | `v0.8.0` |
+| Latest release | `v0.8.1` |
 
 Deploying needs the **university network or VPN** — SSH is filtered from
 outside. The app repo is public; the deployment repo is not.
@@ -52,7 +52,7 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-313 tests. `go test ./...` needs nothing external; the one skip is a manual
+322 tests. `go test ./...` needs nothing external; the one skip is a manual
 end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
 
 ## Not done
@@ -152,7 +152,8 @@ end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
   override of one field silently drops the rest.
 - Secrets live in `group_vars/*/vault.yml`, encrypted; gopass holds only the
   vault password (`uos/ai-self-service/ansible-vault`).
-- Releases are `v*` tags; the image publishes semver tags and `:main`.
+- Releases are `v*` tags; the image publishes semver tags and `:main`, and
+  a tag push creates the GitHub release with a static linux-x86_64 binary.
   Testing tracks `:main`, production pins a tag.
 - MIT licence, matching the virtUOS norm (38 of the org's licensed repos).
 
@@ -238,6 +239,42 @@ and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
 needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
 `zz-probe-e2e-issue26` user;
 deleting that user also removes any key left attached to it.
+
+### Released as v0.8.1 (2026-10-09)
+
+No schema change and no new environment variables; the dashboard explains
+itself, and the header fits on a phone.
+
+A first-time visitor saw "Your account" and "Generate API key" with no word on
+what the key was for. The dashboard now opens with a card saying what the
+portal issues, that the key reaches the models through the gateway from one's
+own scripts and tools, and that it is personal. The usage example is on show
+from the start rather than after a click, before a key exists too (not on a
+retired portal), with a switch between curl and the OpenAI Python SDK that
+each browser remembers (#62).
+
+The header wrapped onto two or three lines on a phone. The username now opens
+a menu holding the address, the Dashboard and Admin links and sign-out, and
+the privacy link moves to a footer (#65). The header had been copied into each
+template and had drifted, so the admin and privacy pages offered no sign-out;
+it is now one partial, `web/templates/layout.html`.
+
+`/login` first redirects to the host in `OIDC_REDIRECT_URL` (#59). Reached
+under another name — `127.0.0.1` for `localhost` — the state cookie was set on
+a host the provider never returned to, and every login failed with "invalid
+state". The hop is made once, so a proxy that rewrites `Host` logs a warning
+rather than looping. Production's Caddy passes `Host` through unchanged, so
+there it never fires.
+
+`/metrics` serves OpenMetrics to scrapers that ask for it, as Prometheus does
+by default (#64). Every counter already ends in `_total`, so no series is
+renamed and the alert rules match as before.
+
+This is the first tag the release workflow runs on (#61): a `v*` tag push now
+creates the GitHub release, with generated notes and a static linux-x86_64
+binary. Also: `.env.example` is preset for the dev OIDC mock (#58), the
+GitHub Actions run on their current major versions (#60), and `client_golang`
+is listed as a direct dependency (#63).
 
 ### Released as v0.8.0 (2026-09-30)
 
