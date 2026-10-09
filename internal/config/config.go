@@ -97,7 +97,7 @@ func Load() (*Config, error) {
 
 		FrontendURL: requireEnv("FRONTEND_URL"),
 
-		DBPath: envOr("DB_PATH", "./data.db"),
+		DBPath: DBPath(),
 
 		SMTPHost:     os.Getenv("SMTP_HOST"),
 		SMTPFrom:     envOr("SMTP_FROM", "noreply@uni-osnabrueck.de"),
@@ -243,6 +243,12 @@ func requireEnv(key string) string {
 		os.Exit(1)
 	}
 	return v
+}
+
+// DBPath is the SQLite database file. The -resync-limits command reads it
+// without loading the rest of the configuration.
+func DBPath() string {
+	return envOr("DB_PATH", "./data.db")
 }
 
 // ListenAddr is the address the server listens on. The -healthcheck mode
