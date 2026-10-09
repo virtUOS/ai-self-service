@@ -18,7 +18,7 @@
 services:
   keycloak:
     profiles: ["keycloak"]
-    image: quay.io/keycloak/keycloak:26.0
+    image: quay.io/keycloak/keycloak:26.8
     command: ["start-dev", "--import-realm", "--http-port=8081"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
@@ -45,7 +45,7 @@ services:
       - sh
       - -c
       - >-
-        uvx --from oidc-provider-mock==0.4.6 python -m oidc_provider_mock
+        uvx --from oidc-provider-mock==0.4.8 python -m oidc_provider_mock
         --host 0.0.0.0 --port 8081
         --user-claims-file /users.json
     ports:
