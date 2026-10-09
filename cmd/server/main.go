@@ -230,7 +230,7 @@ func main() {
 	// a deadline an admin set for a particular date should take effect near
 	// midnight, not up to an hour into the next day.
 	expiryCtx, stopExpiry := context.WithCancel(context.Background())
-	go profileexpiry.NewRunner(store, keys).Start(expiryCtx, 15*time.Minute)
+	go profileexpiry.NewRunner(store, keys, syncer.Kick).Start(expiryCtx, 15*time.Minute)
 
 	// Bring keys in line with their profiles. Runs at startup, whenever an
 	// admin change asks for it, and on the interval to retry failed pushes.
