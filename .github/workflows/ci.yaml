@@ -39,3 +39,23 @@ jobs:
         env:
           CGO_ENABLED: '0'
         run: go build ./...
+
+  # The image is only published from main and tags, so a broken Dockerfile
+  # (e.g. go.mod requiring a newer Go than the builder image) would otherwise
+  # only surface after merge.
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build container image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
