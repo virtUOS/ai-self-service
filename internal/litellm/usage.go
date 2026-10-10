@@ -140,14 +140,19 @@ type keyInfoResponse struct {
 	} `json:"info"`
 }
 
+// keyInfoPath addresses a key by its hash, never the key itself: query
+// strings end up in access logs, and LiteLLM accepts either form here.
+func keyInfoPath(key string) string {
+	q := url.Values{}
+	q.Set("key", keyHash(key))
+	return "/key/info?" + q.Encode()
+}
+
 // keyInfo fetches the gateway's own record of a key.
 func (c *Client) keyInfo(ctx context.Context, key string) (keyInfoResponse, error) {
 	var info keyInfoResponse
 
-	q := url.Values{}
-	q.Set("key", key)
-
-	resp, err := c.do(ctx, http.MethodGet, "/key/info?"+q.Encode(), nil)
+	resp, err := c.do(ctx, http.MethodGet, keyInfoPath(key), nil)
 	if err != nil {
 		return info, err
 	}
