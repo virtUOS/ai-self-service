@@ -51,6 +51,7 @@ for local development against the OIDC mock in `dev/`, so for that only
 | `ADMIN_EMAILS`       | no       | —           | Deprecated alias for `ADMIN_IDS`; still read, email entries only   |
 | `DB_PATH`            | no       | `./data.db` | Path to the SQLite database file. It runs in WAL mode, so `-wal` and `-shm` files sit next to it; keep the directory on a local filesystem (not NFS), and back up with `sqlite3 data.db .backup` rather than copying the file |
 | `LISTEN_ADDR`        | no       | `:8080`     | Address and port to listen on                                      |
+| `TRUSTED_PROXIES`    | no       | private ranges | Comma-separated CIDRs or IPs of reverse proxies whose `X-Forwarded-For` is believed for the client address in the request log. The default is loopback and the private ranges (`127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`); `none` trusts nobody and always logs the connecting address |
 | `COOKIE_SECURE`      | no       | `false`     | Set `true` when serving over HTTPS                                 |
 | `SESSION_DURATION`   | no       | `24h`       | How long a login session lasts                                     |
 | `KEY_DURATION_DAYS`  | no       | `90`        | Default key validity; profiles may override it                     |
