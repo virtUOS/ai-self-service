@@ -139,6 +139,46 @@ func TestDeleteProfileRefusesDefault(t *testing.T) {
 	}
 }
 
+// Deleting a profile users are assigned to is refused with how many there are,
+// and the profile keeps its windows.
+func TestDeleteProfileRefusesAssignedProfile(t *testing.T) {
+	s := migratedStore(t, "pf-delinuse")
+	ctx := context.Background()
+
+	p := &Profile{Name: "lecturers"}
+	if err := s.CreateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Budget: 1, Period: "1d"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, sub := range []string{"a", "b"} {
+		u, err := s.GetOrCreateUser(ctx, sub, sub+"@example.org", sub)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetUserProfile(ctx, u.ID, &p.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err := s.DeleteProfile(ctx, p.ID)
+	var inUse *ProfileInUseError
+	if !errors.As(err, &inUse) {
+		t.Fatalf("err = %v, want ProfileInUseError", err)
+	}
+	if inUse.Users != 2 {
+		t.Errorf("users = %d, want 2", inUse.Users)
+	}
+	got, err := s.GetProfile(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("profile gone: %v", err)
+	}
+	if len(got.Quotas) != 1 {
+		t.Errorf("quotas = %d, want 1 (refused delete still removed them)", len(got.Quotas))
+	}
+}
+
 // Models must survive the create/update round trip.
 func TestProfileModelsRoundTrip(t *testing.T) {
 	s := migratedStore(t, "pf4")

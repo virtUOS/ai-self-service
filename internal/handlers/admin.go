@@ -420,6 +420,11 @@ func (a *Admin) DeleteProfile(w http.ResponseWriter, r *http.Request) {
 		slog.Info("refused to delete the default profile", "profile", id)
 		http.Redirect(w, r, "/admin?flash=The+default+profile+cannot+be+deleted.+Mark+another+profile+as+default+first.", http.StatusFound)
 		return
+	} else if inUse := (*database.ProfileInUseError)(nil); errors.As(err, &inUse) {
+		slog.Info("refused to delete an assigned profile", "profile", id, "users", inUse.Users)
+		msg := fmt.Sprintf("Profile is assigned to %d user(s). Move them to another profile first.", inUse.Users)
+		http.Redirect(w, r, "/admin?flash="+url.QueryEscape(msg), http.StatusFound)
+		return
 	} else if err != nil {
 		slog.Error("delete profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+delete+profile", http.StatusFound)
