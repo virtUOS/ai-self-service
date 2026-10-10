@@ -8,8 +8,8 @@ import (
 )
 
 func init() {
-	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
-		_, err := db.ExecContext(ctx, `
+	Migrations.MustRegister(inTx(func(ctx context.Context, tx bun.Tx) error {
+		_, err := tx.ExecContext(ctx, `
 			CREATE TABLE IF NOT EXISTS profiles (
 				id              INTEGER PRIMARY KEY AUTOINCREMENT,
 				name            TEXT    NOT NULL UNIQUE,
@@ -28,7 +28,7 @@ func init() {
 			return fmt.Errorf("create profiles: %w", err)
 		}
 
-		_, err = db.ExecContext(ctx, `
+		_, err = tx.ExecContext(ctx, `
 			CREATE TABLE IF NOT EXISTS users (
 				id         INTEGER PRIMARY KEY AUTOINCREMENT,
 				oidc_sub   TEXT    NOT NULL UNIQUE,
@@ -43,7 +43,7 @@ func init() {
 			return fmt.Errorf("create users: %w", err)
 		}
 
-		_, err = db.ExecContext(ctx, `
+		_, err = tx.ExecContext(ctx, `
 			CREATE TABLE IF NOT EXISTS api_keys (
 				id          INTEGER PRIMARY KEY AUTOINCREMENT,
 				user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -57,7 +57,7 @@ func init() {
 			return fmt.Errorf("create api_keys: %w", err)
 		}
 
-		_, err = db.ExecContext(ctx, `
+		_, err = tx.ExecContext(ctx, `
 			CREATE TABLE IF NOT EXISTS sessions (
 				id         INTEGER PRIMARY KEY AUTOINCREMENT,
 				user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -72,20 +72,20 @@ func init() {
 		}
 
 		return nil
-	}, func(ctx context.Context, db *bun.DB) error {
-		_, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS sessions`)
+	}), inTx(func(ctx context.Context, tx bun.Tx) error {
+		_, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS sessions`)
 		if err != nil {
 			return err
 		}
-		_, err = db.ExecContext(ctx, `DROP TABLE IF EXISTS api_keys`)
+		_, err = tx.ExecContext(ctx, `DROP TABLE IF EXISTS api_keys`)
 		if err != nil {
 			return err
 		}
-		_, err = db.ExecContext(ctx, `DROP TABLE IF EXISTS users`)
+		_, err = tx.ExecContext(ctx, `DROP TABLE IF EXISTS users`)
 		if err != nil {
 			return err
 		}
-		_, err = db.ExecContext(ctx, `DROP TABLE IF EXISTS profiles`)
+		_, err = tx.ExecContext(ctx, `DROP TABLE IF EXISTS profiles`)
 		return err
-	})
+	}))
 }

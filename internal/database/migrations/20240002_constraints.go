@@ -21,10 +21,10 @@ import (
 // Existing rows are de-duplicated before the indexes are created, otherwise
 // the migration would fail on any database that already drifted.
 func init() {
-	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
+	Migrations.MustRegister(inTx(func(ctx context.Context, tx bun.Tx) error {
 		// Keep the most recently created key per user; older rows are the
 		// orphans a failed rotation left behind.
-		if _, err := db.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, `
 			DELETE FROM api_keys
 			WHERE id NOT IN (
 				SELECT MAX(id) FROM api_keys GROUP BY user_id
@@ -33,7 +33,7 @@ func init() {
 			return fmt.Errorf("dedupe api_keys: %w", err)
 		}
 
-		if _, err := db.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, `
 			CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_user_id
 			ON api_keys (user_id)
 		`); err != nil {
@@ -42,7 +42,7 @@ func init() {
 
 		// Demote every default but the lowest-id one, so the survivor matches
 		// what GetDefaultProfile would previously have picked.
-		if _, err := db.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, `
 			UPDATE profiles SET is_default = 0
 			WHERE is_default <> 0
 			  AND id <> (SELECT MIN(id) FROM profiles WHERE is_default <> 0)
@@ -53,7 +53,7 @@ func init() {
 		// A partial index: rows with is_default = 0 are not covered, so any
 		// number of non-default profiles remain allowed. Supported by both
 		// SQLite and Postgres.
-		if _, err := db.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, `
 			CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_single_default
 			ON profiles (is_default) WHERE is_default <> 0
 		`); err != nil {
@@ -61,7 +61,7 @@ func init() {
 		}
 
 		// Session lookups happen on every authenticated request.
-		if _, err := db.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, `
 			CREATE INDEX IF NOT EXISTS idx_sessions_expires_at
 			ON sessions (expires_at)
 		`); err != nil {
@@ -69,16 +69,16 @@ func init() {
 		}
 
 		return nil
-	}, func(ctx context.Context, db *bun.DB) error {
+	}), inTx(func(ctx context.Context, tx bun.Tx) error {
 		for _, stmt := range []string{
 			`DROP INDEX IF EXISTS idx_sessions_expires_at`,
 			`DROP INDEX IF EXISTS idx_profiles_single_default`,
 			`DROP INDEX IF EXISTS idx_api_keys_user_id`,
 		} {
-			if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return err
 			}
 		}
 		return nil
-	})
+	}))
 }

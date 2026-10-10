@@ -3,12 +3,16 @@ package database
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
+	"github.com/uptrace/bun/migrate"
+
+	"github.com/virtuos/ai-self-service/internal/database/migrations"
 )
 
 func testStore(t *testing.T, name string) *Store {
@@ -137,5 +141,66 @@ func TestMigrationDeduplicatesExistingRows(t *testing.T) {
 	}
 	if defaults != 1 {
 		t.Errorf("default profiles after dedupe = %d, want 1", defaults)
+	}
+}
+
+// A migration that fails halfway must leave no trace: its statements are
+// rolled back and it is not recorded, so the next start runs it again instead
+// of skipping it.
+func TestFailedMigrationIsNotMarkedApplied(t *testing.T) {
+	s := testStore(t, "m4")
+	ctx := context.Background()
+
+	const name = "20991231000000"
+	withLast := func(up func(ctx context.Context, db *bun.DB) error) *migrate.Migrations {
+		ms := migrate.NewMigrations()
+		for _, m := range migrations.Migrations.Sorted() {
+			ms.Add(m)
+		}
+		ms.Add(migrate.Migration{
+			Name: name,
+			Up: func(ctx context.Context, m *migrate.Migrator, _ *migrate.Migration) error {
+				return up(ctx, m.DB())
+			},
+		})
+		return ms
+	}
+	failing := func(ctx context.Context, db *bun.DB) error {
+		return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+			if _, err := tx.ExecContext(ctx, `CREATE TABLE half_done (id INTEGER)`); err != nil {
+				return err
+			}
+			return errors.New("fails after the first statement")
+		})
+	}
+
+	m := newMigrator(s.db, withLast(failing))
+	if err := m.Init(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Migrate(ctx); err == nil {
+		t.Fatal("failing migration reported success")
+	}
+	if err := s.ExecRaw(ctx, `SELECT id FROM half_done`); err == nil {
+		t.Error("half_done exists; the failed migration was not rolled back")
+	}
+	var n int
+	if err := s.QueryRowRaw(ctx, `SELECT COUNT(*) FROM bun_migrations WHERE name = ?`, name).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatal("failed migration recorded as applied")
+	}
+
+	// Once fixed, the next run picks it up.
+	fixed := func(ctx context.Context, db *bun.DB) error {
+		_, err := db.ExecContext(ctx, `CREATE TABLE half_done (id INTEGER)`)
+		return err
+	}
+	if _, err := newMigrator(s.db, withLast(fixed)).Migrate(ctx); err != nil {
+		t.Fatalf("fixed migration: %v", err)
+	}
+	if err := s.ExecRaw(ctx, `SELECT id FROM half_done`); err != nil {
+		t.Errorf("fixed migration did not run: %v", err)
 	}
 }

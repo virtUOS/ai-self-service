@@ -15,7 +15,7 @@ import (
 // default profile", which is resolved when the deadline fires, so the row does
 // not go stale if the default changes in between.
 func init() {
-	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
+	Migrations.MustRegister(inTx(func(ctx context.Context, tx bun.Tx) error {
 		for _, stmt := range []string{
 			`ALTER TABLE users ADD COLUMN profile_expires_at TIMESTAMP`,
 			`ALTER TABLE users ADD COLUMN profile_after_expiry INTEGER`,
@@ -24,22 +24,22 @@ func init() {
 			// that is a full table scan each time.
 			`CREATE INDEX idx_users_profile_expires_at ON users (profile_expires_at)`,
 		} {
-			if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return fmt.Errorf("add profile expiry columns: %w", err)
 			}
 		}
 		return nil
-	}, func(ctx context.Context, db *bun.DB) error {
+	}), inTx(func(ctx context.Context, tx bun.Tx) error {
 		for _, stmt := range []string{
 			`DROP INDEX idx_users_profile_expires_at`,
 			`ALTER TABLE users DROP COLUMN revoke_key_at_expiry`,
 			`ALTER TABLE users DROP COLUMN profile_after_expiry`,
 			`ALTER TABLE users DROP COLUMN profile_expires_at`,
 		} {
-			if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return fmt.Errorf("drop profile expiry columns: %w", err)
 			}
 		}
 		return nil
-	})
+	}))
 }

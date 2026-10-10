@@ -19,27 +19,27 @@ import (
 // each enforced cap keeps its size across the upgrade. A deployment that had
 // changed that rate should check its profile budgets after upgrading.
 func init() {
-	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
+	Migrations.MustRegister(inTx(func(ctx context.Context, tx bun.Tx) error {
 		for _, stmt := range []string{
 			`ALTER TABLE profile_quotas ADD COLUMN budget REAL NOT NULL DEFAULT 0`,
 			`UPDATE profile_quotas SET budget = tokens * 0.0000001`,
 			`ALTER TABLE profile_quotas DROP COLUMN tokens`,
 		} {
-			if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return fmt.Errorf("convert token quotas to budgets: %w", err)
 			}
 		}
 		return nil
-	}, func(ctx context.Context, db *bun.DB) error {
+	}), inTx(func(ctx context.Context, tx bun.Tx) error {
 		for _, stmt := range []string{
 			`ALTER TABLE profile_quotas ADD COLUMN tokens INTEGER NOT NULL DEFAULT 0`,
 			`UPDATE profile_quotas SET tokens = CAST(budget / 0.0000001 AS INTEGER)`,
 			`ALTER TABLE profile_quotas DROP COLUMN budget`,
 		} {
-			if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return fmt.Errorf("revert budgets to token quotas: %w", err)
 			}
 		}
 		return nil
-	})
+	}))
 }

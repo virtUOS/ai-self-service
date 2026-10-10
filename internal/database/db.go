@@ -39,8 +39,15 @@ func (s *Store) QueryRowRaw(ctx context.Context, query string, args ...any) *sql
 	return s.db.QueryRowContext(ctx, query, args...)
 }
 
+// newMigrator records a migration as applied only once it has succeeded. By
+// default bun records it first, so a migration that failed halfway would be
+// skipped on the next start.
+func newMigrator(db *bun.DB, ms *migrate.Migrations) *migrate.Migrator {
+	return migrate.NewMigrator(db, ms, migrate.WithMarkAppliedOnSuccess(true))
+}
+
 func (s *Store) RunMigrations(ctx context.Context) error {
-	migrator := migrate.NewMigrator(s.db, migrations.Migrations)
+	migrator := newMigrator(s.db, migrations.Migrations)
 	if err := migrator.Init(ctx); err != nil {
 		return fmt.Errorf("init migrator: %w", err)
 	}
