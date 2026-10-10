@@ -60,7 +60,7 @@ for local development against the OIDC mock in `dev/`, so for that only
 | `PRIVACY_NOTICE_FILE_DE` | no   | —           | Path to an HTML fragment shown at `/privacy` (no login needed) as this deployment's privacy notice, and linked from the dashboard. A named file that is missing or empty stops startup |
 | `PRIVACY_NOTICE_FILE_EN` | no   | —           | The same in English. With only one language set, readers of the other get that one |
 | `SMTP_HOST`          | no       | —           | `host:port` of a mail relay; unset disables expiry emails          |
-| `SMTP_FROM`          | no       | `noreply@uni-osnabrueck.de` | Sender address for expiry emails                   |
+| `SMTP_FROM`          | no       | `noreply@example.com` | Sender address for expiry emails                   |
 | `SMTP_USERNAME`      | no       | —           | Only if the relay requires authentication                          |
 | `SMTP_PASSWORD`      | no       | —           | Only if the relay requires authentication                          |
 | `LOG_LEVEL`          | no       | `info`      | `debug`, `info`, `warn` or `error`                                 |

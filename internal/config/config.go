@@ -100,7 +100,7 @@ func Load() (*Config, error) {
 		DBPath: DBPath(),
 
 		SMTPHost:     os.Getenv("SMTP_HOST"),
-		SMTPFrom:     envOr("SMTP_FROM", "noreply@uni-osnabrueck.de"),
+		SMTPFrom:     envOr("SMTP_FROM", "noreply@example.com"),
 		SMTPUsername: os.Getenv("SMTP_USERNAME"),
 		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
 
