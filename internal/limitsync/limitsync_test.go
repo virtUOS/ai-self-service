@@ -226,16 +226,12 @@ func TestEditDuringRunIsPickedUpBySameRun(t *testing.T) {
 }
 
 // Without any profile to take limits from, the key must not be pushed: empty
-// limits mean "unlimited" to the gateway.
+// limits mean "unlimited" to the gateway. The store refuses to un-default the
+// default, so the state is set up directly, as a hand-edited database would.
 func TestKeyWithoutProfileIsNeverPushedEmptyLimits(t *testing.T) {
 	f := newFixture(t)
 	ref := f.addKey(t, "a")
-	p, err := f.store.GetProfile(f.ctx, f.def.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	p.IsDefault = false
-	if err := f.store.UpdateProfile(f.ctx, p); err != nil {
+	if err := f.store.ExecRaw(f.ctx, "UPDATE profiles SET is_default = 0"); err != nil {
 		t.Fatal(err)
 	}
 

@@ -67,7 +67,7 @@ func newSyncTestAdmin(t *testing.T, name string) (*Admin, *database.Store, strin
 	return a, store, token, stub
 }
 
-func postAdminForm(t *testing.T, h http.HandlerFunc, token, path string, id int64, form url.Values) {
+func postAdminForm(t *testing.T, h http.HandlerFunc, token, path string, id int64, form url.Values) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -80,6 +80,7 @@ func postAdminForm(t *testing.T, h http.HandlerFunc, token, path string, id int6
 	if rec.Code != http.StatusFound {
 		t.Fatalf("%s: status %d, want a redirect", path, rec.Code)
 	}
+	return rec
 }
 
 // Every admin change that can affect what keys enforce starts a sync run, so
