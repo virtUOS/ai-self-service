@@ -96,6 +96,13 @@ func (s *Store) upsertProfile(ctx context.Context, p *Profile) error {
 
 // --- Profiles ---
 
+// ErrDefaultProfile is returned for a change that would leave no default
+// profile: deleting the default, or saving it as not the default. Users with no
+// profile of their own get their keys from the default, so without one key
+// generation, the limit sync and the profile-expiry job all fail. The default
+// moves by marking another profile as default instead.
+var ErrDefaultProfile = errors.New("the default profile cannot be deleted or un-defaulted")
+
 // ListProfiles returns every profile with its quota windows.
 //
 // The relation is loaded here, not left to the caller: the admin table and the
@@ -242,7 +249,8 @@ func clearDefaultProfile(ctx context.Context, tx bun.Tx, keepID int64) error {
 }
 
 // UpdateProfile saves a profile, demoting any other default when this one is
-// marked as such.
+// marked as such. Saving the default as not the default returns
+// ErrDefaultProfile.
 //
 // A change to the models or the TPM/RPM limits raises LimitsRev, which marks
 // every key on the profile for the limit sync. The quota windows are saved
@@ -256,9 +264,12 @@ func (s *Store) UpdateProfile(ctx context.Context, p *Profile) error {
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		var current Profile
 		if err := tx.NewSelect().Model(&current).
-			Column("models", "tpm_limit", "rpm_limit", "limits_rev").
+			Column("models", "tpm_limit", "rpm_limit", "limits_rev", "is_default").
 			Where("id = ?", p.ID).Scan(ctx); err != nil {
 			return fmt.Errorf("read profile: %w", err)
+		}
+		if current.IsDefault && !p.IsDefault {
+			return ErrDefaultProfile
 		}
 		p.LimitsRev = current.LimitsRev
 		if !slices.Equal(current.Models, p.Models) ||
@@ -302,7 +313,8 @@ func (s *Store) updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile, mode
 	return err
 }
 
-// DeleteProfile removes a profile and the quota windows belonging to it.
+// DeleteProfile removes a profile and the quota windows belonging to it. It
+// refuses to remove the default profile with ErrDefaultProfile.
 //
 // Open enables foreign keys, so ON DELETE CASCADE would remove the windows on
 // its own. They are still deleted explicitly so that a handle opened without
@@ -310,6 +322,15 @@ func (s *Store) updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile, mode
 // reused profile id to inherit.
 func (s *Store) DeleteProfile(ctx context.Context, id int64) error {
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		isDefault, err := tx.NewSelect().Model((*Profile)(nil)).
+			Where("id = ? AND is_default <> 0", id).Exists(ctx)
+		if err != nil {
+			return fmt.Errorf("read profile: %w", err)
+		}
+		if isDefault {
+			return ErrDefaultProfile
+		}
+
 		if _, err := tx.NewDelete().Model((*ProfileQuota)(nil)).
 			Where("profile_id = ?", id).Exec(ctx); err != nil {
 			return fmt.Errorf("delete profile quotas: %w", err)
@@ -322,7 +343,7 @@ func (s *Store) DeleteProfile(ctx context.Context, id int64) error {
 			Where("profile_after_expiry = ?", id).Exec(ctx); err != nil {
 			return fmt.Errorf("clear pending profile destinations: %w", err)
 		}
-		_, err := tx.NewDelete().Model((*Profile)(nil)).Where("id = ?", id).Exec(ctx)
+		_, err = tx.NewDelete().Model((*Profile)(nil)).Where("id = ?", id).Exec(ctx)
 		return err
 	})
 }

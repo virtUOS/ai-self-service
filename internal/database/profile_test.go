@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -88,6 +89,53 @@ func TestUpdateDefaultProfileKeepsItself(t *testing.T) {
 	}
 	if n := countDefaults(t, s); n != 1 {
 		t.Fatalf("defaults = %d, want 1 (profile demoted itself)", n)
+	}
+}
+
+// Saving the default as not the default would leave none, so it is refused and
+// the profile stays the default.
+func TestUpdateProfileRefusesToUndefault(t *testing.T) {
+	s := migratedStore(t, "pf-undefault")
+	ctx := context.Background()
+
+	p := &Profile{Name: "students", IsDefault: true, Description: "before"}
+	if err := s.CreateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	p.IsDefault = false
+	p.Description = "after"
+	if err := s.UpdateProfile(ctx, p); !errors.Is(err, ErrDefaultProfile) {
+		t.Fatalf("err = %v, want ErrDefaultProfile", err)
+	}
+	d, err := s.GetDefaultProfile(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.ID != p.ID || d.Description != "before" {
+		t.Errorf("default = %q (%q), want students unchanged", d.Name, d.Description)
+	}
+}
+
+func TestDeleteProfileRefusesDefault(t *testing.T) {
+	s := migratedStore(t, "pf-deldefault")
+	ctx := context.Background()
+
+	p := &Profile{Name: "students", IsDefault: true}
+	if err := s.CreateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Budget: 1, Period: "1d"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteProfile(ctx, p.ID); !errors.Is(err, ErrDefaultProfile) {
+		t.Fatalf("err = %v, want ErrDefaultProfile", err)
+	}
+	d, err := s.GetDefaultProfile(ctx)
+	if err != nil {
+		t.Fatalf("default profile gone: %v", err)
+	}
+	if len(d.Quotas) != 1 {
+		t.Errorf("quotas = %d, want 1 (refused delete still removed them)", len(d.Quotas))
 	}
 }
 

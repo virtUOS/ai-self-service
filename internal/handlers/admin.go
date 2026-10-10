@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -389,7 +390,11 @@ func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.store.UpdateProfile(r.Context(), p); err != nil {
+	if err := a.store.UpdateProfile(r.Context(), p); errors.Is(err, database.ErrDefaultProfile) {
+		slog.Info("refused to un-default the default profile", "profile", id)
+		http.Redirect(w, r, "/admin?flash=The+default+profile+must+stay+the+default.+Mark+another+profile+as+default+instead.", http.StatusFound)
+		return
+	} else if err != nil {
 		slog.Error("update profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+update+profile", http.StatusFound)
 		return
@@ -411,7 +416,11 @@ func (a *Admin) DeleteProfile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
-	if err := a.store.DeleteProfile(r.Context(), id); err != nil {
+	if err := a.store.DeleteProfile(r.Context(), id); errors.Is(err, database.ErrDefaultProfile) {
+		slog.Info("refused to delete the default profile", "profile", id)
+		http.Redirect(w, r, "/admin?flash=The+default+profile+cannot+be+deleted.+Mark+another+profile+as+default+first.", http.StatusFound)
+		return
+	} else if err != nil {
 		slog.Error("delete profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+delete+profile", http.StatusFound)
 		return
