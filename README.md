@@ -347,7 +347,7 @@ restricts the endpoint to the monitoring host.
 | ------ | ------- |
 | `aiselfservice_http_requests_total` | requests by route, method, status |
 | `aiselfservice_http_request_duration_seconds` | latency by route |
-| `aiselfservice_key_operations_total` | key issue/extend/revoke by outcome |
+| `aiselfservice_key_operations_total` | key issue/extend/delete/revoke by outcome |
 | `aiselfservice_active_keys` | keys currently issued |
 | `aiselfservice_keys_expiring_7d` | keys expiring within a week |
 
