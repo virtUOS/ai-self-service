@@ -217,6 +217,7 @@ var messages = map[string]map[Lang]string{
 	"admin.form.period":        {DE: "Limit zurücksetzen", EN: "Limit resets"},
 	"admin.form.period.hint":   {DE: "Anfragen schlagen fehl, sobald das Limit erreicht ist, und funktionieren beim nächsten Zurücksetzen wieder. Zeitpunkte in UTC (täglich = Mitternacht UTC).", EN: "Requests fail once the limit is hit, then resume automatically at the next reset. Boundaries are UTC (daily = midnight UTC)."},
 	"admin.form.default":       {DE: "Standardprofil", EN: "Default profile"},
+	"admin.form.default.hint":  {DE: "Um den Standard zu ändern, ein anderes Profil als Standard markieren.", EN: "To change the default, mark another profile as default."},
 	"admin.form.unlimited":     {DE: "unbegrenzt", EN: "unlimited"},
 	"admin.form.serverdefault": {DE: "Server-Standard", EN: "server default"},
 
