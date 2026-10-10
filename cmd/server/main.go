@@ -138,7 +138,7 @@ func main() {
 
 	// ── Router ────────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
-	r.Use(middleware.RealIP)
+	r.Use(handlers.ClientIP(cfg.TrustedProxies))
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)

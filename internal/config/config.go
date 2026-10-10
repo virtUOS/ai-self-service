@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -83,6 +84,21 @@ type Config struct {
 	// LimitSyncInterval is how often the limit sync retries keys whose push
 	// failed. Admin changes start a run straight away and do not wait for it.
 	LimitSyncInterval time.Duration
+
+	// TrustedProxies are the peers whose X-Forwarded-For is believed when
+	// logging the client address. A request from anywhere else is logged with
+	// the address that opened the connection, whatever headers it carries.
+	//
+	// The default is the loopback and private ranges, where a reverse proxy in
+	// front of the portal usually sits. Empty trusts nobody.
+	TrustedProxies []netip.Prefix
+}
+
+// defaultTrustedProxies are the loopback and private ranges, IPv4 and IPv6.
+var defaultTrustedProxies = []string{
+	"127.0.0.0/8", "::1/128",
+	"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+	"fc00::/7",
 }
 
 func Load() (*Config, error) {
@@ -159,6 +175,12 @@ func Load() (*Config, error) {
 	}
 	cfg.LimitSyncInterval = interval
 
+	proxies, err := parseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
+	if err != nil {
+		return nil, err
+	}
+	cfg.TrustedProxies = proxies
+
 	for _, n := range []struct {
 		env string
 		dst *string
@@ -174,6 +196,40 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// parseTrustedProxies reads a comma-separated list of CIDRs or single IPs.
+// Unset falls back to the private ranges; "none" trusts nobody.
+func parseTrustedProxies(raw string) ([]netip.Prefix, error) {
+	raw = strings.TrimSpace(raw)
+	if strings.EqualFold(raw, "none") {
+		return nil, nil
+	}
+	entries := strings.Split(raw, ",")
+	if raw == "" {
+		entries = defaultTrustedProxies
+	}
+	var prefixes []netip.Prefix
+	for _, e := range entries {
+		if e = strings.TrimSpace(e); e == "" {
+			continue
+		}
+		p, err := netip.ParsePrefix(e)
+		if err != nil {
+			// A single address is a prefix of its full length. One with a
+			// zone is refused: a zoned peer never matches a prefix, so the
+			// entry would silently trust nobody.
+			if a, aerr := netip.ParseAddr(e); aerr == nil && a.Zone() == "" {
+				a = a.Unmap()
+				p = netip.PrefixFrom(a, a.BitLen())
+			}
+		}
+		if !p.IsValid() {
+			return nil, fmt.Errorf("TRUSTED_PROXIES must be a comma-separated list of CIDRs or IPs: %q", e)
+		}
+		prefixes = append(prefixes, p.Masked())
+	}
+	return prefixes, nil
 }
 
 // readNotice reads a privacy notice file, or nothing when no path is given.
