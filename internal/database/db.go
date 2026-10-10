@@ -62,36 +62,52 @@ func (s *Store) RunMigrations(ctx context.Context) error {
 	return nil
 }
 
+// SeedDefaultProfile makes sure a default profile exists.
+//
+// A fresh database gets an unlimited profile named "default". A database with
+// profiles but no default, left by a version that let the default be removed
+// or by a hand edit, has the profile named "default" promoted instead, since
+// inserting another would collide with its name. If there is none, it refuses
+// rather than add an unlimited default that every unassigned user would get.
 func (s *Store) SeedDefaultProfile(ctx context.Context) error {
-	count, err := s.db.NewSelect().Model((*Profile)(nil)).Where("is_default <> 0").Count(ctx)
-	if err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	now := time.Now()
-	p := &Profile{
-		Name:        "default",
-		Description: "Default profile — no rate or budget limits.",
-		Models:      []string{},
-		IsDefault:   true,
-		LimitsRev:   1,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
-	return s.upsertProfile(ctx, p)
-}
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		hasDefault, err := tx.NewSelect().Model((*Profile)(nil)).
+			Where("is_default <> 0").Exists(ctx)
+		if err != nil || hasDefault {
+			return err
+		}
 
-func (s *Store) upsertProfile(ctx context.Context, p *Profile) error {
-	modelsJSON, err := json.Marshal(p.Models)
-	if err != nil {
-		return err
-	}
-	_, err = s.db.NewInsert().Model(p).
-		Value("models", "?", string(modelsJSON)).
-		Exec(ctx)
-	return err
+		profiles, err := tx.NewSelect().Model((*Profile)(nil)).Count(ctx)
+		if err != nil {
+			return err
+		}
+		if profiles == 0 {
+			now := time.Now()
+			_, err := tx.NewInsert().Model(&Profile{
+				Name:        "default",
+				Description: "Default profile — no rate or budget limits.",
+				IsDefault:   true,
+				LimitsRev:   1,
+				CreatedAt:   now,
+				UpdatedAt:   now,
+			}).Value("models", "?", "[]").Exec(ctx)
+			return err
+		}
+
+		res, err := tx.NewUpdate().Model((*Profile)(nil)).
+			Set("is_default = ?", true).
+			Set("updated_at = ?", time.Now()).
+			Where("name = ?", "default").Exec(ctx)
+		if err != nil {
+			return fmt.Errorf("promote profile %q: %w", "default", err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return errors.New(`no default profile, and none named "default" to promote: ` +
+				`mark one as default, e.g. UPDATE profiles SET is_default = 1 WHERE name = '<name>'`)
+		}
+		slog.Warn(`no default profile; promoted the profile named "default"`)
+		return nil
+	})
 }
 
 // --- Profiles ---

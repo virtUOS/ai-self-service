@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -268,5 +269,85 @@ func TestExistingProfilesGetSafeDefaults(t *testing.T) {
 	}
 	if len(d.Quotas) != 0 {
 		t.Errorf("seeded profile has quotas: %+v", d.Quotas)
+	}
+}
+
+func TestSeedInsertsIntoEmptyTable(t *testing.T) {
+	s := migratedStore(t, "seed-empty")
+	ctx := context.Background()
+
+	if err := s.SeedDefaultProfile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	d, err := s.GetDefaultProfile(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Name != "default" {
+		t.Errorf("default = %q, want default", d.Name)
+	}
+	if err := s.SeedDefaultProfile(ctx); err != nil {
+		t.Fatalf("second seed: %v", err)
+	}
+	if n := countDefaults(t, s); n != 1 {
+		t.Errorf("defaults = %d, want 1", n)
+	}
+}
+
+// A database left without a default must not stop the server from starting
+// when a profile named "default" is there to take the role.
+func TestSeedPromotesProfileNamedDefault(t *testing.T) {
+	s := migratedStore(t, "seed-promote")
+	ctx := context.Background()
+
+	p := &Profile{Name: "default", IsDefault: true, Description: "kept"}
+	if err := s.CreateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateProfile(ctx, &Profile{Name: "lecturers"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ExecRaw(ctx, "UPDATE profiles SET is_default = 0"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.SeedDefaultProfile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	d, err := s.GetDefaultProfile(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.ID != p.ID || d.Description != "kept" {
+		t.Errorf("default = %d %q, want the existing profile %d promoted", d.ID, d.Description, p.ID)
+	}
+	var n int
+	if err := s.QueryRowRaw(ctx, `SELECT COUNT(*) FROM profiles`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Errorf("profiles = %d, want 2 (nothing inserted)", n)
+	}
+}
+
+// Without a profile named "default", seeding must not add an unlimited one
+// that every unassigned user would silently get.
+func TestSeedRefusesWithoutCandidate(t *testing.T) {
+	s := migratedStore(t, "seed-refuse")
+	ctx := context.Background()
+
+	if err := s.CreateProfile(ctx, &Profile{Name: "students", IsDefault: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ExecRaw(ctx, "UPDATE profiles SET is_default = 0"); err != nil {
+		t.Fatal(err)
+	}
+
+	err := s.SeedDefaultProfile(ctx)
+	if err == nil || !strings.Contains(err.Error(), "no default profile") {
+		t.Fatalf("err = %v, want a refusal naming the missing default", err)
+	}
+	if n := countDefaults(t, s); n != 0 {
+		t.Errorf("defaults = %d, want 0", n)
 	}
 }
