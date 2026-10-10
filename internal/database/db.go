@@ -103,6 +103,17 @@ func (s *Store) upsertProfile(ctx context.Context, p *Profile) error {
 // moves by marking another profile as default instead.
 var ErrDefaultProfile = errors.New("the default profile cannot be deleted or un-defaulted")
 
+// ProfileInUseError is returned for deleting a profile that users are still
+// assigned to. They would otherwise be left pointing at a missing profile,
+// which the foreign key rejects with an error that names neither cause nor fix.
+type ProfileInUseError struct {
+	Users int
+}
+
+func (e *ProfileInUseError) Error() string {
+	return fmt.Sprintf("profile is assigned to %d user(s)", e.Users)
+}
+
 // ListProfiles returns every profile with its quota windows.
 //
 // The relation is loaded here, not left to the caller: the admin table and the
@@ -314,7 +325,8 @@ func (s *Store) updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile, mode
 }
 
 // DeleteProfile removes a profile and the quota windows belonging to it. It
-// refuses to remove the default profile with ErrDefaultProfile.
+// refuses to remove the default profile with ErrDefaultProfile, and one that
+// users are assigned to with a *ProfileInUseError.
 //
 // Open enables foreign keys, so ON DELETE CASCADE would remove the windows on
 // its own. They are still deleted explicitly so that a handle opened without
@@ -329,6 +341,14 @@ func (s *Store) DeleteProfile(ctx context.Context, id int64) error {
 		}
 		if isDefault {
 			return ErrDefaultProfile
+		}
+		assigned, err := tx.NewSelect().Model((*User)(nil)).
+			Where("profile_id = ?", id).Count(ctx)
+		if err != nil {
+			return fmt.Errorf("count assigned users: %w", err)
+		}
+		if assigned > 0 {
+			return &ProfileInUseError{Users: int(assigned)}
 		}
 
 		if _, err := tx.NewDelete().Model((*ProfileQuota)(nil)).
