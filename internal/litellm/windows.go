@@ -54,10 +54,7 @@ func periodDuration(period string) time.Duration {
 
 // keyWindows reads the stacked windows configured on a key.
 func (c *Client) keyWindows(ctx context.Context, key string) (windows []budgetWindow, spend float64, err error) {
-	q := url.Values{}
-	q.Set("key", key)
-
-	resp, err := c.do(ctx, http.MethodGet, "/key/info?"+q.Encode(), nil)
+	resp, err := c.do(ctx, http.MethodGet, keyInfoPath(key), nil)
 	if err != nil {
 		return nil, 0, err
 	}

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -127,7 +129,18 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte) (*htt
 	}
 	req.Header.Set("Authorization", "Bearer "+c.masterKey)
 	req.Header.Set("Content-Type", "application/json")
-	return c.http.Do(req)
+
+	resp, err := c.http.Do(req)
+	// A transport error carries the full URL, and callers log it. Drop the
+	// query so nothing passed there ends up in our own logs.
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		if u, perr := url.Parse(ue.URL); perr == nil {
+			u.RawQuery = ""
+			ue.URL = u.String()
+		}
+	}
+	return resp, err
 }
 
 type modelInfoResponse struct {
