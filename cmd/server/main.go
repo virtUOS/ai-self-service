@@ -139,9 +139,10 @@ func main() {
 	// ── Router ────────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
 	r.Use(handlers.ClientIP(cfg.TrustedProxies))
+	// Before the Logger, so access-log lines carry the ID that error pages show.
+	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.RequestID)
 	// The sign-out form redirects to the OIDC provider, so its origin must be a
 	// permitted form-action target.
 	idpOrigin := ""

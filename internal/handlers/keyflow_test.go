@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
@@ -201,6 +202,38 @@ func TestGenerateKeyKeepsOldKeyWhenCreateFails(t *testing.T) {
 	}
 	if fake.LiveCount() != 1 {
 		t.Errorf("provider holds %d keys, want the original still live", fake.LiveCount())
+	}
+}
+
+// LiteLLM errors carry the response body; the user sees only a request ID.
+func TestGenerateKeyHidesProviderError(t *testing.T) {
+	ui, fake, _, _ := newTestUI(t, "kf4b")
+
+	fake.CreateErr = errors.New("LiteLLM /key/generate returned 500: secret-body")
+	rec := post(t, ui, middleware.RequestID(http.HandlerFunc(ui.GenerateKey)).ServeHTTP, "/key/generate")
+	assertHidesError(t, rec, "secret-body")
+}
+
+func TestExtendKeyHidesProviderError(t *testing.T) {
+	ui, fake, _, _ := newTestUI(t, "kf5b")
+
+	post(t, ui, ui.GenerateKey, "/key/generate")
+	fake.ExpiryErr = errors.New("LiteLLM /key/update returned 500: secret-body")
+	rec := post(t, ui, middleware.RequestID(http.HandlerFunc(ui.ExtendKey)).ServeHTTP, "/key/extend")
+	assertHidesError(t, rec, "secret-body")
+}
+
+func assertHidesError(t *testing.T, rec *httptest.ResponseRecorder, secret string) {
+	t.Helper()
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, secret) {
+		t.Errorf("response leaks the upstream error: %q", body)
+	}
+	if !strings.Contains(body, "request ID: ") {
+		t.Errorf("response has no request ID: %q", body)
 	}
 }
 

@@ -220,22 +220,19 @@ func (u *UI) Login(w http.ResponseWriter, r *http.Request) {
 func (u *UI) Callback(w http.ResponseWriter, r *http.Request) {
 	result, err := u.oidc.HandleCallback(w, r)
 	if err != nil {
-		slog.Error("callback: OIDC error", "err", err)
-		http.Error(w, "Authentication failed: "+err.Error(), http.StatusBadRequest)
+		httpError(w, r, http.StatusBadRequest, "Authentication failed", err)
 		return
 	}
 
 	user, err := u.oidc.GetOrCreateUser(r.Context(), result.UserInfo)
 	if err != nil {
-		slog.Error("callback: get/create user", "err", err)
-		http.Error(w, "Failed to load user", http.StatusInternalServerError)
+		httpError(w, r, http.StatusInternalServerError, "Failed to load user", err)
 		return
 	}
 
 	token, err := u.sessions.Create(r.Context(), user.ID, result.IDToken)
 	if err != nil {
-		slog.Error("callback: create session", "user_id", user.ID, "err", err)
-		http.Error(w, "Failed to create session", http.StatusInternalServerError)
+		httpError(w, r, http.StatusInternalServerError, "Failed to create session", err, "user_id", user.ID)
 		return
 	}
 
@@ -361,22 +358,20 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 
 	existing, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
 	if err != nil {
-		slog.Error("look up existing key", "err", err)
-		http.Error(w, "Failed to load your key", http.StatusInternalServerError)
+		httpError(w, r, http.StatusInternalServerError, "Failed to load your key", err)
 		return
 	}
 
 	profile, err := u.resolveProfile(r, su.User)
 	if err != nil {
-		http.Error(w, "Failed to load profile", http.StatusInternalServerError)
+		httpError(w, r, http.StatusInternalServerError, "Failed to load profile", err)
 		return
 	}
 
 	alias, err := keyAlias(su.User.OIDCSub, su.User.Name)
 	if err != nil {
-		slog.Error("build key alias", "err", err)
 		metrics.KeyOperations.WithLabelValues("generate", "alias_error").Inc()
-		http.Error(w, "Failed to create key", http.StatusInternalServerError)
+		httpError(w, r, http.StatusInternalServerError, "Failed to create key", err)
 		return
 	}
 
@@ -392,7 +387,7 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		metrics.KeyOperations.WithLabelValues("generate", "provider_error").Inc()
-		http.Error(w, "Failed to create key: "+err.Error(), http.StatusInternalServerError)
+		httpError(w, r, http.StatusInternalServerError, "Failed to create key", err)
 		return
 	}
 
@@ -414,12 +409,11 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		// The key exists upstream but could not be recorded, so nothing can
 		// ever revoke it through this app. Revoke it now rather than leaking it.
-		slog.Error("store api key", "err", err)
 		if delErr := u.keys.DeleteKey(r.Context(), result.Ref); delErr != nil {
 			slog.Error("roll back orphaned key", "key_prefix", prefix, "err", delErr)
 		}
 		metrics.KeyOperations.WithLabelValues("generate", "store_error").Inc()
-		http.Error(w, "Failed to save your key", http.StatusInternalServerError)
+		httpError(w, r, http.StatusInternalServerError, "Failed to save your key", err)
 		return
 	}
 
@@ -456,7 +450,7 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 
 	k, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
 	if err != nil {
-		http.Error(w, "Failed to load your key", http.StatusInternalServerError)
+		httpError(w, r, http.StatusInternalServerError, "Failed to load your key", err)
 		return
 	}
 	if k == nil {
@@ -466,12 +460,12 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 
 	profile, err := u.resolveProfile(r, su.User)
 	if err != nil {
-		http.Error(w, "Failed to load profile", http.StatusInternalServerError)
+		httpError(w, r, http.StatusInternalServerError, "Failed to load profile", err)
 		return
 	}
 	newExpiry := time.Now().AddDate(0, 0, u.keyDuration(profile))
 	if err := u.keys.UpdateExpiry(r.Context(), k.LiteLLMKey, newExpiry); err != nil {
-		http.Error(w, "Failed to extend key: "+err.Error(), http.StatusInternalServerError)
+		httpError(w, r, http.StatusInternalServerError, "Failed to extend key", err)
 		return
 	}
 	if err := u.store.UpdateAPIKeyExpiry(r.Context(), k.ID, newExpiry); err != nil {
@@ -502,17 +496,15 @@ func (u *UI) DeleteKey(w http.ResponseWriter, r *http.Request) {
 	// Revoke upstream first: if that fails the key is still live, so the local
 	// row must stay to keep it revocable.
 	if err := u.keys.DeleteKey(r.Context(), k.LiteLLMKey); err != nil {
-		slog.Error("delete upstream key", "key_prefix", k.KeyPrefix, "err", err)
 		metrics.KeyOperations.WithLabelValues("delete", "provider_error").Inc()
-		http.Error(w, "Failed to delete your key; it is still active. Please try again.", http.StatusInternalServerError)
+		httpError(w, r, http.StatusInternalServerError, "Failed to delete your key; it is still active. Please try again.", err, "key_prefix", k.KeyPrefix)
 		return
 	}
 	// The key is revoked either way, so record that even if the row stays.
 	u.audit(r, database.AuditKeyDeleted, su.User, "key "+k.KeyPrefix)
 	if err := u.store.DeleteAPIKey(r.Context(), k.ID); err != nil {
-		slog.Error("delete local key row", "key_id", k.ID, "err", err)
 		metrics.KeyOperations.WithLabelValues("delete", "store_error").Inc()
-		http.Error(w, "Your key was revoked, but the portal could not update its records", http.StatusInternalServerError)
+		httpError(w, r, http.StatusInternalServerError, "Your key was revoked, but the portal could not update its records", err, "key_id", k.ID)
 		return
 	}
 	metrics.KeyOperations.WithLabelValues("delete", "success").Inc()
