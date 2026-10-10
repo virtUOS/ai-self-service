@@ -92,17 +92,50 @@ func TestSetLanguageStoresChoice(t *testing.T) {
 	}
 }
 
-// return_to must not become an open redirect.
+// return_to must not become an open redirect. Only a crafted request sends
+// such a value, so it is refused outright and nothing is set.
 func TestSetLanguageRejectsOffsiteReturn(t *testing.T) {
-	for _, bad := range []string{"https://evil.example", "//evil.example", "javascript:alert(1)"} {
+	for _, bad := range []string{
+		"https://evil.example", "//evil.example", "javascript:alert(1)",
+		// Browsers read "\" as "/" and drop tabs and newlines, so each of
+		// these lands on //evil.example.
+		"/\\evil.example", "\\\\evil.example", "/\t/evil.example", "/\n/evil.example",
+		"/\r\n/evil.example",
+	} {
 		req := httptest.NewRequest(http.MethodPost, "/lang",
 			strings.NewReader(url.Values{"lang": {"de"}, "return_to": {bad}}.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		rec := httptest.NewRecorder()
 		SetLanguage(false)(rec, req)
-		if loc := rec.Header().Get("Location"); loc != "/" {
-			t.Errorf("return_to %q redirected to %q, want /", bad, loc)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("return_to %q got %d (Location %q), want 400",
+				bad, rec.Code, rec.Header().Get("Location"))
 		}
+		if len(rec.Result().Cookies()) != 0 {
+			t.Errorf("return_to %q still set a cookie", bad)
+		}
+	}
+}
+
+// Paths on this site are accepted, query and fragment included.
+func TestIsLocalPathAcceptsOwnPaths(t *testing.T) {
+	for _, ok := range []string{"/", "/admin", "/privacy?x=1", "/a/b#c"} {
+		if !isLocalPath(ok) {
+			t.Errorf("isLocalPath(%q) = false, want true", ok)
+		}
+	}
+}
+
+// A request without return_to is incomplete rather than hostile, so it just
+// goes home.
+func TestSetLanguageWithoutReturnGoesHome(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/lang",
+		strings.NewReader(url.Values{"lang": {"en"}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	SetLanguage(false)(rec, req)
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/" {
+		t.Errorf("got %d to %q, want a redirect to /", rec.Code, rec.Header().Get("Location"))
 	}
 }
 
