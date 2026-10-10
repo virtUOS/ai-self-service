@@ -194,8 +194,10 @@
         <div class="form-group">
           <div class="checkbox-row">
             <input type="checkbox" id="pf-default" name="is_default">
+            <input type="hidden" id="pf-default-keep" name="is_default" value="on" disabled>
             <label for="pf-default" style="margin:0">{{T .Lang "admin.form.default"}} <button type="button" class="help" data-help="{{T $.Lang "help.defaultprofile"}}">?</button></label>
           </div>
+          <div class="form-hint" id="pf-default-hint" hidden>{{T .Lang "admin.form.default.hint"}}</div>
         </div>
         <div class="btn-row">
           <button type="submit" class="btn btn-primary" id="profile-submit-btn">{{T .Lang "admin.form.create"}}</button>
@@ -426,7 +428,7 @@ function openEditProfile(id, name, desc, models, tpm, rpm, expiry, quotas, isDef
   document.getElementById('pf-rpm').value = rpm;
   document.getElementById('pf-expiry').value = expiry;
   setQuotaRows(quotas);
-  document.getElementById('pf-default').checked = isDefault;
+  setDefaultLocked(isDefault);
   document.getElementById('profile-form-title').textContent = 'Edit profile: ' + name;
   document.getElementById('profile-submit-btn').textContent = 'Update profile';
   document.getElementById('profile-form').action = '/admin/profiles/' + id;
@@ -502,9 +504,21 @@ function setSelectedModels(models) {
   });
 }
 
+// The default profile cannot be saved as not the default; the server refuses
+// it. Its checkbox is locked instead, and since a disabled box is not posted,
+// a hidden field keeps sending is_default for it.
+function setDefaultLocked(locked) {
+  const box = document.getElementById('pf-default');
+  box.checked = locked;
+  box.disabled = locked;
+  document.getElementById('pf-default-keep').disabled = !locked;
+  document.getElementById('pf-default-hint').hidden = !locked;
+}
+
 function resetProfileForm() {
   document.getElementById('pf-id').value = '';
   document.getElementById('profile-form').reset();
+  setDefaultLocked(false);
   setSelectedModels('');
   setQuotaRows([]);
   document.getElementById('profile-form').action = '/admin/profiles';
