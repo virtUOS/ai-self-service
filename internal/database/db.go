@@ -518,12 +518,23 @@ func (s *Store) CreateAPIKey(ctx context.Context, k *APIKey) error {
 	return err
 }
 
+// UpdateAPIKeyExpiry moves a key's expiry date and clears the expiry notices
+// already sent for it. Those notices were about the old date; leaving them
+// would make the reminder job skip every warning for the new one.
 func (s *Store) UpdateAPIKeyExpiry(ctx context.Context, keyID int64, expiresAt time.Time) error {
-	_, err := s.db.NewUpdate().Model((*APIKey)(nil)).
-		Set("expires_at = ?", expiresAt).
-		Where("id = ?", keyID).
-		Exec(ctx)
-	return err
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.NewUpdate().Model((*APIKey)(nil)).
+			Set("expires_at = ?", expiresAt).
+			Where("id = ?", keyID).
+			Exec(ctx); err != nil {
+			return fmt.Errorf("update expiry: %w", err)
+		}
+		if _, err := tx.NewDelete().Model((*ExpiryNotice)(nil)).
+			Where("api_key_id = ?", keyID).Exec(ctx); err != nil {
+			return fmt.Errorf("clear expiry notices: %w", err)
+		}
+		return nil
+	})
 }
 
 func (s *Store) DeleteAPIKey(ctx context.Context, keyID int64) error {
