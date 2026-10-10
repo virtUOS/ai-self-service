@@ -18,8 +18,8 @@ import (
 // across: nothing is in production yet, so there is no deployment to roll back
 // to that would still need them.
 func init() {
-	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
-		if _, err := db.ExecContext(ctx, `
+	Migrations.MustRegister(inTx(func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
 			CREATE TABLE IF NOT EXISTS profile_quotas (
 				id         INTEGER PRIMARY KEY AUTOINCREMENT,
 				profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -33,7 +33,7 @@ func init() {
 
 		// One row per profile that already had a quota, so behaviour is
 		// unchanged until an admin adds a second window.
-		if _, err := db.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO profile_quotas (profile_id, tokens, period)
 			SELECT id, quota_tokens, quota_period
 			FROM profiles
@@ -46,22 +46,22 @@ func init() {
 			`ALTER TABLE profiles DROP COLUMN quota_tokens`,
 			`ALTER TABLE profiles DROP COLUMN quota_period`,
 		} {
-			if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return fmt.Errorf("drop single-quota columns: %w", err)
 			}
 		}
 
 		return nil
-	}, func(ctx context.Context, db *bun.DB) error {
+	}), inTx(func(ctx context.Context, tx bun.Tx) error {
 		for _, stmt := range []string{
 			`ALTER TABLE profiles ADD COLUMN quota_tokens INTEGER NOT NULL DEFAULT 0`,
 			`ALTER TABLE profiles ADD COLUMN quota_period TEXT NOT NULL DEFAULT ''`,
 			`DROP TABLE IF EXISTS profile_quotas`,
 		} {
-			if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return err
 			}
 		}
 		return nil
-	})
+	}))
 }

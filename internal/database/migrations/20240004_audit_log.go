@@ -14,8 +14,8 @@ import (
 // they describe, so actor and subject are denormalised: a deleted user must not
 // erase the history of an admin acting on their key.
 func init() {
-	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
-		if _, err := db.ExecContext(ctx, `
+	Migrations.MustRegister(inTx(func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
 			CREATE TABLE IF NOT EXISTS audit_events (
 				id            INTEGER PRIMARY KEY AUTOINCREMENT,
 				created_at    DATETIME NOT NULL,
@@ -34,13 +34,13 @@ func init() {
 			`CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_events (created_at DESC)`,
 			`CREATE INDEX IF NOT EXISTS idx_audit_subject ON audit_events (subject_id)`,
 		} {
-			if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return fmt.Errorf("index audit_events: %w", err)
 			}
 		}
 		return nil
-	}, func(ctx context.Context, db *bun.DB) error {
-		_, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS audit_events`)
+	}), inTx(func(ctx context.Context, tx bun.Tx) error {
+		_, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS audit_events`)
 		return err
-	})
+	}))
 }

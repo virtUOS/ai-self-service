@@ -24,7 +24,7 @@ import (
 // panel and so a run does not retry a failing key in a tight loop. A
 // successful push clears both.
 func init() {
-	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
+	Migrations.MustRegister(inTx(func(ctx context.Context, tx bun.Tx) error {
 		for _, stmt := range []string{
 			`ALTER TABLE profiles ADD COLUMN limits_rev INTEGER NOT NULL DEFAULT 1`,
 			`ALTER TABLE api_keys ADD COLUMN synced_profile_id INTEGER`,
@@ -32,12 +32,12 @@ func init() {
 			`ALTER TABLE api_keys ADD COLUMN sync_error TEXT NOT NULL DEFAULT ''`,
 			`ALTER TABLE api_keys ADD COLUMN sync_failed_at TIMESTAMP`,
 		} {
-			if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return fmt.Errorf("add limit sync columns: %w", err)
 			}
 		}
 		return nil
-	}, func(ctx context.Context, db *bun.DB) error {
+	}), inTx(func(ctx context.Context, tx bun.Tx) error {
 		for _, stmt := range []string{
 			`ALTER TABLE api_keys DROP COLUMN sync_failed_at`,
 			`ALTER TABLE api_keys DROP COLUMN sync_error`,
@@ -45,10 +45,10 @@ func init() {
 			`ALTER TABLE api_keys DROP COLUMN synced_profile_id`,
 			`ALTER TABLE profiles DROP COLUMN limits_rev`,
 		} {
-			if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return fmt.Errorf("drop limit sync columns: %w", err)
 			}
 		}
 		return nil
-	})
+	}))
 }

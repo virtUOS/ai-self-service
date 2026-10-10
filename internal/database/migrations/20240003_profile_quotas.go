@@ -21,20 +21,20 @@ import (
 //
 // Superseded by 20240007, which stores budgets after all: see that file.
 func init() {
-	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
+	Migrations.MustRegister(inTx(func(ctx context.Context, tx bun.Tx) error {
 		for _, stmt := range []string{
 			`ALTER TABLE profiles ADD COLUMN key_duration_days INTEGER NOT NULL DEFAULT 0`,
 			`ALTER TABLE profiles ADD COLUMN quota_tokens INTEGER NOT NULL DEFAULT 0`,
 			`ALTER TABLE profiles ADD COLUMN quota_period TEXT NOT NULL DEFAULT ''`,
 		} {
-			if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return fmt.Errorf("add profile quota columns: %w", err)
 			}
 		}
 
 		// Carry over any budget already configured in dollars, converting at the
 		// nominal rate so existing limits keep their effective size.
-		if _, err := db.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, `
 			UPDATE profiles
 			SET quota_tokens = CAST(max_budget / 0.0000001 AS INTEGER),
 			    quota_period = COALESCE(budget_duration, '30d')
@@ -44,16 +44,16 @@ func init() {
 		}
 
 		return nil
-	}, func(ctx context.Context, db *bun.DB) error {
+	}), inTx(func(ctx context.Context, tx bun.Tx) error {
 		for _, stmt := range []string{
 			`ALTER TABLE profiles DROP COLUMN quota_period`,
 			`ALTER TABLE profiles DROP COLUMN quota_tokens`,
 			`ALTER TABLE profiles DROP COLUMN key_duration_days`,
 		} {
-			if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return err
 			}
 		}
 		return nil
-	})
+	}))
 }

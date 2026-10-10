@@ -17,8 +17,8 @@ import (
 // ever logged in; it is filled in on their first login and is what authorises
 // them thereafter.
 func init() {
-	Migrations.MustRegister(func(ctx context.Context, db *bun.DB) error {
-		if _, err := db.ExecContext(ctx, `
+	Migrations.MustRegister(inTx(func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
 			CREATE TABLE admin_grants (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				oidc_sub TEXT,
@@ -29,10 +29,10 @@ func init() {
 			return fmt.Errorf("create admin_grants: %w", err)
 		}
 		return nil
-	}, func(ctx context.Context, db *bun.DB) error {
-		if _, err := db.ExecContext(ctx, `DROP TABLE admin_grants`); err != nil {
+	}), inTx(func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.ExecContext(ctx, `DROP TABLE admin_grants`); err != nil {
 			return fmt.Errorf("drop admin_grants: %w", err)
 		}
 		return nil
-	})
+	}))
 }

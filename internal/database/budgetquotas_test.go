@@ -25,7 +25,7 @@ func TestMigrationConvertsTokenQuotasToBudgets(t *testing.T) {
 			before.Add(m)
 		}
 	}
-	old := migrate.NewMigrator(s.db, before)
+	old := newMigrator(s.db, before)
 	if err := old.Init(ctx); err != nil {
 		t.Fatal(err)
 	}
