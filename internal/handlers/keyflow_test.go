@@ -245,6 +245,57 @@ func TestDeleteKeyRevokesUpstream(t *testing.T) {
 	}
 }
 
+// A failed upstream delete leaves the key live, so the row must stay to keep
+// it revocable, and the user must not be told it is gone.
+func TestDeleteKeyKeepsRowWhenUpstreamFails(t *testing.T) {
+	ui, fake, store, user := newTestUI(t, "kf6b")
+	post(t, ui, ui.GenerateKey, "/key/generate")
+	original, _ := store.GetAPIKeyByUser(context.Background(), user.ID)
+
+	fake.DeleteErr = errors.New("gateway down")
+	rec := post(t, ui, ui.DeleteKey, "/key/delete")
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("delete with a failing provider returned %d, want 500", rec.Code)
+	}
+	k, _ := store.GetAPIKeyByUser(context.Background(), user.ID)
+	if k == nil || k.LiteLLMKey != original.LiteLLMKey {
+		t.Fatal("key row lost although the key is still live upstream")
+	}
+	if fake.LiveCount() != 1 {
+		t.Errorf("provider holds %d keys, want the original still live", fake.LiveCount())
+	}
+
+	// Once the provider recovers, the same key can still be revoked.
+	fake.DeleteErr = nil
+	if rec := post(t, ui, ui.DeleteKey, "/key/delete"); rec.Code != http.StatusFound {
+		t.Fatalf("retried delete returned %d, want 302", rec.Code)
+	}
+	if fake.LiveCount() != 0 {
+		t.Errorf("provider still holds %d keys after the retry", fake.LiveCount())
+	}
+}
+
+// If the row cannot be removed after the upstream delete, the user must hear
+// about it rather than be sent back to a dashboard that still shows the key.
+func TestDeleteKeyReportsStoreFailure(t *testing.T) {
+	ui, fake, store, _ := newTestUI(t, "kf6c")
+	ctx := context.Background()
+	post(t, ui, ui.GenerateKey, "/key/generate")
+
+	if err := store.ExecRaw(ctx, `CREATE TRIGGER block_delete BEFORE DELETE ON api_keys
+		BEGIN SELECT RAISE(ABORT, 'blocked'); END`); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := post(t, ui, ui.DeleteKey, "/key/delete")
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 when the store fails, got %d", rec.Code)
+	}
+	if fake.LiveCount() != 0 {
+		t.Errorf("provider still holds %d keys", fake.LiveCount())
+	}
+}
+
 // The profile's quota must reach the provider as a spend budget.
 func TestGenerateKeyPassesQuotaToProvider(t *testing.T) {
 	ui, fake, store, user := newTestUI(t, "kf7")

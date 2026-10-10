@@ -484,7 +484,8 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
-// DeleteKey removes the user's LiteLLM key.
+// DeleteKey removes the user's LiteLLM key. If the upstream delete fails, the
+// local row is kept so the key stays revocable.
 func (u *UI) DeleteKey(w http.ResponseWriter, r *http.Request) {
 	su, err := u.requireSession(r)
 	if err != nil {
@@ -498,12 +499,23 @@ func (u *UI) DeleteKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Revoke upstream first: if that fails the key is still live, so the local
+	// row must stay to keep it revocable.
 	if err := u.keys.DeleteKey(r.Context(), k.LiteLLMKey); err != nil {
-		slog.Error("delete LiteLLM key", "err", err)
+		slog.Error("delete upstream key", "key_prefix", k.KeyPrefix, "err", err)
+		metrics.KeyOperations.WithLabelValues("delete", "provider_error").Inc()
+		http.Error(w, "Failed to delete your key; it is still active. Please try again.", http.StatusInternalServerError)
+		return
 	}
-	_ = u.store.DeleteAPIKey(r.Context(), k.ID)
-	metrics.KeyOperations.WithLabelValues("delete", "success").Inc()
+	// The key is revoked either way, so record that even if the row stays.
 	u.audit(r, database.AuditKeyDeleted, su.User, "key "+k.KeyPrefix)
+	if err := u.store.DeleteAPIKey(r.Context(), k.ID); err != nil {
+		slog.Error("delete local key row", "key_id", k.ID, "err", err)
+		metrics.KeyOperations.WithLabelValues("delete", "store_error").Inc()
+		http.Error(w, "Your key was revoked, but the portal could not update its records", http.StatusInternalServerError)
+		return
+	}
+	metrics.KeyOperations.WithLabelValues("delete", "success").Inc()
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
