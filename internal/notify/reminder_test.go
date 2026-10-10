@@ -119,6 +119,37 @@ func TestReminderDoesNotRepeat(t *testing.T) {
 	}
 }
 
+// Extending a key moves its expiry date, so the warnings for the old date must
+// not suppress the warnings for the new one.
+func TestReminderWarnsAgainAfterExtension(t *testing.T) {
+	s := setup(t, "rem7")
+	k := addKey(t, s, "u1", "u1@uni.de", 2)
+
+	rec := &recorder{}
+	r := NewReminder(s, rec, "https://portal", nil)
+	ctx := context.Background()
+
+	if err := r.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if rec.count() != 2 {
+		t.Fatalf("sent %d messages before the extension, want 2 (14d and 3d)", rec.count())
+	}
+
+	if err := s.UpdateAPIKeyExpiry(ctx, k.ID, time.Now().AddDate(0, 0, 2)); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if rec.count() != 4 {
+		t.Fatalf("sent %d messages after the extension, want 4 (14d and 3d again)", rec.count())
+	}
+}
+
 // Already-expired keys are not worth a warning.
 func TestReminderSkipsExpiredKeys(t *testing.T) {
 	s := setup(t, "rem3")

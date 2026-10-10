@@ -90,3 +90,55 @@ func TestReplaceAPIKeyScopedToUser(t *testing.T) {
 		t.Errorf("user2 key = %v, want sk-u2b", k2)
 	}
 }
+
+// Extending a key must clear its expiry notices, so the new date gets its own
+// warnings, and must leave other keys' notices alone.
+func TestUpdateAPIKeyExpiryClearsNotices(t *testing.T) {
+	s := testStore(t, "rk4")
+	ctx := context.Background()
+	if err := s.RunMigrations(ctx); err != nil {
+		t.Fatal(err)
+	}
+	u1, _ := s.GetOrCreateUser(ctx, "s1", "a@b.c", "A")
+	u2, _ := s.GetOrCreateUser(ctx, "s2", "c@d.e", "B")
+
+	exp := time.Now().AddDate(0, 0, 2)
+	k1 := &APIKey{UserID: u1.ID, LiteLLMKey: "sk-u1", KeyPrefix: "sk-u1", ExpiresAt: exp}
+	k2 := &APIKey{UserID: u2.ID, LiteLLMKey: "sk-u2", KeyPrefix: "sk-u2", ExpiresAt: exp}
+	for _, k := range []*APIKey{k1, k2} {
+		if err := s.ReplaceAPIKey(ctx, k); err != nil {
+			t.Fatal(err)
+		}
+		for _, days := range []int{14, 3} {
+			if err := s.MarkExpiryNoticeSent(ctx, k.ID, days); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	newExp := time.Now().AddDate(0, 0, 30).Truncate(time.Second)
+	if err := s.UpdateAPIKeyExpiry(ctx, k1.ID, newExp); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.GetAPIKeyByUser(ctx, u1.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.ExpiresAt.Equal(newExp) {
+		t.Errorf("expires_at = %v, want %v", got.ExpiresAt, newExp)
+	}
+	for _, c := range []struct {
+		key  *APIKey
+		want int
+	}{{k1, 0}, {k2, 2}} {
+		var n int
+		if err := s.db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM expiry_notices WHERE api_key_id = ?`, c.key.ID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != c.want {
+			t.Errorf("%s has %d notices, want %d", c.key.LiteLLMKey, n, c.want)
+		}
+	}
+}
