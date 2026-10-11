@@ -17,33 +17,20 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # The steps are the Makefile's, so `make check` locally runs the same.
       - name: Verify formatting
-        run: |
-          unformatted="$(gofmt -l .)"
-          if [ -n "$unformatted" ]; then
-            echo "These files need gofmt:"
-            echo "$unformatted"
-            exit 1
-          fi
+        run: make fmt
 
       - name: Vet
-        run: go vet ./...
-
-      # The end-to-end tests only build with their tag; vet them here too so
-      # they cannot rot between the runs of the e2e job.
-      - name: Vet (e2e tests)
-        run: go vet -tags e2e ./...
+        run: make vet
 
       - name: Test
-        run: go test -race ./...
+        run: make test
 
       # The deployment image builds with CGO disabled so bun's sqliteshim
-      # selects the pure-Go sqlite backend. Building that way here catches a
-      # cgo-only dependency before it reaches the registry.
+      # selects the pure-Go sqlite backend.
       - name: Build (CGO disabled, as the image does)
-        env:
-          CGO_ENABLED: '0'
-        run: go build ./...
+        run: make build
 
   # The LiteLLM client against a real gateway: the one the dev stack runs,
   # from the same compose file, so a Dependabot bump of the image is tested
@@ -60,11 +47,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Start LiteLLM
-        run: docker compose -f dev/docker-compose.yml up -d --wait litellm
-
+      # Only LiteLLM: the tests need nothing else from the stack.
       - name: Test
-        run: go test -tags e2e -race ./internal/litellm/
+        run: make e2e SERVICES=litellm
 
       - name: Show LiteLLM logs
         if: failure()
