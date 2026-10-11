@@ -13,8 +13,8 @@ import (
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
 
-// LiteLLM identifies a key in its spend log by the SHA-256 of the key itself.
-// The portal stores the key, so it derives the hash rather than storing it.
+// LiteLLM identifies a key by the SHA-256 of the key itself. The portal stores
+// that hash as the key's ref, and derives it when the gateway does not say.
 func TestKeyHashIsSHA256(t *testing.T) {
 	// Known-good vector: sha256("sk-test"), computed independently.
 	const key = "sk-test"

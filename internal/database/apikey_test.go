@@ -20,7 +20,7 @@ func TestReplaceAPIKeyRotates(t *testing.T) {
 
 	for i, want := range []string{"sk-1", "sk-2", "sk-3"} {
 		err := s.ReplaceAPIKey(ctx, &APIKey{
-			UserID: u.ID, LiteLLMKey: want, KeyPrefix: want,
+			UserID: u.ID, KeyRef: want, KeyPrefix: want,
 			ExpiresAt: time.Now().Add(time.Hour),
 		})
 		if err != nil {
@@ -30,7 +30,7 @@ func TestReplaceAPIKeyRotates(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got == nil || got.LiteLLMKey != want {
+		if got == nil || got.KeyRef != want {
 			t.Fatalf("after rotation %d: got %v, want %s", i, got, want)
 		}
 		var n int
@@ -71,22 +71,22 @@ func TestReplaceAPIKeyScopedToUser(t *testing.T) {
 	u2, _ := s.GetOrCreateUser(ctx, "s2", "c@d.e", "B")
 
 	exp := time.Now().Add(time.Hour)
-	if err := s.ReplaceAPIKey(ctx, &APIKey{UserID: u1.ID, LiteLLMKey: "sk-u1", KeyPrefix: "sk-u1", ExpiresAt: exp}); err != nil {
+	if err := s.ReplaceAPIKey(ctx, &APIKey{UserID: u1.ID, KeyRef: "sk-u1", KeyPrefix: "sk-u1", ExpiresAt: exp}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ReplaceAPIKey(ctx, &APIKey{UserID: u2.ID, LiteLLMKey: "sk-u2", KeyPrefix: "sk-u2", ExpiresAt: exp}); err != nil {
+	if err := s.ReplaceAPIKey(ctx, &APIKey{UserID: u2.ID, KeyRef: "sk-u2", KeyPrefix: "sk-u2", ExpiresAt: exp}); err != nil {
 		t.Fatal(err)
 	}
 	// Rotating u2 must not disturb u1.
-	if err := s.ReplaceAPIKey(ctx, &APIKey{UserID: u2.ID, LiteLLMKey: "sk-u2b", KeyPrefix: "sk-u2b", ExpiresAt: exp}); err != nil {
+	if err := s.ReplaceAPIKey(ctx, &APIKey{UserID: u2.ID, KeyRef: "sk-u2b", KeyPrefix: "sk-u2b", ExpiresAt: exp}); err != nil {
 		t.Fatal(err)
 	}
 	k1, _ := s.GetAPIKeyByUser(ctx, u1.ID)
-	if k1 == nil || k1.LiteLLMKey != "sk-u1" {
+	if k1 == nil || k1.KeyRef != "sk-u1" {
 		t.Errorf("user1 key = %v, want sk-u1", k1)
 	}
 	k2, _ := s.GetAPIKeyByUser(ctx, u2.ID)
-	if k2 == nil || k2.LiteLLMKey != "sk-u2b" {
+	if k2 == nil || k2.KeyRef != "sk-u2b" {
 		t.Errorf("user2 key = %v, want sk-u2b", k2)
 	}
 }
@@ -103,8 +103,8 @@ func TestUpdateAPIKeyExpiryClearsNotices(t *testing.T) {
 	u2, _ := s.GetOrCreateUser(ctx, "s2", "c@d.e", "B")
 
 	exp := time.Now().AddDate(0, 0, 2)
-	k1 := &APIKey{UserID: u1.ID, LiteLLMKey: "sk-u1", KeyPrefix: "sk-u1", ExpiresAt: exp}
-	k2 := &APIKey{UserID: u2.ID, LiteLLMKey: "sk-u2", KeyPrefix: "sk-u2", ExpiresAt: exp}
+	k1 := &APIKey{UserID: u1.ID, KeyRef: "sk-u1", KeyPrefix: "sk-u1", ExpiresAt: exp}
+	k2 := &APIKey{UserID: u2.ID, KeyRef: "sk-u2", KeyPrefix: "sk-u2", ExpiresAt: exp}
 	for _, k := range []*APIKey{k1, k2} {
 		if err := s.ReplaceAPIKey(ctx, k); err != nil {
 			t.Fatal(err)
@@ -138,7 +138,7 @@ func TestUpdateAPIKeyExpiryClearsNotices(t *testing.T) {
 			t.Fatal(err)
 		}
 		if n != c.want {
-			t.Errorf("%s has %d notices, want %d", c.key.LiteLLMKey, n, c.want)
+			t.Errorf("%s has %d notices, want %d", c.key.KeyRef, n, c.want)
 		}
 	}
 }

@@ -49,40 +49,51 @@ type KeyParams struct {
 
 type createKeyResponse struct {
 	Key string `json:"key"`
+	// Token is the gateway's hash of the key, which it accepts in place of
+	// the key on every management route.
+	Token string `json:"token"`
 }
 
-func (c *Client) CreateKey(ctx context.Context, alias string, params KeyParams, expiresAt time.Time) (string, error) {
+// CreateKey issues a key and returns the secret, to hand to the user once, and
+// the hash LiteLLM identifies it by, to keep as the ref. Only the hash may be
+// stored: unlike the secret, it cannot be used to make requests.
+func (c *Client) CreateKey(ctx context.Context, alias string, params KeyParams, expiresAt time.Time) (secret, ref string, err error) {
 	params.KeyAlias = alias
 	params.Duration = fmt.Sprintf("%dd", int(time.Until(expiresAt).Hours()/24)+1)
 
 	body, err := json.Marshal(params)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	resp, err := c.do(ctx, http.MethodPost, "/key/generate", body)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("LiteLLM /key/generate returned %d: %s", resp.StatusCode, b)
+		return "", "", fmt.Errorf("LiteLLM /key/generate returned %d: %s", resp.StatusCode, b)
 	}
 
 	var result createKeyResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
+		return "", "", fmt.Errorf("decode response: %w", err)
 	}
 	if result.Key == "" {
-		return "", fmt.Errorf("LiteLLM returned empty key")
+		return "", "", fmt.Errorf("LiteLLM returned empty key")
 	}
-	return result.Key, nil
+	// The token is the same SHA-256 the portal can derive itself; derive it if
+	// a gateway version leaves it out rather than fall back to the secret.
+	if result.Token == "" {
+		return result.Key, keyHash(result.Key), nil
+	}
+	return result.Key, result.Token, nil
 }
 
-func (c *Client) DeleteKey(ctx context.Context, key string) error {
-	body, err := json.Marshal(map[string]any{"keys": []string{key}})
+func (c *Client) DeleteKey(ctx context.Context, ref string) error {
+	body, err := json.Marshal(map[string]any{"keys": []string{ref}})
 	if err != nil {
 		return err
 	}
@@ -100,9 +111,9 @@ func (c *Client) DeleteKey(ctx context.Context, key string) error {
 	return nil
 }
 
-func (c *Client) UpdateKeyExpiry(ctx context.Context, key string, expiresAt time.Time) error {
+func (c *Client) UpdateKeyExpiry(ctx context.Context, ref string, expiresAt time.Time) error {
 	body, err := json.Marshal(map[string]any{
-		"key":      key,
+		"key":      ref,
 		"duration": fmt.Sprintf("%dd", int(time.Until(expiresAt).Hours()/24)+1),
 	})
 	if err != nil {

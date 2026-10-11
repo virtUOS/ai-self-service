@@ -37,11 +37,11 @@ func TestUniqueKeyPerUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	k := &APIKey{UserID: u.ID, LiteLLMKey: "sk-1", KeyPrefix: "sk-1", ExpiresAt: time.Now().Add(time.Hour)}
+	k := &APIKey{UserID: u.ID, KeyRef: "sk-1", KeyPrefix: "sk-1", ExpiresAt: time.Now().Add(time.Hour)}
 	if err := s.CreateAPIKey(ctx, k); err != nil {
 		t.Fatalf("first key: %v", err)
 	}
-	second := &APIKey{UserID: u.ID, LiteLLMKey: "sk-2", KeyPrefix: "sk-2", ExpiresAt: time.Now().Add(time.Hour)}
+	second := &APIKey{UserID: u.ID, KeyRef: "sk-2", KeyPrefix: "sk-2", ExpiresAt: time.Now().Add(time.Hour)}
 	if err := s.CreateAPIKey(ctx, second); err == nil {
 		t.Fatal("second key for the same user was accepted; unique constraint missing")
 	}
@@ -128,11 +128,12 @@ func TestMigrationDeduplicatesExistingRows(t *testing.T) {
 		t.Errorf("api_keys after dedupe = %d, want 1", keys)
 	}
 	var kept string
-	if err := s.db.QueryRowContext(ctx, `SELECT litellm_key FROM api_keys`).Scan(&kept); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT key_ref FROM api_keys`).Scan(&kept); err != nil {
 		t.Fatal(err)
 	}
-	if kept != "sk-new" {
-		t.Errorf("kept %q, want the newest key sk-new", kept)
+	// Later migrations hash what is kept, so compare against the hash.
+	if kept != sha256Hex("sk-new") {
+		t.Errorf("kept %q, want the newest key sk-new, hashed", kept)
 	}
 
 	var defaults int

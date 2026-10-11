@@ -49,10 +49,11 @@ type KeyRequest struct {
 
 // KeyResult is what a provider returns when a key is created.
 type KeyResult struct {
-	// Secret is shown to the user once and never stored in full.
+	// Secret is shown to the user once and never stored.
 	Secret string
-	// Ref identifies the key for later revocation. For providers that can
-	// revoke by an opaque id this is that id; otherwise it is the secret.
+	// Ref identifies the key to the provider for every later call: revoke,
+	// update, usage. It is what the portal stores, so it must not work as a
+	// credential: an opaque id or a hash of the secret, never the secret.
 	Ref string
 }
 

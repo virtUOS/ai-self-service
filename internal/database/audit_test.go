@@ -87,7 +87,7 @@ func TestListAPIKeys(t *testing.T) {
 	u2, _ := s.GetOrCreateUser(ctx, "s2", "c@d.e", "B")
 	for _, u := range []int64{u1.ID, u2.ID} {
 		if err := s.ReplaceAPIKey(ctx, &APIKey{
-			UserID: u, LiteLLMKey: "sk-x", KeyPrefix: "sk-x",
+			UserID: u, KeyRef: "sk-x", KeyPrefix: "sk-x",
 		}); err != nil {
 			t.Fatal(err)
 		}

@@ -401,7 +401,7 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	// of date the moment it is stored, and the sync pushes the newer limits.
 	if err := u.store.ReplaceAPIKey(r.Context(), &database.APIKey{
 		UserID:          su.User.ID,
-		LiteLLMKey:      result.Ref,
+		KeyRef:          result.Ref,
 		KeyPrefix:       prefix,
 		ExpiresAt:       expiresAt,
 		SyncedProfileID: &profile.ID,
@@ -420,7 +420,7 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	// The new key is stored; the old one is now unreferenced and safe to
 	// revoke. A failure here leaves a stale key that expires on its own.
 	if existing != nil {
-		if delErr := u.keys.DeleteKey(r.Context(), existing.LiteLLMKey); delErr != nil {
+		if delErr := u.keys.DeleteKey(r.Context(), existing.KeyRef); delErr != nil {
 			slog.Error("revoke replaced key", "key_prefix", existing.KeyPrefix, "err", delErr)
 		}
 	}
@@ -464,7 +464,7 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newExpiry := time.Now().AddDate(0, 0, u.keyDuration(profile))
-	if err := u.keys.UpdateExpiry(r.Context(), k.LiteLLMKey, newExpiry); err != nil {
+	if err := u.keys.UpdateExpiry(r.Context(), k.KeyRef, newExpiry); err != nil {
 		httpError(w, r, http.StatusInternalServerError, "Failed to extend key", err)
 		return
 	}
@@ -495,7 +495,7 @@ func (u *UI) DeleteKey(w http.ResponseWriter, r *http.Request) {
 
 	// Revoke upstream first: if that fails the key is still live, so the local
 	// row must stay to keep it revocable.
-	if err := u.keys.DeleteKey(r.Context(), k.LiteLLMKey); err != nil {
+	if err := u.keys.DeleteKey(r.Context(), k.KeyRef); err != nil {
 		metrics.KeyOperations.WithLabelValues("delete", "provider_error").Inc()
 		httpError(w, r, http.StatusInternalServerError, "Failed to delete your key; it is still active. Please try again.", err, "key_prefix", k.KeyPrefix)
 		return
@@ -669,7 +669,7 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 		return usageReport{}
 	}
 	var rep usageReport
-	h, err := u.usage.History(ctx, k.LiteLLMKey)
+	h, err := u.usage.History(ctx, k.KeyRef)
 	if err != nil {
 		rep.Incomplete = true
 	}
@@ -687,7 +687,7 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 			}
 		}
 	}
-	q, err := u.usage.Quota(ctx, k.LiteLLMKey, ownerID)
+	q, err := u.usage.Quota(ctx, k.KeyRef, ownerID)
 	if err != nil {
 		slog.Error("read quota", "err", err)
 		rep.Incomplete = true
@@ -697,7 +697,7 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 		rep.QuotaPct = quotaPct(q.Used, q.Limit)
 	}
 
-	rep.Windows, err = u.quotaWindows(ctx, k.LiteLLMKey, ownerID, lang)
+	rep.Windows, err = u.quotaWindows(ctx, k.KeyRef, ownerID, lang)
 	if err != nil {
 		rep.Incomplete = true
 	}
@@ -718,7 +718,7 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 	// No per-day rows. That may mean an unused key, or a gateway that records
 	// spend without keeping a per-request log — the two are indistinguishable
 	// here, so ask for the cumulative figure before reporting nothing.
-	total, err := u.usage.TotalSpend(ctx, k.LiteLLMKey)
+	total, err := u.usage.TotalSpend(ctx, k.KeyRef)
 	if err != nil {
 		rep.Incomplete = true
 	} else if total > 0 {

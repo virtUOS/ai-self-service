@@ -91,7 +91,7 @@ func (r *Runner) revoke(ctx context.Context, u *database.User) error {
 	if key != nil {
 		// Upstream first: if that fails the key is still live, so the local row
 		// must stay to keep it revocable.
-		if err := r.keys.DeleteKey(ctx, key.LiteLLMKey); err != nil {
+		if err := r.keys.DeleteKey(ctx, key.KeyRef); err != nil {
 			return fmt.Errorf("delete key upstream: %w", err)
 		}
 		if err := r.store.DeleteAPIKey(ctx, key.ID); err != nil {

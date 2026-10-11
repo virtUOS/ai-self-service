@@ -150,7 +150,7 @@ func TestRunLeavesThePushToTheLimitSync(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.CreateAPIKey(ctx, &database.APIKey{
-		UserID: u.ID, LiteLLMKey: "sk-live", KeyPrefix: "sk-li",
+		UserID: u.ID, KeyRef: "sk-live", KeyPrefix: "sk-li",
 		ExpiresAt: time.Now().Add(90 * 24 * time.Hour), CreatedAt: time.Now(),
 	}); err != nil {
 		t.Fatal(err)
@@ -197,7 +197,7 @@ func TestRunRevokesTheKeyWhenAsked(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.CreateAPIKey(ctx, &database.APIKey{
-		UserID: u.ID, LiteLLMKey: "sk-doomed", KeyPrefix: "sk-do",
+		UserID: u.ID, KeyRef: "sk-doomed", KeyPrefix: "sk-do",
 		ExpiresAt: time.Now().Add(90 * 24 * time.Hour), CreatedAt: time.Now(),
 	}); err != nil {
 		t.Fatal(err)
@@ -286,7 +286,7 @@ func TestRunKeepsTheDeadlineWhenTheGatewayFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.CreateAPIKey(ctx, &database.APIKey{
-		UserID: u.ID, LiteLLMKey: "sk-fail", KeyPrefix: "sk-fa",
+		UserID: u.ID, KeyRef: "sk-fail", KeyPrefix: "sk-fa",
 		ExpiresAt: time.Now().Add(90 * 24 * time.Hour), CreatedAt: time.Now(),
 	}); err != nil {
 		t.Fatal(err)

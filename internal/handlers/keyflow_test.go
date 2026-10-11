@@ -95,8 +95,25 @@ func TestGenerateKeyStoresAndIssues(t *testing.T) {
 	if err != nil || k == nil {
 		t.Fatalf("key not stored: %v", err)
 	}
+	// The fake's first secret; the provider hands it out exactly once.
+	const secret = "sk-fake-001"
+
+	// What is stored is the provider's ref, never the secret: anyone reading
+	// the database would otherwise hold a working key.
+	if _, ok := fake.Keys[k.KeyRef]; !ok {
+		t.Errorf("stored ref %q is not the provider's ref", k.KeyRef)
+	}
+	var leaked int
+	if err := store.QueryRowRaw(context.Background(),
+		`SELECT COUNT(*) FROM api_keys WHERE key_ref LIKE '%' || ? || '%'`, secret).Scan(&leaked); err != nil {
+		t.Fatal(err)
+	}
+	if leaked != 0 {
+		t.Error("api_keys holds the secret")
+	}
+
 	// The redirect must carry an opaque token, never the secret.
-	if loc := rec.Header().Get("Location"); strings.Contains(loc, k.LiteLLMKey) {
+	if loc := rec.Header().Get("Location"); strings.Contains(loc, secret) {
 		t.Errorf("redirect leaks the key: %s", loc)
 	}
 }
@@ -137,13 +154,13 @@ func TestGenerateKeyRevokesOldKeyAfterSuccess(t *testing.T) {
 	post(t, ui, ui.GenerateKey, "/key/generate")
 	second, _ := store.GetAPIKeyByUser(context.Background(), user.ID)
 
-	if first.LiteLLMKey == second.LiteLLMKey {
+	if first.KeyRef == second.KeyRef {
 		t.Fatal("rotation did not issue a new key")
 	}
 	if fake.LiveCount() != 1 {
 		t.Errorf("provider holds %d keys after rotation, want 1 (old key leaked)", fake.LiveCount())
 	}
-	if len(fake.Deleted) != 1 || fake.Deleted[0] != first.LiteLLMKey {
+	if len(fake.Deleted) != 1 || fake.Deleted[0] != first.KeyRef {
 		t.Errorf("old key not revoked; deleted=%v", fake.Deleted)
 	}
 }
@@ -197,7 +214,7 @@ func TestGenerateKeyKeepsOldKeyWhenCreateFails(t *testing.T) {
 	}
 
 	after, _ := store.GetAPIKeyByUser(context.Background(), user.ID)
-	if after == nil || after.LiteLLMKey != original.LiteLLMKey {
+	if after == nil || after.KeyRef != original.KeyRef {
 		t.Fatal("existing key was lost when creation failed")
 	}
 	if fake.LiveCount() != 1 {
@@ -291,7 +308,7 @@ func TestDeleteKeyKeepsRowWhenUpstreamFails(t *testing.T) {
 		t.Fatalf("delete with a failing provider returned %d, want 500", rec.Code)
 	}
 	k, _ := store.GetAPIKeyByUser(context.Background(), user.ID)
-	if k == nil || k.LiteLLMKey != original.LiteLLMKey {
+	if k == nil || k.KeyRef != original.KeyRef {
 		t.Fatal("key row lost although the key is still live upstream")
 	}
 	if fake.LiveCount() != 1 {

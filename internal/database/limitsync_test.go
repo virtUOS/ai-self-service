@@ -39,7 +39,7 @@ func (f *limitSyncFixture) addUserWithKey(t *testing.T, sub, email string) (*Use
 	if err != nil {
 		t.Fatal(err)
 	}
-	k := &APIKey{UserID: u.ID, LiteLLMKey: "sk-" + sub, KeyPrefix: "sk-" + sub,
+	k := &APIKey{UserID: u.ID, KeyRef: "sk-" + sub, KeyPrefix: "sk-" + sub,
 		ExpiresAt: time.Now().Add(24 * time.Hour)}
 	if err := f.s.ReplaceAPIKey(f.ctx, k); err != nil {
 		t.Fatal(err)

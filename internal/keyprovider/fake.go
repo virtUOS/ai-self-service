@@ -15,7 +15,7 @@ type Fake struct {
 	mu      sync.Mutex
 	counter int
 
-	// Keys holds every live key by ref.
+	// Keys holds every live key by ref, never by secret.
 	Keys map[string]KeyRequest
 	// Created, Deleted, Extended and Relimited record calls in order.
 	Created   []KeyRequest
@@ -190,9 +190,12 @@ func (f *Fake) CreateKey(_ context.Context, req KeyRequest) (KeyResult, error) {
 	}
 	f.counter++
 	secret := fmt.Sprintf("sk-fake-%03d", f.counter)
-	f.Keys[secret] = req
+	// The ref differs from the secret, as on a real gateway, so that code
+	// passing or storing the secret where the ref belongs fails in tests.
+	ref := fmt.Sprintf("ref-fake-%03d", f.counter)
+	f.Keys[ref] = req
 	f.Created = append(f.Created, req)
-	return KeyResult{Secret: secret, Ref: secret}, nil
+	return KeyResult{Secret: secret, Ref: ref}, nil
 }
 
 func (f *Fake) DeleteKey(_ context.Context, ref string) error {

@@ -111,12 +111,13 @@ func (p *Provider) CreateKey(ctx context.Context, req keyprovider.KeyRequest) (k
 		req.Limits.Quotas = rest
 	}
 
-	secret, err := p.client.CreateKey(ctx, req.Alias, p.toKeyParams(req), req.ExpiresAt)
+	secret, ref, err := p.client.CreateKey(ctx, req.Alias, p.toKeyParams(req), req.ExpiresAt)
 	if err != nil {
 		return keyprovider.KeyResult{}, err
 	}
-	// LiteLLM revokes by the key itself, so the ref is the secret.
-	return keyprovider.KeyResult{Secret: secret, Ref: secret}, nil
+	// The ref is the key's hash, which LiteLLM accepts wherever it takes the
+	// key, so the secret itself never has to be kept.
+	return keyprovider.KeyResult{Secret: secret, Ref: ref}, nil
 }
 
 func (p *Provider) DeleteKey(ctx context.Context, ref string) error {

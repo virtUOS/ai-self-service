@@ -28,7 +28,7 @@ func TestUserUsageReportsEveryWindow(t *testing.T) {
 	}
 
 	got := windowsUI(fake).userUsage(context.Background(),
-		&database.APIKey{LiteLLMKey: "sk-live"}, "sub-1", i18n.EN)
+		&database.APIKey{KeyRef: "sk-live"}, "sub-1", i18n.EN)
 
 	if len(got.Windows) != 2 {
 		t.Fatalf("got %d windows, want 2", len(got.Windows))
@@ -55,7 +55,7 @@ func TestUserUsageHeadlineFollowsTheBindingWindow(t *testing.T) {
 	}
 
 	got := windowsUI(fake).userUsage(context.Background(),
-		&database.APIKey{LiteLLMKey: "sk-live"}, "sub-1", i18n.EN)
+		&database.APIKey{KeyRef: "sk-live"}, "sub-1", i18n.EN)
 
 	if got.QuotaPct != 95 {
 		t.Errorf("headline at %d%%, want the 95%% hourly window", got.QuotaPct)
@@ -78,7 +78,7 @@ func TestUserUsageFallsBackWhenWindowSpendUnknown(t *testing.T) {
 	}
 
 	got := windowsUI(fake).userUsage(context.Background(),
-		&database.APIKey{LiteLLMKey: "sk-live"}, "sub-1", i18n.EN)
+		&database.APIKey{KeyRef: "sk-live"}, "sub-1", i18n.EN)
 
 	if len(got.Windows) != 0 {
 		t.Errorf("got %d windows, want none when a window's usage is unknown", len(got.Windows))
@@ -100,7 +100,7 @@ func TestUserUsageSurvivesWindowError(t *testing.T) {
 	}
 
 	got := windowsUI(fake).userUsage(context.Background(),
-		&database.APIKey{LiteLLMKey: "sk-live"}, "sub-1", i18n.EN)
+		&database.APIKey{KeyRef: "sk-live"}, "sub-1", i18n.EN)
 
 	if len(got.Windows) != 0 {
 		t.Error("windows reported despite the error")
@@ -145,7 +145,7 @@ func TestUserUsageKeepsWindowResetTimes(t *testing.T) {
 	}
 
 	got := windowsUI(fake).userUsage(context.Background(),
-		&database.APIKey{LiteLLMKey: "sk-live"}, "sub-1", i18n.EN)
+		&database.APIKey{KeyRef: "sk-live"}, "sub-1", i18n.EN)
 
 	if len(got.Windows) != 1 || got.Windows[0].ResetsAt.IsZero() {
 		t.Fatalf("reset time not carried through: %+v", got.Windows)

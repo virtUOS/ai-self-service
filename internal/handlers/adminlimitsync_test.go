@@ -163,7 +163,7 @@ func TestPanelShowsPendingAndFailedKeys(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		k := &database.APIKey{UserID: u.ID, LiteLLMKey: "sk-" + sub, KeyPrefix: "sk-" + sub,
+		k := &database.APIKey{UserID: u.ID, KeyRef: "sk-" + sub, KeyPrefix: "sk-" + sub,
 			ExpiresAt: time.Now().Add(time.Hour)}
 		if err := store.ReplaceAPIKey(ctx, k); err != nil {
 			t.Fatal(err)
@@ -212,7 +212,7 @@ func TestPanelWordsASinglePendingKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	k := &database.APIKey{UserID: u.ID, LiteLLMKey: "sk-a", KeyPrefix: "sk-a",
+	k := &database.APIKey{UserID: u.ID, KeyRef: "sk-a", KeyPrefix: "sk-a",
 		ExpiresAt: time.Now().Add(time.Hour)}
 	if err := store.ReplaceAPIKey(ctx, k); err != nil {
 		t.Fatal(err)
