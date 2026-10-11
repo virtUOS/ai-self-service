@@ -1,0 +1,418 @@
+//go:build e2e
+
+package litellm
+
+// End-to-end tests against a real gateway: by default the one in
+// dev/docker-compose.yml, whose models are defined in dev/litellm-config.yaml
+// and answer with a canned response, so usage costs nothing. Built only with
+// the e2e tag, so the normal suite still needs nothing external:
+//
+//	docker compose -f dev/docker-compose.yml up -d --wait litellm
+//	go test -tags e2e ./internal/litellm/
+//
+// LITELLM_BASE_URL and LITELLM_MASTER_KEY point them at another gateway, which
+// needs the same models. Every test works under an owner of its own, so
+// reruns against a long-lived stack never see each other's keys or spend.
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"math"
+	"net/http"
+	"os"
+	"slices"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/virtuos/ai-self-service/internal/keyprovider"
+)
+
+// What a request costs is read back from the gateway rather than fixed here:
+// LiteLLM's token count for the same mock request differs between releases.
+const (
+	spendLogPatience   = 60 * time.Second
+	spendLogPollPeriod = time.Second
+)
+
+type e2eGateway struct {
+	*Provider
+	baseURL string
+}
+
+func newE2EGateway(t *testing.T) e2eGateway {
+	t.Helper()
+	base := envOr("LITELLM_BASE_URL", "http://localhost:4000")
+	key := envOr("LITELLM_MASTER_KEY", "sk-local-dev")
+	return e2eGateway{Provider: NewProvider(NewClient(base, key)), baseURL: base}
+}
+
+func envOr(name, fallback string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// e2eOwner is an owner no earlier run has used.
+func e2eOwner(t *testing.T) string {
+	return fmt.Sprintf("zz-e2e-%s-%s",
+		strings.ToLower(t.Name()), strconv.FormatInt(time.Now().UnixNano(), 36))
+}
+
+// createKey creates a key for owner and deletes it when the test ends.
+func (g e2eGateway) createKey(t *testing.T, owner string, limits keyprovider.Limits) keyprovider.KeyResult {
+	t.Helper()
+	// Aliases are unique across the gateway, so a rotation needs a new one.
+	alias := owner + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	k, err := g.CreateKey(context.Background(), keyprovider.KeyRequest{
+		Alias: alias, Owner: owner, OwnerID: owner, Limits: limits,
+		ExpiresAt: time.Now().AddDate(0, 0, 1),
+	})
+	if err != nil {
+		t.Fatalf("create key: %v", err)
+	}
+	// A test that deletes the key itself makes this fail, which is fine.
+	t.Cleanup(func() { _ = g.DeleteKey(context.Background(), k.Ref) })
+	return k
+}
+
+// complete sends one chat request with a user's key, as a client of the
+// gateway would, and returns the status. The portal itself never does this.
+func (g e2eGateway) complete(t *testing.T, secret, model string) int {
+	status, _ := g.completeBody(t, secret, model)
+	return status
+}
+
+// completeBody is complete that also returns the response body, for errors.
+func (g e2eGateway) completeBody(t *testing.T, secret, model string) (int, string) {
+	t.Helper()
+	body, _ := json.Marshal(map[string]any{
+		"model":    model,
+		"messages": []map[string]string{{"role": "user", "content": "hello"}},
+		// LiteLLM reserves a request's worst-case cost against the budget
+		// until the response is settled, and without max_tokens that is the
+		// model's whole output limit — more than the small test budgets
+		// hold, which would turn the next request into a 422 for a moment.
+		"max_tokens": 20,
+	})
+	req, err := http.NewRequest(http.MethodPost, g.baseURL+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+secret)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("chat request: %v", err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(b)
+}
+
+// mustComplete is complete for requests that have to succeed.
+func (g e2eGateway) mustComplete(t *testing.T, secret, model string) {
+	t.Helper()
+	if status, body := g.completeBody(t, secret, model); status != http.StatusOK {
+		t.Fatalf("chat request on %s returned %d: %s", model, status, body)
+	}
+}
+
+// eventually retries check until it passes. The spend log is written in
+// batches, so usage shows up a few seconds after the request that caused it.
+func eventually(t *testing.T, what string, check func() error) {
+	t.Helper()
+	deadline := time.Now().Add(spendLogPatience)
+	for {
+		err := check()
+		if err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: %v", what, err)
+		}
+		time.Sleep(spendLogPollPeriod)
+	}
+}
+
+func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
+
+func TestE2EModels(t *testing.T) {
+	g := newE2EGateway(t)
+	ctx := context.Background()
+
+	models, err := g.ListModels(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"mock-embed", "mock-large", "mock-small"} {
+		if !slices.Contains(models, want) {
+			t.Errorf("models = %v, missing %s", models, want)
+		}
+	}
+
+	embedding, err := g.EmbeddingModels(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !embedding["mock-embed"] || embedding["mock-small"] || embedding["mock-large"] {
+		t.Errorf("embedding models = %v, want mock-embed only", embedding)
+	}
+}
+
+func TestE2EKeyLifecycle(t *testing.T) {
+	g := newE2EGateway(t)
+	ctx := context.Background()
+	owner := e2eOwner(t)
+
+	k := g.createKey(t, owner, keyprovider.Limits{
+		Models: []string{"mock-small"},
+		Quotas: []keyprovider.QuotaWindow{{Budget: 1, Period: "1h"}, {Budget: 5, Period: "30d"}},
+	})
+	if k.Secret == "" || k.Ref == "" || k.Ref == k.Secret {
+		t.Fatalf("key result = %+v, want a secret and a distinct ref", k)
+	}
+
+	// The model list on the key is enforced.
+	g.mustComplete(t, k.Secret, "mock-small")
+	if status := g.complete(t, k.Secret, "mock-large"); status == http.StatusOK {
+		t.Error("key restricted to mock-small could use mock-large")
+	}
+
+	// New limits reach both halves: the key's window and the owner's.
+	err := g.UpdateLimits(ctx, k.Ref, owner, keyprovider.Limits{
+		Quotas: []keyprovider.QuotaWindow{{Budget: 2, Period: "1h"}, {Budget: 7, Period: "30d"}},
+	})
+	if err != nil {
+		t.Fatalf("update limits: %v", err)
+	}
+	windows, err := g.Windows(ctx, k.Ref, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	limits := map[string]float64{}
+	for _, w := range windows {
+		limits[w.Period] = w.Limit
+	}
+	if limits["1h"] != 2 || limits["30d"] != 7 {
+		t.Errorf("limits after update = %v, want 1h:2 30d:7", limits)
+	}
+	// Dropping the model list opens the key to every model.
+	g.mustComplete(t, k.Secret, "mock-large")
+
+	// Extending moves the expiry the gateway enforces.
+	want := time.Now().AddDate(0, 0, 10)
+	if err := g.UpdateExpiry(ctx, k.Ref, want); err != nil {
+		t.Fatalf("update expiry: %v", err)
+	}
+	var info struct {
+		Info struct {
+			Expires string `json:"expires"`
+		} `json:"info"`
+	}
+	resp, err := g.client.do(ctx, http.MethodGet, keyInfoPath(k.Ref), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatal(err)
+	}
+	expires, err := time.Parse(time.RFC3339, info.Info.Expires)
+	if err != nil {
+		t.Fatalf("parse expiry %q: %v", info.Info.Expires, err)
+	}
+	if d := expires.Sub(want); d < -36*time.Hour || d > 36*time.Hour {
+		t.Errorf("expires = %s, want about %s", expires, want)
+	}
+
+	// A deleted key is gone, both for the portal and for the user. (Its
+	// /key/info still answers, with status "deleted".)
+	if err := g.DeleteKey(ctx, k.Ref); err != nil {
+		t.Fatalf("delete key: %v", err)
+	}
+	if err := g.UpdateExpiry(ctx, k.Ref, want); err == nil {
+		t.Error("a deleted key could still be extended")
+	}
+	if status := g.complete(t, k.Secret, "mock-small"); status == http.StatusOK {
+		t.Error("deleted key still works")
+	}
+}
+
+// Issue #26: the widest window lives on the owner, so regenerating a key must
+// neither reset its spend nor change its allowance.
+func TestE2EOwnerQuotaSurvivesRotation(t *testing.T) {
+	g := newE2EGateway(t)
+	ctx := context.Background()
+	owner := e2eOwner(t)
+	limits := keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{
+		{Budget: 1, Period: "1h"},
+		{Budget: 10, Period: "30d"},
+	}}
+
+	k1 := g.createKey(t, owner, limits)
+	g.mustComplete(t, k1.Secret, "mock-small")
+
+	var q1 keyprovider.Quota
+	eventually(t, "spend via first key", func() error {
+		var err error
+		if q1, err = g.Quota(ctx, k1.Ref, owner); err != nil {
+			return err
+		}
+		if q1.Used <= 0 {
+			return fmt.Errorf("used = %v", q1.Used)
+		}
+		return nil
+	})
+	if q1.Limit != 10 {
+		t.Errorf("limit = %v, want the 30d allowance on the owner", q1.Limit)
+	}
+
+	k2 := g.createKey(t, owner, limits)
+	q2, err := g.Quota(ctx, k2.Ref, owner)
+	if err != nil {
+		t.Fatalf("quota via replacement key: %v", err)
+	}
+	if q2.Limit != q1.Limit {
+		t.Errorf("allowance changed across rotation: %v then %v", q1.Limit, q2.Limit)
+	}
+	if !near(q2.Used, q1.Used) {
+		t.Errorf("spend reset across rotation: %v then %v", q1.Used, q2.Used)
+	}
+
+	// Spend through the replacement adds to the same allowance.
+	g.mustComplete(t, k2.Secret, "mock-small")
+	eventually(t, "spend accumulates across keys", func() error {
+		spent2, err := g.TotalSpend(ctx, k2.Ref)
+		if err != nil {
+			return err
+		}
+		q3, err := g.Quota(ctx, k2.Ref, owner)
+		if err != nil {
+			return err
+		}
+		if spent2 <= 0 || !near(q3.Used, q1.Used+spent2) {
+			return fmt.Errorf("used = %v, want %v + %v", q3.Used, q1.Used, spent2)
+		}
+		return nil
+	})
+}
+
+// The windows the dashboard draws count real spend from the log, against the
+// limits that were pushed.
+func TestE2EWindowsReportRealUsage(t *testing.T) {
+	g := newE2EGateway(t)
+	ctx := context.Background()
+	owner := e2eOwner(t)
+
+	k := g.createKey(t, owner, keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{
+		{Budget: 1, Period: "1h"},
+		{Budget: 10, Period: "30d"},
+	}})
+	g.mustComplete(t, k.Secret, "mock-small")
+	g.mustComplete(t, k.Secret, "mock-small")
+
+	eventually(t, "windows count both requests", func() error {
+		h, err := g.History(ctx, k.Ref, 1)
+		if err != nil {
+			return err
+		}
+		if len(h.Models) != 1 || h.Models[0].Requests != 2 {
+			return fmt.Errorf("log holds %+v, want both requests", h.Models)
+		}
+		spent, err := g.TotalSpend(ctx, k.Ref)
+		if err != nil {
+			return err
+		}
+		windows, err := g.Windows(ctx, k.Ref, owner)
+		if err != nil {
+			return err
+		}
+		if len(windows) != 2 {
+			return fmt.Errorf("got %d windows, want 2: %+v", len(windows), windows)
+		}
+		limits := map[string]float64{}
+		for _, w := range windows {
+			limits[w.Period] = w.Limit
+			if !w.UsedKnown || spent <= 0 || !near(w.Used, spent) {
+				return fmt.Errorf("%s window: used=%v known=%v, want the key's %v",
+					w.Period, w.Used, w.UsedKnown, spent)
+			}
+			if w.ResetsAt.IsZero() {
+				return fmt.Errorf("%s window has no reset time", w.Period)
+			}
+		}
+		if limits["1h"] != 1 || limits["30d"] != 10 {
+			return fmt.Errorf("limits = %v, want 1h:1 30d:10", limits)
+		}
+		return nil
+	})
+}
+
+// The per-model table labels requests by the public model name and counts
+// their tokens.
+func TestE2EHistoryByModel(t *testing.T) {
+	g := newE2EGateway(t)
+	ctx := context.Background()
+	k := g.createKey(t, e2eOwner(t), keyprovider.Limits{})
+
+	g.mustComplete(t, k.Secret, "mock-small")
+	g.mustComplete(t, k.Secret, "mock-small")
+	g.mustComplete(t, k.Secret, "mock-large")
+
+	eventually(t, "history shows both models", func() error {
+		h, err := g.History(ctx, k.Ref, 30)
+		if err != nil {
+			return err
+		}
+		got := map[string]keyprovider.ModelUsage{}
+		for _, m := range h.Models {
+			got[m.Model] = m
+		}
+		if got["mock-small"].Requests != 2 || got["mock-large"].Requests != 1 {
+			return fmt.Errorf("models = %+v, want mock-small×2 and mock-large×1", h.Models)
+		}
+		var total int64
+		for _, m := range h.Models {
+			if m.TotalTokens <= 0 || m.TotalTokens != m.PromptTokens+m.CompletionTokens {
+				return fmt.Errorf("%s tokens don't add up: %+v", m.Model, m)
+			}
+			total += m.TotalTokens
+		}
+		if len(h.Days) != 1 || h.Days[0].Tokens != total {
+			return fmt.Errorf("days = %+v, want one day of %d tokens", h.Days, total)
+		}
+		return nil
+	})
+}
+
+// A quota the portal pushes is one the gateway enforces: on the owner for the
+// widest window, which is the one users actually run into.
+func TestE2EOwnerQuotaIsEnforced(t *testing.T) {
+	g := newE2EGateway(t)
+	owner := e2eOwner(t)
+	// Room for about two mock-small requests.
+	k := g.createKey(t, owner, keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{
+		{Budget: 0.1, Period: "30d"},
+	}})
+
+	// The last request that starts within the budget may take it over, so
+	// allow a request or two past the line before calling it unenforced.
+	for i := 1; i <= 6; i++ {
+		status, body := g.completeBody(t, k.Secret, "mock-small")
+		if status == http.StatusOK {
+			time.Sleep(time.Second)
+			continue
+		}
+		if i == 1 {
+			t.Fatalf("first request returned %d: %s", status, body)
+		}
+		return
+	}
+	t.Fatal("six requests went through on a budget for about two")
+}
