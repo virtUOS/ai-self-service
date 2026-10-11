@@ -1,0 +1,39 @@
+# LiteLLM configuration for the local development stack.
+#
+# No model here reaches a provider: the chat models answer with a canned
+# mock_response, and nothing else in the portal calls a model at all. Requests
+# against them still go through LiteLLM's key checks, budgets and spend
+# logging, so usage shows up on the dashboard exactly as it would in
+# production.
+#
+# A mock answer counts the prompt's real tokens and 20 completion tokens, so
+# with the prices below a short prompt ("hello", 8 tokens) costs:
+#
+#   mock-small   8 × 0.001 + 20 × 0.002 = 0.048
+#   mock-large   8 × 0.01  + 20 × 0.02  = 0.48
+model_list:
+  - model_name: mock-small
+    litellm_params:
+      model: openai/mock-small
+      api_key: not-used
+      mock_response: This is a mock response from mock-small.
+      input_cost_per_token: 0.001
+      output_cost_per_token: 0.002
+
+  - model_name: mock-large
+    litellm_params:
+      model: openai/mock-large
+      api_key: not-used
+      mock_response: This is a mock response from mock-large.
+      input_cost_per_token: 0.01
+      output_cost_per_token: 0.02
+
+  # Listed so the dashboard shows its embedding example for it; the portal
+  # decides that from the mode alone.
+  - model_name: mock-embed
+    litellm_params:
+      model: openai/mock-embed
+      api_key: not-used
+      input_cost_per_token: 0.001
+    model_info:
+      mode: embedding

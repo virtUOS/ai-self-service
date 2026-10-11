@@ -1,12 +1,40 @@
 # Local development environment
 
+`docker-compose.yml` starts everything the app needs, and `.env.example` is
+preset for it:
+
+```bash
+cp .env.example .env
+docker compose -f dev/docker-compose.yml up -d --wait
+go run ./cmd/server
+```
+
+Open <http://localhost:8080>. `podman compose` works the same way.
+
+| Service    | Address                 | What for |
+| ---------- | ----------------------- | -------- |
+| app        | <http://localhost:8080> | `go run ./cmd/server` |
+| OIDC mock  | <http://localhost:8081> | login |
+| Keycloak   | <http://localhost:8082> | login, opt-in (see below) |
+| LiteLLM    | <http://localhost:4000> | the gateway keys are issued on |
+| Mailpit    | <http://localhost:8025> | every mail the app sends |
+
+The first start takes a couple of minutes: the LiteLLM image is large, and it
+sets up its database before it answers. Later starts are quicker.
+
+Stop it all with `docker compose -f dev/docker-compose.yml down`, and add `-v`
+to also drop LiteLLM's database, which holds its keys, users and spend.
+
+## Login
+
 The app requires an OIDC provider at startup — it fetches the discovery
 document before it will serve traffic. There are two to choose from; the mock
-is the default, and `.env.example` is preset for it.
+starts by default, and `.env.example` is preset for it.
 
 | | Mock | Keycloak |
 | --- | --- | --- |
-| Start | `docker compose -f dev/docker-compose.yml --profile mock up -d` | `docker compose -f dev/docker-compose.yml --profile keycloak up -d` |
+| Start | by default | `--profile keycloak` |
+| Issuer | `http://localhost:8081` | `http://localhost:8082/realms/virtuos` |
 | Ready in | ~8s | ~20s (realm import) |
 | Fidelity | different implementation | same software as production |
 | Back-channel logout | **no** | yes |
@@ -21,22 +49,13 @@ production behaviour: it is the same software the university runs
 (`https://login.uni-osnabrueck.de/realms/virtuos`), so it catches bugs that
 only appear against the real provider.
 
-Both listen on port 8081, so run one at a time. Each sits behind its own
-compose profile and neither starts by default, so the profile flag is what
-picks one — a bare `up` starts nothing rather than starting Keycloak on top of
-whichever you asked for. `podman compose` works the same way.
+The two use different ports and run side by side, so switching is only a
+matter of `OIDC_ISSUER_URL`.
 
-## Start the mock
+### The mock
 
-```bash
-cp .env.example .env    # then set LITELLM_BASE_URL and LITELLM_MASTER_KEY
-docker compose -f dev/docker-compose.yml --profile mock up -d
-go run ./cmd/server
-```
-
-Open <http://localhost:8080>. The `.env.example` values work unchanged: the
-mock accepts any client id and secret without registration, and the issuer is
-already `http://localhost:8081`.
+The `.env.example` values work unchanged: the mock accepts any client id and
+secret without registration, and the issuer is already `http://localhost:8081`.
 
 At the login prompt, enter the subject of the user you want to be, matching
 `dev/mock-users.json`:
@@ -49,17 +68,13 @@ At the login prompt, enter the subject of the user you want to be, matching
 The mock's subjects are fixed rather than generated, so `ADMIN_IDS=admin` also
 works here.
 
-Stop it with `docker compose -f dev/docker-compose.yml --profile mock down`.
-
-## Switch to Keycloak
-
-Stop the mock first — both use port 8081 — then:
+### Keycloak
 
 ```bash
-docker compose -f dev/docker-compose.yml --profile keycloak up -d
+docker compose -f dev/docker-compose.yml --profile keycloak up -d --wait
 ```
 
-Admin console: <http://localhost:8081> (`admin` / `admin`).
+Admin console: <http://localhost:8082> (`admin` / `admin`).
 
 The `virtuos` realm is imported automatically with a confidential client and
 the same two users as the mock, with passwords:
@@ -73,7 +88,7 @@ The client id and secret in `.env.example` (`ai-self-service` /
 `local-dev-secret`) are the realm's, so only the issuer changes in `.env`:
 
 ```
-OIDC_ISSUER_URL=http://localhost:8081/realms/virtuos
+OIDC_ISSUER_URL=http://localhost:8082/realms/virtuos
 ```
 
 The realm also defines an `ai-self-service-admin` role, assigned to the `admin`
@@ -88,11 +103,64 @@ pin user ids: Keycloak mints new ones on each import, so a subject written into
 `.env` goes stale as soon as the volume is dropped. The app logs a warning on
 every email-based grant, which is expected locally.
 
-Stop it with `docker compose -f dev/docker-compose.yml --profile keycloak down`
-and set the issuer back to `http://localhost:8081` to return to the mock.
+Set the issuer back to `http://localhost:8081` to return to the mock. Stop
+Keycloak with `docker compose -f dev/docker-compose.yml --profile keycloak down`.
+
+## LiteLLM
+
+A real LiteLLM gateway, with its Postgres database, configured by
+`litellm-config.yaml`. Its master key is `sk-local-dev`.
+
+None of its models reaches a provider. The chat models answer every request
+with a canned text, which still goes through LiteLLM's key checks, budgets and
+spend logging — so a key generated in the portal can be used for real, and the
+dashboard shows the usage:
+
+| Model        | Kind      | Cost of a short request |
+| ------------ | --------- | ----------------------- |
+| `mock-small` | chat      | about 0.05              |
+| `mock-large` | chat      | about 0.50              |
+| `mock-embed` | embedding | listed only             |
+
+```bash
+curl http://localhost:4000/chat/completions \
+  -H "Authorization: Bearer sk-…the key from the dashboard…" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "mock-small", "max_tokens": 20, "messages": [{"role": "user", "content": "hi"}]}'
+```
+
+Usage can take up to a minute to reach the dashboard: LiteLLM writes its spend
+log in batches, and the dashboard caches what it read for 60 seconds.
+
+With a small budget, send `max_tokens` as the example does. LiteLLM reserves
+a request's worst-case cost against the budget until the answer is settled,
+and without `max_tokens` that is the model's whole output limit: when it is
+more than the budget has left, a second request sent right after the first is
+refused for a moment.
+
+LiteLLM checks for budgets to reset every few seconds here rather than every
+ten minutes, so a profile with a short window, such as `1h`, visibly resets
+during a session.
+
+## Mail
+
+Mailpit accepts whatever the app sends on port 1025 and shows it at
+<http://localhost:8025>; nothing leaves the machine. `.env.example` points
+`SMTP_HOST` at it.
 
 ## Automated tests
 
-The auth-path tests do **not** need Docker: `internal/oidc/mockprovider_test.go`
-runs an in-process issuer shaped like the university's Keycloak (same endpoint
-layout, same claims, back-channel logout). Run `go test ./...` as usual.
+`go test ./...` needs none of this. The auth-path tests run an in-process
+issuer (`internal/oidc/mockprovider_test.go`) shaped like the university's
+Keycloak: same endpoint layout, same claims, back-channel logout.
+
+The LiteLLM end-to-end tests run against the gateway above, and are built only
+with the `e2e` tag:
+
+```bash
+docker compose -f dev/docker-compose.yml up -d --wait litellm
+go test -tags e2e ./internal/litellm/
+```
+
+CI runs them on every push. `LITELLM_BASE_URL` and `LITELLM_MASTER_KEY` point
+them at another gateway, which then needs the same models.

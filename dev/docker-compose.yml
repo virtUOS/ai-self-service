@@ -1,45 +1,24 @@
-# Two OIDC providers for local development; pick one. The mock is the default:
-# .env.example is preset for it.
+# Local development environment. A bare `up` starts everything the app needs:
 #
-#   docker compose -f dev/docker-compose.yml --profile mock up -d      # mock
-#   docker compose -f dev/docker-compose.yml --profile keycloak up -d  # Keycloak
+#   docker compose -f dev/docker-compose.yml up -d --wait
 #
-# Both bind port 8081, so each sits behind its own profile and neither starts
-# by default: a bare `up` would otherwise start Keycloak alongside whichever
-# one was asked for, and the two would fight over the port.
+#   oidc-mock   http://localhost:8081  OIDC provider (.env.example's issuer)
+#   litellm     http://localhost:4000  LiteLLM gateway, master key sk-local-dev
+#   mailpit     http://localhost:8025  catches the app's mail (SMTP on 1025)
+#
+# Keycloak is opt-in, and runs next to the mock on its own port:
+#
+#   docker compose -f dev/docker-compose.yml --profile keycloak up -d --wait
 #
 # Keycloak is the same software the university runs, so it is what to use when
 # touching anything auth-shaped. The mock starts in about a second and needs no
 # realm import, which suits everyday iteration — but it serves no back-channel
 # logout, so it cannot exercise that path. See dev/README.md.
-#
-# Admin console: http://localhost:8081  (admin / admin)
-# Realm, client and two test users are imported from realm-export.json.
 services:
-  keycloak:
-    profiles: ["keycloak"]
-    image: quay.io/keycloak/keycloak:26.8
-    command: ["start-dev", "--import-realm", "--http-port=8081"]
-    environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-      KC_HEALTH_ENABLED: "true"
-    ports:
-      - "8081:8081"
-    volumes:
-      - ./realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
-    healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8081 && echo -e 'GET /realms/virtuos HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | head -1 | grep -q '200 OK'"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-
-  # Fast alternative to Keycloak.
-  #
-  # It accepts any client id and secret without registration, so no client
-  # config is needed: log in as either user below by entering their subject.
+  # Accepts any client id and secret without registration, so no client config
+  # is needed: log in as either user in mock-users.json by entering their
+  # subject.
   oidc-mock:
-    profiles: ["mock"]
     image: ghcr.io/astral-sh/uv:python3.14-bookworm
     command:
       - sh
@@ -51,7 +30,7 @@ services:
     ports:
       - "8081:8081"
     volumes:
-      - ./mock-users.json:/users.json:ro
+      - ./mock-users.json:/users.json:ro,z
     # Checked with python, not the /dev/tcp trick the Keycloak service uses:
     # this image's sh is dash, which has no /dev/tcp.
     healthcheck:
@@ -63,3 +42,80 @@ services:
       interval: 2s
       timeout: 5s
       retries: 30
+
+  # Admin console: http://localhost:8082  (admin / admin)
+  # Realm, client and two test users are imported from realm-export.json.
+  keycloak:
+    profiles: ["keycloak"]
+    image: quay.io/keycloak/keycloak:26.8
+    command: ["start-dev", "--import-realm", "--http-port=8082"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./realm-export.json:/opt/keycloak/data/import/realm-export.json:ro,z
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8082 && echo -e 'GET /realms/virtuos HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | head -1 | grep -q '200 OK'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # LiteLLM keeps keys, users and spend logs in Postgres; it has no other
+  # database backend, and without one it refuses the routes the app uses.
+  litellm-db:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: litellm
+      POSTGRES_DB: litellm
+    volumes:
+      - litellm-db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "litellm"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # The models in litellm-config.yaml reach no provider: they answer with a
+  # canned response, which is enough to create spend for the dashboard.
+  litellm:
+    image: ghcr.io/berriai/litellm-database:v1.105.0
+    command: ["--config", "/config.yaml", "--port", "4000"]
+    environment:
+      DATABASE_URL: postgresql://litellm:litellm@litellm-db:5432/litellm
+      LITELLM_MASTER_KEY: sk-local-dev
+      STORE_MODEL_IN_DB: "False"
+      # Look for budgets to reset every few seconds instead of every ten
+      # minutes, so a short quota window visibly resets during a dev session.
+      PROXY_BUDGET_RESCHEDULER_MIN_TIME: "5"
+      PROXY_BUDGET_RESCHEDULER_MAX_TIME: "10"
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./litellm-config.yaml:/config.yaml:ro,z
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:4000/health/readiness").read()
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      # The first start runs LiteLLM's database migrations.
+      start_period: 60s
+
+  mailpit:
+    image: axllent/mailpit:v1.31.5
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  litellm-db:
