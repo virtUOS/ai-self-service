@@ -41,8 +41,9 @@ Phases 1–6 of the original assessment all shipped:
 - **Limit sync** — a change to a profile or an assignment reaches every
   affected key from a background sync, with its progress in the admin panel.
   The dashboard no longer pushes limits.
-- **Local dev** — an OIDC mock (`--profile mock`, which `.env.example` targets
-  out of the box), or Keycloak under `--profile keycloak`.
+- **Local dev** — a plain `docker compose up` in `dev/` starts an OIDC mock, a
+  LiteLLM gateway with mock models and Mailpit, which `.env.example` targets
+  out of the box; Keycloak runs alongside under `--profile keycloak`.
 - **Stacked quota windows** — a profile holds several allowances at once
   (100k/day AND 1M/month); the gateway enforces each independently.
 - **A usage bar per quota window** — the card shows every allowance, since the

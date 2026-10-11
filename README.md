@@ -29,13 +29,15 @@ A self-service web portal that lets users generate, manage, and renew their own 
 - **Admin rights from the panel** — admins can grant and withdraw the admin
   panel for other users without a redeploy; `ADMIN_IDS` still always grants and
   cannot be removed there, so a lockout is always recoverable
-- **Local development** — Keycloak or a faster OIDC mock, both in `dev/`
+- **Local development** — one `docker compose up` in `dev/` starts an OIDC
+  mock, a LiteLLM gateway with mock models, and a mail catcher; Keycloak is
+  opt-in
 
 ## Configuration
 
 Copy `.env.example` to `.env` and fill in the values. The example is preset
-for local development against the OIDC mock in `dev/`, so for that only
-`LITELLM_BASE_URL` and `LITELLM_MASTER_KEY` need filling in:
+for the local development stack in `dev/`, so for that nothing needs filling
+in:
 
 | Variable             | Required | Default     | Description                                                        |
 | -------------------- | -------- | ----------- | ------------------------------------------------------------------ |
@@ -86,25 +88,29 @@ contain every key in plaintext**; destroy them, or rotate the keys.
 ### Local development
 
 ```bash
-cp .env.example .env    # then set LITELLM_BASE_URL and LITELLM_MASTER_KEY
-docker compose -f dev/docker-compose.yml --profile mock up -d   # or podman compose
+cp .env.example .env
+docker compose -f dev/docker-compose.yml up -d --wait   # or podman compose
 go run ./cmd/server
 ```
 
 Open <http://localhost:8080> and log in by entering `admin` (admin panel) or
-`student` at the mock's prompt. Stop the mock with
-`docker compose -f dev/docker-compose.yml --profile mock down`.
+`student` at the mock's prompt. Keys are issued on a local LiteLLM gateway at
+<http://localhost:4000>, whose mock models answer without reaching any
+provider, and mail lands in Mailpit at <http://localhost:8025>. Stop it all
+with `docker compose -f dev/docker-compose.yml down`.
 
 The app needs an OIDC provider before it will serve traffic — it fetches the
 discovery document at startup. The mock starts in seconds and needs no
 configuration, but serves no back-channel logout, so that path cannot be
 exercised against it. When touching anything auth-shaped, switch to Keycloak,
-the software production runs: stop the mock, start `--profile keycloak`, and
-set `OIDC_ISSUER_URL=http://localhost:8081/realms/virtuos`. See
+the software production runs: start `--profile keycloak`, which runs next to
+the mock, and set `OIDC_ISSUER_URL=http://localhost:8082/realms/virtuos`. See
 `dev/README.md` for details.
 
 The auth-path tests need neither: `internal/oidc/mockprovider_test.go` runs an
-in-process issuer, so `go test ./...` requires nothing external.
+in-process issuer, so `go test ./...` requires nothing external. The LiteLLM
+end-to-end tests run against the local gateway with
+`go test -tags e2e ./internal/litellm/`.
 
 ## Admin panel
 
