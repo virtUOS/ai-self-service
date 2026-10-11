@@ -29,6 +29,11 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # The end-to-end tests only build with their tag; vet them here too so
+      # they cannot rot between the runs of the e2e job.
+      - name: Vet (e2e tests)
+        run: go vet -tags e2e ./...
+
       - name: Test
         run: go test -race ./...
 
@@ -39,6 +44,31 @@ jobs:
         env:
           CGO_ENABLED: '0'
         run: go build ./...
+
+  # The LiteLLM client against a real gateway: the one the dev stack runs,
+  # from the same compose file, so a Dependabot bump of the image is tested
+  # here before it is merged.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Start LiteLLM
+        run: docker compose -f dev/docker-compose.yml up -d --wait litellm
+
+      - name: Test
+        run: go test -tags e2e -race ./internal/litellm/
+
+      - name: Show LiteLLM logs
+        if: failure()
+        run: docker compose -f dev/docker-compose.yml logs litellm
 
   # The image is only published from main and tags, so a broken Dockerfile
   # (e.g. go.mod requiring a newer Go than the builder image) would otherwise
