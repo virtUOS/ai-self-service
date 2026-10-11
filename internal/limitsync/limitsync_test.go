@@ -103,7 +103,7 @@ func (f *fixture) addKey(t *testing.T, sub string) string {
 		t.Fatal(err)
 	}
 	ref := "sk-" + sub
-	if err := f.store.ReplaceAPIKey(f.ctx, &database.APIKey{UserID: u.ID, LiteLLMKey: ref,
+	if err := f.store.ReplaceAPIKey(f.ctx, &database.APIKey{UserID: u.ID, KeyRef: ref,
 		KeyPrefix: ref, ExpiresAt: time.Now().Add(24 * time.Hour)}); err != nil {
 		t.Fatal(err)
 	}

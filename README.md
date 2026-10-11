@@ -76,6 +76,13 @@ go run ./cmd/server
 
 The server runs database migrations and seeds a default profile on startup.
 
+The database holds no usable API keys: a key is shown to its user once, and
+only its SHA-256 hash is stored, which LiteLLM accepts for revoking, updating
+and reporting on it. Releases before migration `20240011` stored the keys
+themselves. That migration replaces them with their hashes and vacuums the file
+afterwards. It cannot be rolled back. **Backups taken before the upgrade still
+contain every key in plaintext**; destroy them, or rotate the keys.
+
 ### Local development
 
 ```bash

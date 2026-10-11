@@ -186,7 +186,7 @@ func (s *Syncer) syncOne(ctx context.Context, t database.LimitSyncTarget) (ok, a
 		return false, true, s.fail(ctx, t, fmt.Sprintf("load profile %d: %v", *t.ProfileID, err))
 	}
 
-	if err := s.keys.UpdateLimits(ctx, t.LiteLLMKey, t.OIDCSub, p.Limits()); err != nil {
+	if err := s.keys.UpdateLimits(ctx, t.KeyRef, t.OIDCSub, p.Limits()); err != nil {
 		if ctx.Err() != nil {
 			return false, false, nil
 		}

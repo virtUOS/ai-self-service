@@ -27,7 +27,7 @@ import (
 // (null columns) counts as different.
 const pendingLimitSyncs = `
 WITH effective AS (
-	SELECT k.id AS key_id, k.litellm_key, k.key_prefix, k.user_id,
+	SELECT k.id AS key_id, k.key_ref, k.key_prefix, k.user_id,
 	       u.oidc_sub, u.email,
 	       k.synced_profile_id, k.synced_rev, k.sync_error, k.sync_failed_at,
 	       COALESCE(u.profile_id,
@@ -47,12 +47,12 @@ WITH effective AS (
 // LimitSyncTarget is a key whose upstream limits are out of date, with what
 // the sync needs to bring it up to date.
 type LimitSyncTarget struct {
-	KeyID      int64  `bun:"key_id"`
-	LiteLLMKey string `bun:"litellm_key"`
-	KeyPrefix  string `bun:"key_prefix"`
-	UserID     int64  `bun:"user_id"`
-	OIDCSub    string `bun:"oidc_sub"`
-	Email      string `bun:"email"`
+	KeyID     int64  `bun:"key_id"`
+	KeyRef    string `bun:"key_ref"`
+	KeyPrefix string `bun:"key_prefix"`
+	UserID    int64  `bun:"user_id"`
+	OIDCSub   string `bun:"oidc_sub"`
+	Email     string `bun:"email"`
 
 	// ProfileID is the owner's effective profile: their own, or the default.
 	// Nil when they have none and no default exists.
@@ -79,7 +79,7 @@ type LimitSyncTarget struct {
 func (s *Store) PendingLimitSyncs(ctx context.Context, notFailedSince time.Time, limit int) ([]LimitSyncTarget, error) {
 	var rows []LimitSyncTarget
 	err := s.db.NewRaw(pendingLimitSyncs+`
-		SELECT key_id, litellm_key, key_prefix, user_id, oidc_sub, email,
+		SELECT key_id, key_ref, key_prefix, user_id, oidc_sub, email,
 		       profile_id, sync_error, sync_failed_at
 		FROM pending
 		WHERE sync_failed_at IS NULL OR sync_failed_at < ?

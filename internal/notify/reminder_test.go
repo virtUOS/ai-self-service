@@ -63,7 +63,7 @@ func addKey(t *testing.T, s *database.Store, sub, email string, inDays int) *dat
 		t.Fatal(err)
 	}
 	k := &database.APIKey{
-		UserID: u.ID, LiteLLMKey: "sk-" + sub, KeyPrefix: "sk-" + sub,
+		UserID: u.ID, KeyRef: "sk-" + sub, KeyPrefix: "sk-" + sub,
 		ExpiresAt: time.Now().AddDate(0, 0, inDays),
 	}
 	if err := s.ReplaceAPIKey(ctx, k); err != nil {

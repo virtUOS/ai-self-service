@@ -53,8 +53,8 @@ func periodDuration(period string) time.Duration {
 }
 
 // keyWindows reads the stacked windows configured on a key.
-func (c *Client) keyWindows(ctx context.Context, key string) (windows []budgetWindow, spend float64, err error) {
-	resp, err := c.do(ctx, http.MethodGet, keyInfoPath(key), nil)
+func (c *Client) keyWindows(ctx context.Context, ref string) (windows []budgetWindow, spend float64, err error) {
+	resp, err := c.do(ctx, http.MethodGet, keyInfoPath(ref), nil)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -99,9 +99,9 @@ func (c *Client) keyWindows(ctx context.Context, key string) (windows []budgetWi
 // response to an aggregated shape that drops token counts entirely. So it is
 // fetched once and every window counted from it, rather than once per window —
 // three windows meant three identical multi-megabyte downloads per page load.
-func (c *Client) spendLog(ctx context.Context, key string) ([]spendRow, error) {
+func (c *Client) spendLog(ctx context.Context, ref string) ([]spendRow, error) {
 	q := url.Values{}
-	q.Set("api_key", keyHash(key))
+	q.Set("api_key", ref)
 
 	resp, err := c.do(ctx, http.MethodGet, "/spend/logs?"+q.Encode(), nil)
 	if err != nil {

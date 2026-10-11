@@ -32,9 +32,8 @@ type spendRow struct {
 	StartTime        string  `json:"startTime"`
 }
 
-// keyHash is how LiteLLM identifies a key in its spend log: the SHA-256 of the
-// key itself. The portal stores the key, so it derives this rather than
-// keeping a second copy of the same fact.
+// keyHash is how LiteLLM identifies a key: the SHA-256 of the key itself. It
+// is the ref the portal stores, normally taken from /key/generate's token.
 func keyHash(key string) string {
 	sum := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(sum[:])
@@ -49,8 +48,8 @@ func keyHash(key string) string {
 // reports spend only and drops token counts entirely — and local models are
 // priced so that spend is always zero, so it carries no usable signal. The
 // window is therefore bounded here, over rows already in hand.
-func (c *Client) History(ctx context.Context, key string, days int) (keyprovider.History, error) {
-	rows, err := c.spendLog(ctx, key)
+func (c *Client) History(ctx context.Context, ref string, days int) (keyprovider.History, error) {
+	rows, err := c.spendLog(ctx, ref)
 	if err != nil {
 		return keyprovider.History{}, err
 	}
@@ -140,19 +139,20 @@ type keyInfoResponse struct {
 	} `json:"info"`
 }
 
-// keyInfoPath addresses a key by its hash, never the key itself: query
-// strings end up in access logs, and LiteLLM accepts either form here.
-func keyInfoPath(key string) string {
+// keyInfoPath addresses a key by its ref, which is its hash, never the key
+// itself: query strings end up in access logs, and LiteLLM accepts either form
+// here.
+func keyInfoPath(ref string) string {
 	q := url.Values{}
-	q.Set("key", keyHash(key))
+	q.Set("key", ref)
 	return "/key/info?" + q.Encode()
 }
 
 // keyInfo fetches the gateway's own record of a key.
-func (c *Client) keyInfo(ctx context.Context, key string) (keyInfoResponse, error) {
+func (c *Client) keyInfo(ctx context.Context, ref string) (keyInfoResponse, error) {
 	var info keyInfoResponse
 
-	resp, err := c.do(ctx, http.MethodGet, keyInfoPath(key), nil)
+	resp, err := c.do(ctx, http.MethodGet, keyInfoPath(ref), nil)
 	if err != nil {
 		return info, err
 	}
@@ -171,8 +171,8 @@ func (c *Client) keyInfo(ctx context.Context, key string) (keyInfoResponse, erro
 // KeyQuota reports spend against the key's enforced budget, both read from
 // the key itself: that is the counter LiteLLM enforces against, and it resets
 // on the budget period rather than the 30-day window the log is charted over.
-func (c *Client) KeyQuota(ctx context.Context, key string) (keyprovider.Quota, error) {
-	info, err := c.keyInfo(ctx, key)
+func (c *Client) KeyQuota(ctx context.Context, ref string) (keyprovider.Quota, error) {
+	info, err := c.keyInfo(ctx, ref)
 	if err != nil {
 		return keyprovider.Quota{}, err
 	}
@@ -191,8 +191,8 @@ func (c *Client) KeyQuota(ctx context.Context, key string) (keyprovider.Quota, e
 // KeySpend is the cumulative spend recorded on the key itself. It is the
 // fallback for when per-request spend logging is switched off: the key's
 // counter keeps working either way, at the cost of any per-day breakdown.
-func (c *Client) KeySpend(ctx context.Context, key string) (float64, error) {
-	info, err := c.keyInfo(ctx, key)
+func (c *Client) KeySpend(ctx context.Context, ref string) (float64, error) {
+	info, err := c.keyInfo(ctx, ref)
 	if err != nil {
 		return 0, err
 	}
@@ -208,9 +208,9 @@ func (c *Client) KeySpend(ctx context.Context, key string) (float64, error) {
 // Fields are sent explicitly rather than omitted when empty. LiteLLM leaves an
 // omitted field untouched, so clearing a quota has to send null — otherwise a
 // profile that loses its allowance keeps enforcing the previous one.
-func (c *Client) UpdateKeyLimits(ctx context.Context, key string, l keyprovider.Limits) error {
+func (c *Client) UpdateKeyLimits(ctx context.Context, ref string, l keyprovider.Limits) error {
 	payload := map[string]any{
-		"key":       key,
+		"key":       ref,
 		"tpm_limit": l.TokensPerMinute,
 		"rpm_limit": l.RequestsPerMinute,
 	}

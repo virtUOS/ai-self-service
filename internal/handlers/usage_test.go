@@ -27,7 +27,7 @@ func TestUserUsageReportsCurrentKey(t *testing.T) {
 	}
 	u := usageUI(t, fake)
 
-	got := u.userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN)
+	got := u.userUsage(context.Background(), &database.APIKey{KeyRef: "sk-live"}, "", i18n.EN)
 	if got.Total != 157 {
 		t.Errorf("Total = %d, want 157", got.Total)
 	}
@@ -52,7 +52,7 @@ func TestUserUsageWithoutFigures(t *testing.T) {
 
 	failing := keyprovider.NewFake()
 	failing.UsageErr = errors.New("gateway down")
-	got := usageUI(t, failing).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN)
+	got := usageUI(t, failing).userUsage(context.Background(), &database.APIKey{KeyRef: "sk-live"}, "", i18n.EN)
 	if got.Total != 0 {
 		t.Errorf("gateway down = %+v, want no figures", got)
 	}
@@ -61,7 +61,7 @@ func TestUserUsageWithoutFigures(t *testing.T) {
 	}
 
 	u := &UI{usage: newUsageCache(nil)}
-	if got := u.userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN); got.Total != 0 || got.Incomplete {
+	if got := u.userUsage(context.Background(), &database.APIKey{KeyRef: "sk-live"}, "", i18n.EN); got.Total != 0 || got.Incomplete {
 		t.Errorf("no reporter = %+v, want empty and complete", got)
 	}
 }
@@ -77,7 +77,7 @@ func TestUserUsageReportsPeak(t *testing.T) {
 			{Day: today.Format("2006-01-02"), Tokens: 40},
 		},
 	}
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"}, "", i18n.EN)
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{KeyRef: "k"}, "", i18n.EN)
 	if got.Peak != 40 {
 		t.Errorf("Peak = %d, want 40", got.Peak)
 	}
@@ -153,7 +153,7 @@ func TestUserUsageFallsBackToTotal(t *testing.T) {
 	fake.UsageByRef = nil // logging disabled: no per-day rows
 	fake.TotalByRef = map[string]float64{"sk-live": 0.0123}
 
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN)
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{KeyRef: "sk-live"}, "", i18n.EN)
 	if !got.TotalOnly {
 		t.Error("TotalOnly should mark that no per-day breakdown is available")
 	}
@@ -174,7 +174,7 @@ func TestUserUsagePrefersPerDayRows(t *testing.T) {
 	}
 	fake.TotalByRef = map[string]float64{"sk-live": 9.99}
 
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "sk-live"}, "", i18n.EN)
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{KeyRef: "sk-live"}, "", i18n.EN)
 	if got.Total != 100 {
 		t.Errorf("Total = %d, want 100 from the per-day rows", got.Total)
 	}
@@ -197,7 +197,7 @@ func TestUserUsageReportsPercentOfBudget(t *testing.T) {
 			ResetsAt: time.Now().Add(6 * time.Hour)},
 	}
 
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"}, "", i18n.EN)
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{KeyRef: "k"}, "", i18n.EN)
 	if !got.HasQuota {
 		t.Fatal("HasQuota should be set when the key has a budget")
 	}
@@ -216,7 +216,7 @@ func TestUserUsageUnlimitedReportsNoQuota(t *testing.T) {
 	fake.QuotaByRef = map[string]keyprovider.Quota{
 		"k": {Used: 0.05, Limit: 0},
 	}
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"}, "", i18n.EN)
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{KeyRef: "k"}, "", i18n.EN)
 	if got.HasQuota {
 		t.Error("HasQuota should be false for an unlimited key")
 	}
@@ -233,7 +233,7 @@ func TestUserUsageReportsModels(t *testing.T) {
 	fake.ModelUsageByRef = map[string][]keyprovider.ModelUsage{
 		"k": {{Model: "qwen", Requests: 2, PromptTokens: 7, CompletionTokens: 3, TotalTokens: 10}},
 	}
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{LiteLLMKey: "k"}, "", i18n.EN)
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{KeyRef: "k"}, "", i18n.EN)
 	if len(got.Models) != 1 || got.Models[0].Model != "qwen" || got.Models[0].TotalTokens != 10 {
 		t.Errorf("Models = %+v, want the qwen row", got.Models)
 	}

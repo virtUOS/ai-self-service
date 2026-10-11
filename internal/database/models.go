@@ -86,12 +86,12 @@ type User struct {
 type APIKey struct {
 	bun.BaseModel `bun:"table:api_keys"`
 
-	ID         int64     `bun:"id,pk,autoincrement"`
-	UserID     int64     `bun:"user_id,notnull"`
-	LiteLLMKey string    `bun:"litellm_key,notnull"`
-	KeyPrefix  string    `bun:"key_prefix,notnull"`
-	ExpiresAt  time.Time `bun:"expires_at,notnull"`
-	CreatedAt  time.Time `bun:"created_at,notnull"`
+	ID        int64     `bun:"id,pk,autoincrement"`
+	UserID    int64     `bun:"user_id,notnull"`
+	KeyRef    string    `bun:"key_ref,notnull"`
+	KeyPrefix string    `bun:"key_prefix,notnull"`
+	ExpiresAt time.Time `bun:"expires_at,notnull"`
+	CreatedAt time.Time `bun:"created_at,notnull"`
 
 	// SyncedProfileID and SyncedRev are the profile and its LimitsRev whose
 	// limits this key last received upstream. Null means never, and the key

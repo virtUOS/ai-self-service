@@ -59,7 +59,30 @@ func (s *Store) RunMigrations(ctx context.Context) error {
 		return nil
 	}
 	fmt.Printf("migrated to %s\n", group)
+
+	for _, m := range group.Migrations {
+		if m.Name == migrations.KeyRefName {
+			s.scrubFreePages(ctx)
+			break
+		}
+	}
 	return nil
+}
+
+// scrubFreePages rewrites the database file so that nothing a migration
+// overwrote survives in free pages, and truncates the WAL, which would hold
+// copies of the pages otherwise.
+//
+// A failure is logged, not returned: the migration is committed and will not
+// run again, and refusing to start would not bring the scrub back either.
+func (s *Store) scrubFreePages(ctx context.Context) {
+	for _, stmt := range []string{`VACUUM`, `PRAGMA wal_checkpoint(TRUNCATE)`} {
+		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
+			slog.Warn("could not scrub old plaintext keys from the database file; run VACUUM on it by hand",
+				"stmt", stmt, "err", err)
+			return
+		}
+	}
 }
 
 // SeedDefaultProfile makes sure a default profile exists.
