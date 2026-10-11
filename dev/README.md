@@ -9,7 +9,8 @@ docker compose -f dev/docker-compose.yml up -d --wait
 go run ./cmd/server
 ```
 
-Open <http://localhost:8080>. `podman compose` works the same way.
+Open <http://localhost:8080>. `podman compose` works the same way, and
+`make up` / `make down` do the same with whichever of the two is installed.
 
 | Service    | Address                 | What for |
 | ---------- | ----------------------- | -------- |
@@ -162,5 +163,6 @@ docker compose -f dev/docker-compose.yml up -d --wait litellm
 go test -tags e2e ./internal/litellm/
 ```
 
-CI runs them on every push. `LITELLM_BASE_URL` and `LITELLM_MASTER_KEY` point
+`make check` runs everything CI runs, these tests included, and starts the
+stack first; run it before committing. CI runs the same targets on every push. `LITELLM_BASE_URL` and `LITELLM_MASTER_KEY` point
 them at another gateway, which then needs the same models.
