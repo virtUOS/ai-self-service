@@ -23,7 +23,9 @@ updates:
     schedule:
       interval: monthly
 
-  # Images of the local development stack (Keycloak, mock OIDC).
+  # Images of the local development stack (mock OIDC, Keycloak, LiteLLM and its
+  # Postgres, Mailpit). The CI e2e job runs against this LiteLLM, so each bump
+  # is tested before it is merged.
   - package-ecosystem: docker-compose
     directory: /dev
     schedule:
