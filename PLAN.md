@@ -54,8 +54,8 @@ Phases 1–6 of the original assessment all shipped:
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.
 
-322 tests. `go test ./...` needs nothing external; the one skip is a manual
-end-to-end check against a real gateway, gated behind `LITELLM_E2E=1`.
+322 tests. `go test ./...` needs nothing external; end-to-end checks against
+a real gateway are built with `-tags e2e` (see `dev/README.md`).
 
 ## Not done
 
@@ -228,19 +228,9 @@ The dashboard text no longer says "a newly generated key starts again at
 zero"; it now states that the quota applies to the person, which is what the
 gateway enforces.
 
-**Still unverified:** that spend *accumulates* on the user across two keys.
-Confirming it needs real traffic through a key on a shared gateway, which would
-burn live quota, so it was left alone. The limit and the reset boundary are
-confirmed; the spend field is present and reads 0.0 on a fresh user. If
-anything here is going to be wrong, this is the part — check it once real usage
-exists on testing.
-
-A manual end-to-end test covers the rotation against a real gateway:
-`LITELLM_E2E=1 go test ./internal/litellm/ -run E2E`, with `LITELLM_BASE_URL`
-and `LITELLM_MASTER_KEY` set. It is skipped otherwise, so `go test ./...` still
-needs nothing external. It lives in `internal/litellm/e2e_manual_test.go` and creates then deletes a
-`zz-probe-e2e-issue26` user;
-deleting that user also removes any key left attached to it.
+That spend *accumulates* on the user across two keys is now checked by
+`TestE2EOwnerQuotaSurvivesRotation` (`internal/litellm/e2e_test.go`), which
+spends through both keys on the local gateway in `dev/` and runs in CI.
 
 ### Unreleased: limit sync
 
