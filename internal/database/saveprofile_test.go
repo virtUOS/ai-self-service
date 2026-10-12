@@ -29,16 +29,27 @@ func TestSaveProfileCreatesAndUpdates(t *testing.T) {
 	ctx := context.Background()
 
 	p := &Profile{Name: "students", Description: "d", Models: []string{"a"}}
-	if err := s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 5, Period: "24h"}}); err != nil {
+	prev, err := s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 5, Period: "24h"}})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if p.ID == 0 {
 		t.Fatal("created profile has no id")
 	}
+	if prev != nil {
+		t.Errorf("create returned a previous profile: %+v", prev)
+	}
 
 	p.Description = "changed"
-	if err := s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 2, Period: "1h"}, {Budget: 10, Period: "7d"}}); err != nil {
+	prev, err = s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 2, Period: "1h"}, {Budget: 10, Period: "7d"}})
+	if err != nil {
 		t.Fatal(err)
+	}
+	// The update reports the profile as it was, so the audit log can say
+	// what changed.
+	if prev == nil || prev.Description != "d" ||
+		!sameQuotaWindows(prev.Quotas, []ProfileQuota{{Budget: 5, Period: "24h"}}) {
+		t.Errorf("previous profile = %+v, want description d and 24h 5", prev)
 	}
 
 	got, err := s.GetProfile(ctx, p.ID)
@@ -60,7 +71,7 @@ func TestSaveProfileCreateRollsBackWhenQuotasFail(t *testing.T) {
 	ctx := context.Background()
 
 	p := &Profile{Name: "half", Description: "d"}
-	if err := s.SaveProfile(ctx, p, twoWindowsForOnePeriod); err == nil {
+	if _, err := s.SaveProfile(ctx, p, twoWindowsForOnePeriod); err == nil {
 		t.Fatal("save with two windows for one period succeeded")
 	}
 
@@ -82,7 +93,7 @@ func TestSaveProfileUpdateRollsBackWhenQuotasFail(t *testing.T) {
 	ctx := context.Background()
 
 	p := &Profile{Name: "staff", Description: "before", Models: []string{"a"}}
-	if err := s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 5, Period: "24h"}}); err != nil {
+	if _, err := s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 5, Period: "24h"}}); err != nil {
 		t.Fatal(err)
 	}
 	before, err := s.GetProfile(ctx, p.ID)
@@ -91,7 +102,7 @@ func TestSaveProfileUpdateRollsBackWhenQuotasFail(t *testing.T) {
 	}
 
 	edit := &Profile{ID: p.ID, Name: "staff", Description: "after", Models: []string{"a", "b"}}
-	if err := s.SaveProfile(ctx, edit, twoWindowsForOnePeriod); err == nil {
+	if _, err := s.SaveProfile(ctx, edit, twoWindowsForOnePeriod); err == nil {
 		t.Fatal("save with two windows for one period succeeded")
 	}
 
@@ -115,11 +126,11 @@ func TestSaveProfileRefusesToUndefaultAndSavesNothing(t *testing.T) {
 
 	def := &Profile{Name: "default", Description: "before", IsDefault: true,
 		Quotas: []ProfileQuota{{Budget: 5, Period: "24h"}}}
-	if err := s.SaveProfile(ctx, def, def.Quotas); err != nil {
+	if _, err := s.SaveProfile(ctx, def, def.Quotas); err != nil {
 		t.Fatal(err)
 	}
 	edit := &Profile{ID: def.ID, Name: def.Name, Description: "changed"}
-	err := s.SaveProfile(ctx, edit, []ProfileQuota{{Budget: 1, Period: "1h"}})
+	_, err := s.SaveProfile(ctx, edit, []ProfileQuota{{Budget: 1, Period: "1h"}})
 	if !errors.Is(err, ErrDefaultProfile) {
 		t.Fatalf("err = %v, want ErrDefaultProfile", err)
 	}

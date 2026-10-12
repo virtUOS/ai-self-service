@@ -134,6 +134,12 @@ const (
 	AuditProfileExpired = "user.profile_expired" // by the deadline, not an admin
 	AuditAdminGranted   = "admin.granted"
 	AuditAdminRevoked   = "admin.revoked"
+
+	// The profile actions name the profile as the subject, in SubjectEmail,
+	// and leave SubjectID empty: it always holds a user ID.
+	AuditProfileCreated = "profile.created"
+	AuditProfileUpdated = "profile.updated"
+	AuditProfileDeleted = "profile.deleted"
 )
 
 // AuditEvent is an append-only record of a key or profile change.
