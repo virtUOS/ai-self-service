@@ -315,24 +315,26 @@ func clearDefaultProfile(ctx context.Context, tx bun.Tx, keepID int64) error {
 // touched; SaveProfile saves them with the profile.
 func (s *Store) UpdateProfile(ctx context.Context, p *Profile) error {
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		return updateProfileTx(ctx, tx, p)
+		_, err := updateProfileTx(ctx, tx, p)
+		return err
 	})
 }
 
-func updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile) error {
+// updateProfileTx saves p and returns the profile as it was before, with its
+// quota windows.
+func updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile) (*Profile, error) {
 	p.UpdatedAt = time.Now()
 	modelsJSON, err := json.Marshal(p.Models)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var current Profile
-	if err := tx.NewSelect().Model(&current).
-		Column("models", "tpm_limit", "rpm_limit", "limits_rev", "is_default").
-		Where("id = ?", p.ID).Scan(ctx); err != nil {
-		return fmt.Errorf("read profile: %w", err)
+	current := &Profile{}
+	if err := tx.NewSelect().Model(current).Relation("Quotas").
+		Where("profile.id = ?", p.ID).Scan(ctx); err != nil {
+		return nil, fmt.Errorf("read profile: %w", err)
 	}
 	if current.IsDefault && !p.IsDefault {
-		return ErrDefaultProfile
+		return nil, ErrDefaultProfile
 	}
 	p.LimitsRev = current.LimitsRev
 	if !slices.Equal(current.Models, p.Models) ||
@@ -343,7 +345,7 @@ func updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile) error {
 
 	if p.IsDefault {
 		if err := clearDefaultProfile(ctx, tx, p.ID); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	_, err = tx.NewUpdate().Model(p).
@@ -360,24 +362,37 @@ func updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile) error {
 		Set("updated_at = ?", p.UpdatedAt).
 		Where("id = ?", p.ID).
 		Exec(ctx)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	return current, nil
 }
 
 // SaveProfile creates a profile (when p.ID is 0) or updates it, and replaces
 // its quota windows, in one transaction. A profile is never left saved without
 // the windows the admin gave it, which would read as unlimited. It refuses as
 // CreateProfile and UpdateProfile do, and a refusal saves nothing.
-func (s *Store) SaveProfile(ctx context.Context, p *Profile, quotas []ProfileQuota) error {
-	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		save := updateProfileTx
+//
+// An update returns the profile as it was before, with its windows, read in
+// the same transaction, so the audit log can say what changed. A create
+// returns nil.
+func (s *Store) SaveProfile(ctx context.Context, p *Profile, quotas []ProfileQuota) (prev *Profile, err error) {
+	err = s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		var err error
 		if p.ID == 0 {
-			save = createProfileTx
+			err = createProfileTx(ctx, tx, p)
+		} else {
+			prev, err = updateProfileTx(ctx, tx, p)
 		}
-		if err := save(ctx, tx, p); err != nil {
+		if err != nil {
 			return err
 		}
 		return setProfileQuotasTx(ctx, tx, p.ID, quotas)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return prev, nil
 }
 
 // sameLimit compares two optional limits, where nil means unlimited.

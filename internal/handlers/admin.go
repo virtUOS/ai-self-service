@@ -335,11 +335,12 @@ func (a *Admin) CreateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.store.SaveProfile(r.Context(), p, quotas); err != nil {
+	if _, err := a.store.SaveProfile(r.Context(), p, quotas); err != nil {
 		slog.Error("create profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+create+profile", http.StatusFound)
 		return
 	}
+	a.audit(r, database.AuditProfileCreated, p.Name, nil, describeProfile(p, quotas))
 	http.Redirect(w, r, "/admin?flash=Profile+created", http.StatusFound)
 }
 
@@ -368,7 +369,8 @@ func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	p.ID = id
 
-	if err := a.store.SaveProfile(r.Context(), p, quotas); errors.Is(err, database.ErrDefaultProfile) {
+	prev, err := a.store.SaveProfile(r.Context(), p, quotas)
+	if errors.Is(err, database.ErrDefaultProfile) {
 		slog.Info("refused to un-default the default profile", "profile", id)
 		http.Redirect(w, r, "/admin?flash=The+default+profile+must+stay+the+default.+Mark+another+profile+as+default+instead.", http.StatusFound)
 		return
@@ -376,6 +378,11 @@ func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		slog.Error("update profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+update+profile", http.StatusFound)
 		return
+	}
+	// A save that changed nothing is not worth a row. A rename shows in the
+	// detail; the subject is the new name.
+	if detail := diffProfile(prev, p, quotas); detail != "" {
+		a.audit(r, database.AuditProfileUpdated, p.Name, nil, detail)
 	}
 	http.Redirect(w, r, "/admin?flash=Profile+updated", http.StatusFound)
 }
@@ -388,6 +395,12 @@ func (a *Admin) DeleteProfile(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
+	}
+	// Loaded first, since the audit row needs the name and what the profile
+	// was once it is gone.
+	prev, err := a.store.GetProfile(r.Context(), id)
+	if err != nil {
+		slog.Warn("delete profile: load for audit", "profile", id, "err", err)
 	}
 	if err := a.store.DeleteProfile(r.Context(), id); errors.Is(err, database.ErrDefaultProfile) {
 		slog.Info("refused to delete the default profile", "profile", id)
@@ -402,6 +415,9 @@ func (a *Admin) DeleteProfile(w http.ResponseWriter, r *http.Request) {
 		slog.Error("delete profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+delete+profile", http.StatusFound)
 		return
+	}
+	if prev != nil {
+		a.audit(r, database.AuditProfileDeleted, prev.Name, nil, describeProfile(prev, prev.Quotas))
 	}
 	http.Redirect(w, r, "/admin?flash=Profile+deleted", http.StatusFound)
 }
