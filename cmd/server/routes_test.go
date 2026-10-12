@@ -10,8 +10,8 @@ import (
 	"github.com/virtuos/ai-self-service/internal/handlers"
 )
 
-// The real router needs OIDC discovery at startup, so this asserts the
-// middleware and health handlers in isolation.
+// The security headers on their own; router_test.go checks the real route
+// table.
 func TestSecurityHeadersApplied(t *testing.T) {
 	r := chi.NewRouter()
 	r.Use(handlers.SecurityHeaders(true, "https://login.uni-osnabrueck.de"))
