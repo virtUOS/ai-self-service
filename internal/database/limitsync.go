@@ -65,6 +65,11 @@ type LimitSyncTarget struct {
 	Email     string `bun:"email"`
 	Name      string `bun:"name"`
 
+	// SyncedOwnerName is the name the key's alias was last built from, or nil
+	// for a key from before that was recorded. The sync relabels the key when
+	// it differs from Name.
+	SyncedOwnerName *string `bun:"synced_owner_name"`
+
 	// ProfileID is the owner's effective profile: their own, or the default.
 	// Nil when they have none and no default exists.
 	ProfileID *int64 `bun:"profile_id"`
@@ -91,7 +96,7 @@ func (s *Store) PendingLimitSyncs(ctx context.Context, notFailedSince time.Time,
 	var rows []LimitSyncTarget
 	err := s.db.NewRaw(pendingLimitSyncs+`
 		SELECT key_id, key_ref, key_prefix, user_id, oidc_sub, email, name,
-		       profile_id, sync_error, sync_failed_at
+		       synced_owner_name, profile_id, sync_error, sync_failed_at
 		FROM pending
 		WHERE sync_failed_at IS NULL OR sync_failed_at < ?
 		ORDER BY sync_failed_at IS NOT NULL, sync_failed_at, key_id

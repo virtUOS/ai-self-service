@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,17 +17,21 @@ import (
 // gatewayStub records pushes. Refs in failing are rejected, and beforePush,
 // when set, runs ahead of every push.
 type gatewayStub struct {
-	mu         sync.Mutex
-	pushes     []string
-	owners     map[string]string
-	users      map[string]keyprovider.User
-	limits     map[string]keyprovider.Limits
-	failing    map[string]bool
-	beforePush func(ref string)
+	mu      sync.Mutex
+	pushes  []string
+	owners  map[string]string
+	users   map[string]keyprovider.User
+	aliases map[string][]string
+
+	aliasFailing bool
+	limits       map[string]keyprovider.Limits
+	failing      map[string]bool
+	beforePush   func(ref string)
 }
 
 func newGatewayStub() *gatewayStub {
 	return &gatewayStub{owners: map[string]string{}, users: map[string]keyprovider.User{},
+		aliases: map[string][]string{},
 		limits:  map[string]keyprovider.Limits{},
 		failing: map[string]bool{}}
 }
@@ -48,6 +53,16 @@ func (g *gatewayStub) UpdateLimits(_ context.Context, ref string, user keyprovid
 	g.owners[ref] = user.ID
 	g.users[ref] = user
 	g.limits[ref] = l
+	return nil
+}
+
+func (g *gatewayStub) UpdateAlias(_ context.Context, ref, alias string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.aliasFailing {
+		return errors.New("alias taken")
+	}
+	g.aliases[ref] = append(g.aliases[ref], alias)
 	return nil
 }
 
@@ -390,5 +405,63 @@ func TestRunLabelsTheOwnerAndRecordsIt(t *testing.T) {
 	}
 	if u := f.gw.users[ref]; f.gw.pushCount(ref) != 2 || u.Name != "Alice" {
 		t.Errorf("after the rename: pushes = %d, user = %+v; want a second push as Alice", f.gw.pushCount(ref), u)
+	}
+}
+
+// The alias carries the username, so it is rebuilt when the name changes, and
+// only then. A key whose name was never recorded is relabelled once.
+func TestRunRelabelsTheKeyWhenTheNameChanges(t *testing.T) {
+	f := newFixture(t)
+	ref := f.addKey(t, "a")
+
+	if _, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.gw.aliases[ref]; len(got) != 1 || !strings.HasPrefix(got[0], "a-a-") {
+		t.Fatalf("aliases = %v, want one relabel as a-a-…", got)
+	}
+
+	// A profile change pushes the key again, but the name is the same.
+	f.setTPM(t, 500)
+	if _, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.gw.aliases[ref]; len(got) != 1 {
+		t.Errorf("aliases = %v after a limits-only push, want no new relabel", got)
+	}
+
+	if _, err := f.store.GetOrCreateUser(f.ctx, "a", "a@uni-osnabrueck.de", "Alice Smith"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.gw.aliases[ref]; len(got) != 2 || !strings.HasPrefix(got[1], "a-alice-smith-") {
+		t.Errorf("aliases = %v after the rename, want a second one as a-alice-smith-…", got)
+	}
+}
+
+// A relabel that fails, say because the alias is taken, fails the key like
+// any push, so the next run tries again with a fresh suffix.
+func TestFailedRelabelIsRetried(t *testing.T) {
+	f := newFixture(t)
+	ref := f.addKey(t, "a")
+	f.gw.aliasFailing = true
+
+	res, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Failed != 1 {
+		t.Fatalf("result = %+v, want the key failed", res)
+	}
+
+	f.gw.aliasFailing = false
+	res, err = New(f.store, f.gw, plainUser, 1).Run(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Synced != 1 || len(f.gw.aliases[ref]) != 1 {
+		t.Errorf("retry: result = %+v, aliases = %v; want it synced and relabelled", res, f.gw.aliases[ref])
 	}
 }

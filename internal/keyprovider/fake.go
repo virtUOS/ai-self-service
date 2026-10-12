@@ -24,6 +24,10 @@ type Fake struct {
 	Relimited []string
 	// RelimitedUsers records the user passed alongside each Relimited ref.
 	RelimitedUsers []User
+	// Relabelled records each UpdateAlias call as ref → alias, in order.
+	Relabelled [][2]string
+	// AliasErr forces UpdateAlias to fail.
+	AliasErr error
 
 	// LimitsByRef is the live limits per key, updated by UpdateLimits.
 	LimitsByRef map[string]Limits
@@ -209,6 +213,21 @@ func (f *Fake) DeleteKey(_ context.Context, ref string) error {
 	}
 	delete(f.Keys, ref)
 	f.Deleted = append(f.Deleted, ref)
+	return nil
+}
+
+// UpdateAlias records a relabelling of an existing key.
+func (f *Fake) UpdateAlias(_ context.Context, ref, alias string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.AliasErr != nil {
+		return f.AliasErr
+	}
+	if req, ok := f.Keys[ref]; ok {
+		req.Alias = alias
+		f.Keys[ref] = req
+	}
+	f.Relabelled = append(f.Relabelled, [2]string{ref, alias})
 	return nil
 }
 
