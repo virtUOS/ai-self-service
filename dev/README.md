@@ -36,7 +36,7 @@ starts by default, and `.env.example` is preset for it.
 | --- | --- | --- |
 | Start | by default | `--profile keycloak` |
 | Issuer | `http://localhost:8081` | `http://localhost:8082/realms/virtuos` |
-| Ready in | ~8s | ~20s (realm import) |
+| Ready in | under a second | ~20s (realm import) |
 | Fidelity | different implementation | same software as production |
 | Back-channel logout | **no** | yes |
 
