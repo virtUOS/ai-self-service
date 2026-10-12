@@ -331,3 +331,66 @@ func TestLimitSyncStatus(t *testing.T) {
 		t.Errorf("failures = %+v, want b's gateway error", st.RecentFailures)
 	}
 }
+
+// expire moves a key's expiry into the past.
+func (f *limitSyncFixture) expire(t *testing.T, k *APIKey) {
+	t.Helper()
+	if err := f.s.UpdateAPIKeyExpiry(f.ctx, k.ID, time.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// An expired key is never pending, however out of date it is: pushing it
+// would still write its owner's allowance upstream (issue #82). Extending it
+// brings it back.
+func TestExpiredKeyIsNotPendingUntilExtended(t *testing.T) {
+	f := newLimitSyncFixture(t, "ls-expired")
+	_, k := f.addUserWithKey(t, "sub-b", "b@uni-osnabrueck.de")
+	f.expire(t, k)
+
+	if got := f.pending(t); len(got) != 0 {
+		t.Fatalf("pending = %+v, want nothing for an expired key", got)
+	}
+
+	if err := f.s.UpdateAPIKeyExpiry(f.ctx, k.ID, time.Now().Add(24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	got := f.pending(t)
+	if len(got) != 1 || got[0].KeyID != k.ID {
+		t.Errorf("pending = %+v, want the extended key", got)
+	}
+}
+
+// A profile change does not mark expired keys either.
+func TestProfileEditSkipsExpiredKeys(t *testing.T) {
+	f := newLimitSyncFixture(t, "ls-expired-edit")
+	f.expire(t, f.key)
+
+	tpm := int64(42)
+	f.def.TPMLimit = &tpm
+	if err := f.s.UpdateProfile(f.ctx, f.def); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.pending(t); len(got) != 0 {
+		t.Errorf("pending = %+v, want nothing: the only key is expired", got)
+	}
+}
+
+// The status card counts only keys the sync would push, so an expired key
+// whose last push failed is neither pending nor listed as a failure.
+func TestLimitSyncStatusIgnoresExpiredKeys(t *testing.T) {
+	f := newLimitSyncFixture(t, "ls-status-expired")
+	_, k := f.addUserWithKey(t, "sub-b", "b@uni-osnabrueck.de")
+	if err := f.s.MarkLimitSyncFailed(f.ctx, k.ID, "Key not found", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	f.expire(t, k)
+
+	st, err := f.s.GetLimitSyncStatus(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Pending != 0 || st.Failed != 0 || len(st.RecentFailures) != 0 {
+		t.Errorf("status = %+v, want nothing pending", st)
+	}
+}

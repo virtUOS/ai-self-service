@@ -246,6 +246,10 @@ does not wait for it. One update takes three calls to the gateway, so a change
 to a profile with 5,000 users takes about 25 minutes with the default single
 worker.
 
+Expired keys are left alone: they enforce nothing, and updating one would
+still rewrite its owner's allowance in the gateway. A key that is extended
+later is updated then, if it is out of date.
+
 There is no queue of changes. A key always receives what its owner's profile
 says at the moment it is updated, so if a profile is saved twice in quick
 succession, keys not reached yet only ever see the second version, and keys

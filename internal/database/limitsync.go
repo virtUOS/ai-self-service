@@ -23,6 +23,12 @@ import (
 // limits to push; it stays pending so the sync reports it as a failure rather
 // than leaving a key with whatever it had.
 //
+// Expired keys are never pending. Their limits enforce nothing, and pushing
+// them still writes the owner's allowance upstream, which another portal on
+// the same gateway may share (issue #82). An extended key is no longer expired
+// and is picked up again if it is out of date. The query takes the current
+// time as its first argument for this.
+//
 // IS NOT is SQLite's null-safe comparison, so a key that was never pushed
 // (null columns) counts as different.
 const pendingLimitSyncs = `
@@ -34,6 +40,7 @@ WITH effective AS (
 	                (SELECT id FROM profiles WHERE is_default <> 0 ORDER BY id LIMIT 1)) AS profile_id
 	FROM api_keys AS k
 	JOIN users AS u ON u.id = k.user_id
+	WHERE k.expires_at > ?
 ), pending AS (
 	SELECT effective.*
 	FROM effective
@@ -84,7 +91,7 @@ func (s *Store) PendingLimitSyncs(ctx context.Context, notFailedSince time.Time,
 		FROM pending
 		WHERE sync_failed_at IS NULL OR sync_failed_at < ?
 		ORDER BY sync_failed_at IS NOT NULL, sync_failed_at, key_id
-		LIMIT ?`, notFailedSince, limit).Scan(ctx, &rows)
+		LIMIT ?`, time.Now(), notFailedSince, limit).Scan(ctx, &rows)
 	return rows, err
 }
 
@@ -138,6 +145,7 @@ type LimitSyncFailure struct {
 // LimitSyncStatus summarises the keys whose limits are out of date.
 type LimitSyncStatus struct {
 	// Pending counts every out-of-date key, including the failed ones.
+	// Expired keys are never pending.
 	Pending int
 	// Failed counts the pending keys whose last push failed.
 	Failed int
@@ -164,7 +172,7 @@ func (s *Store) GetLimitSyncStatus(ctx context.Context) (*LimitSyncStatus, error
 	if err := s.db.NewRaw(pendingLimitSyncs+`
 		SELECT profile_id, COUNT(*) AS pending, COUNT(sync_failed_at) AS failed
 		FROM pending
-		GROUP BY profile_id`).Scan(ctx, &byProfile); err != nil {
+		GROUP BY profile_id`, time.Now()).Scan(ctx, &byProfile); err != nil {
 		return nil, err
 	}
 	for _, row := range byProfile {
@@ -181,7 +189,7 @@ func (s *Store) GetLimitSyncStatus(ctx context.Context) (*LimitSyncStatus, error
 			FROM pending
 			WHERE sync_failed_at IS NOT NULL
 			ORDER BY sync_failed_at DESC, key_id
-			LIMIT ?`, maxListedFailures).Scan(ctx, &st.RecentFailures); err != nil {
+			LIMIT ?`, time.Now(), maxListedFailures).Scan(ctx, &st.RecentFailures); err != nil {
 			return nil, err
 		}
 	}

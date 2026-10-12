@@ -304,3 +304,29 @@ func waitFor(t *testing.T, cond func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// An expired key is not pushed, so a portal whose keys have all expired
+// writes nothing upstream, not even its owners' allowances (issue #82).
+func TestExpiredKeyIsNotPushed(t *testing.T) {
+	f := newFixture(t)
+	ref := f.addKey(t, "a")
+	u, err := f.store.GetUserByOIDCSub(f.ctx, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	k, err := f.store.GetAPIKeyByUser(f.ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.UpdateAPIKeyExpiry(f.ctx, k.ID, time.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := New(f.store, f.gw, 1).Run(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Synced != 0 || res.Failed != 0 || f.gw.pushCount(ref) != 0 {
+		t.Errorf("result = %+v, pushes = %d; want nothing pushed", res, f.gw.pushCount(ref))
+	}
+}
