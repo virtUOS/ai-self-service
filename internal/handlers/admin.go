@@ -325,34 +325,19 @@ func (a *Admin) CreateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p := &database.Profile{
-		Name:        strings.TrimSpace(r.FormValue("name")),
-		Description: strings.TrimSpace(r.FormValue("description")),
-		Models:      selectedModels(r),
-		IsDefault:   r.FormValue("is_default") == "on",
-	}
-	p.TPMLimit = parseOptionalInt64(r.FormValue("tpm_limit"))
-	p.RPMLimit = parseOptionalInt64(r.FormValue("rpm_limit"))
-	p.KeyDurationDays = parseNonNegativeInt(r.FormValue("key_duration_days"))
-
+	p, quotas, err := profileFromForm(r)
 	if p.Name == "" {
 		http.Redirect(w, r, "/admin?flash=Name+is+required", http.StatusFound)
 		return
 	}
-	quotas, err := parseQuotaWindows(r.Form)
 	if err != nil {
 		http.Redirect(w, r, "/admin?flash=Invalid+quota+window", http.StatusFound)
 		return
 	}
 
-	if err := a.store.CreateProfile(r.Context(), p); err != nil {
+	if err := a.store.SaveProfile(r.Context(), p, quotas); err != nil {
 		slog.Error("create profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+create+profile", http.StatusFound)
-		return
-	}
-	if err := a.store.SetProfileQuotas(r.Context(), p.ID, quotas); err != nil {
-		slog.Error("set profile quotas", "err", err)
-		http.Redirect(w, r, "/admin?flash=Profile+created+but+quotas+failed", http.StatusFound)
 		return
 	}
 	http.Redirect(w, r, "/admin?flash=Profile+created", http.StatusFound)
@@ -372,36 +357,24 @@ func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p := &database.Profile{
-		ID:          id,
-		Name:        strings.TrimSpace(r.FormValue("name")),
-		Description: strings.TrimSpace(r.FormValue("description")),
-		Models:      selectedModels(r),
-		IsDefault:   r.FormValue("is_default") == "on",
-		UpdatedAt:   time.Now(),
+	p, quotas, err := profileFromForm(r)
+	if p.Name == "" {
+		http.Redirect(w, r, "/admin?flash=Name+is+required", http.StatusFound)
+		return
 	}
-	p.TPMLimit = parseOptionalInt64(r.FormValue("tpm_limit"))
-	p.RPMLimit = parseOptionalInt64(r.FormValue("rpm_limit"))
-	p.KeyDurationDays = parseNonNegativeInt(r.FormValue("key_duration_days"))
-
-	quotas, err := parseQuotaWindows(r.Form)
 	if err != nil {
 		http.Redirect(w, r, "/admin?flash=Invalid+quota+window", http.StatusFound)
 		return
 	}
+	p.ID = id
 
-	if err := a.store.UpdateProfile(r.Context(), p); errors.Is(err, database.ErrDefaultProfile) {
+	if err := a.store.SaveProfile(r.Context(), p, quotas); errors.Is(err, database.ErrDefaultProfile) {
 		slog.Info("refused to un-default the default profile", "profile", id)
 		http.Redirect(w, r, "/admin?flash=The+default+profile+must+stay+the+default.+Mark+another+profile+as+default+instead.", http.StatusFound)
 		return
 	} else if err != nil {
 		slog.Error("update profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+update+profile", http.StatusFound)
-		return
-	}
-	if err := a.store.SetProfileQuotas(r.Context(), p.ID, quotas); err != nil {
-		slog.Error("set profile quotas", "err", err)
-		http.Redirect(w, r, "/admin?flash=Profile+updated+but+quotas+failed", http.StatusFound)
 		return
 	}
 	http.Redirect(w, r, "/admin?flash=Profile+updated", http.StatusFound)
@@ -557,6 +530,23 @@ func (a *Admin) RevokeAdmin(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- helpers ---
+
+// profileFromForm reads the profile form that both the create and the edit
+// handler receive. The profile is returned even when the quota windows do not
+// parse, so a caller can check the name first. The ID is left for the caller.
+func profileFromForm(r *http.Request) (*database.Profile, []database.ProfileQuota, error) {
+	p := &database.Profile{
+		Name:            strings.TrimSpace(r.FormValue("name")),
+		Description:     strings.TrimSpace(r.FormValue("description")),
+		Models:          selectedModels(r),
+		IsDefault:       r.FormValue("is_default") == "on",
+		TPMLimit:        parseOptionalInt64(r.FormValue("tpm_limit")),
+		RPMLimit:        parseOptionalInt64(r.FormValue("rpm_limit")),
+		KeyDurationDays: parseNonNegativeInt(r.FormValue("key_duration_days")),
+	}
+	quotas, err := parseQuotaWindows(r.Form)
+	return p, quotas, err
+}
 
 // selectedModels reads the model checkboxes, falling back to the comma-
 // separated text field when the picker was not rendered. An empty result means

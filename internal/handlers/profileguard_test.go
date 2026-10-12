@@ -74,3 +74,28 @@ func TestAdminCannotDeleteAnAssignedProfile(t *testing.T) {
 		t.Errorf("profile gone: %v", err)
 	}
 }
+
+// Saving a profile with its name cleared is refused, as creating one without
+// a name is, and the profile keeps its name.
+func TestAdminCannotClearAProfileName(t *testing.T) {
+	a, store, token, _ := newSyncTestAdmin(t, "pguard-noname")
+	ctx := context.Background()
+	p := &database.Profile{Name: "lecturers"}
+	if err := store.CreateProfile(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := postAdminForm(t, a.UpdateProfile, token, "/admin/profiles/1", p.ID,
+		url.Values{"name": {"  "}})
+	if f := flashOf(t, rec.Header().Get("Location")); f != "Name is required" {
+		t.Errorf("flash = %q, want %q", f, "Name is required")
+	}
+
+	got, err := store.GetProfile(ctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "lecturers" {
+		t.Errorf("name = %q, want it unchanged", got.Name)
+	}
+}
