@@ -129,6 +129,9 @@
 
     {{else}}
 
+      {{if .KeyGone}}
+      <div class="alert alert-warning">{{T .Lang "dash.key.gone"}}</div>
+      {{end}}
       <p class="text-muted" style="margin-bottom:1.25rem">{{T .Lang "dash.nokey"}}</p>
       {{if not (or .SuccessorURL .ProfileError)}}
       <form method="POST" action="/key/generate">

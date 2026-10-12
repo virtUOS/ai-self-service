@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -609,5 +610,34 @@ func TestE2EUpdateAliasRelabelsTheKey(t *testing.T) {
 	}
 	if metadata["admin_note"] != "keep" {
 		t.Errorf("metadata = %v after the relabel, want the admin's note kept", metadata)
+	}
+}
+
+// A key deleted in LiteLLM is soft-deleted since 1.105: /key/info still
+// answers, with status "deleted", while every other route answers 404. The
+// portal must read all of these as a missing key, and a second delete as done.
+func TestE2EDeletedKeyIsReportedMissing(t *testing.T) {
+	g := newE2EGateway(t)
+	ctx := context.Background()
+	owner := e2eOwner(t)
+	k := g.createKey(t, owner, keyprovider.Limits{})
+
+	if err := g.DeleteKey(ctx, k.Ref); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.DeleteKey(ctx, k.Ref); err != nil {
+		t.Errorf("deleting the deleted key again: %v, want success", err)
+	}
+
+	for name, call := range map[string]func() error{
+		"update limits": func() error { return g.UpdateLimits(ctx, k.Ref, keyprovider.User{ID: owner}, keyprovider.Limits{}) },
+		"update alias":  func() error { return g.UpdateAlias(ctx, k.Ref, owner+"-gone") },
+		"update expiry": func() error { return g.UpdateExpiry(ctx, k.Ref, time.Now().AddDate(0, 0, 30)) },
+		"windows":       func() error { _, err := g.Windows(ctx, k.Ref, ""); return err },
+		"key quota":     func() error { _, err := g.Quota(ctx, k.Ref, ""); return err },
+	} {
+		if err := call(); !errors.Is(err, keyprovider.ErrKeyNotFound) {
+			t.Errorf("%s: err = %v, want ErrKeyNotFound", name, err)
+		}
 	}
 }

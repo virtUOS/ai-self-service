@@ -7,11 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
 
 type Client struct {
@@ -103,11 +106,28 @@ func (c *Client) DeleteKey(ctx context.Context, ref string) error {
 	}
 	defer resp.Body.Close()
 
+	// A key that is not there is what a delete asks for: it was removed
+	// outside the portal, and the caller can drop its own record of it.
+	if resp.StatusCode == http.StatusNotFound {
+		slog.Info("key to delete was already gone from LiteLLM")
+		return nil
+	}
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("LiteLLM /key/delete returned %d: %s", resp.StatusCode, b)
 	}
 	return nil
+}
+
+// keyCallError describes a failed call about one key. A 404 means the key no
+// longer exists, which no retry can change, so it wraps
+// keyprovider.ErrKeyNotFound for callers to act on.
+func keyCallError(route string, resp *http.Response) error {
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("LiteLLM %s returned 404: %s: %w", route, b, keyprovider.ErrKeyNotFound)
+	}
+	return fmt.Errorf("LiteLLM %s returned %d: %s", route, resp.StatusCode, b)
 }
 
 func (c *Client) UpdateKeyExpiry(ctx context.Context, ref string, expiresAt time.Time) error {
@@ -126,8 +146,7 @@ func (c *Client) UpdateKeyExpiry(ctx context.Context, ref string, expiresAt time
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("LiteLLM /key/update returned %d: %s", resp.StatusCode, b)
+		return keyCallError("/key/update", resp)
 	}
 	return nil
 }
@@ -147,8 +166,7 @@ func (c *Client) UpdateKeyAlias(ctx context.Context, ref, alias string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("LiteLLM /key/update returned %d: %s", resp.StatusCode, b)
+		return keyCallError("/key/update", resp)
 	}
 	return nil
 }

@@ -28,6 +28,7 @@ var messages = map[string]map[Lang]string{
 	// be loaded.
 	"dash.error.profile": {DE: "Ihr Profil konnte gerade nicht geladen werden. Ihre Limits, die verfügbaren Modelle und das Verlängerungsdatum werden deshalb nicht angezeigt. Bitte laden Sie die Seite später neu.", EN: "Your profile could not be loaded just now, so your limits, the models you can use and the extension date are not shown. Please reload the page later."},
 	"dash.error.key":     {DE: "Ihr API-Schlüssel konnte gerade nicht geladen werden. Bitte laden Sie die Seite später neu.", EN: "Your API key could not be loaded just now. Please reload the page later."},
+	"dash.key.gone":      {DE: "Ihr API-Schlüssel wurde im Gateway gelöscht und funktioniert nicht mehr. Sie können einen neuen erstellen.", EN: "Your API key was deleted in the gateway and no longer works. You can generate a new one."},
 	"dash.error.usage":   {DE: "Ein Teil Ihrer Verbrauchsdaten konnte gerade nicht abgerufen werden. Die Angaben unten sind daher möglicherweise unvollständig.", EN: "Some of your usage data could not be retrieved just now, so the figures below may be incomplete."},
 
 	"dash.name":         {DE: "Name", EN: "Name"},

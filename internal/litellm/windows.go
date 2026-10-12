@@ -61,12 +61,12 @@ func (c *Client) keyWindows(ctx context.Context, ref string) (windows []budgetWi
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, 0, fmt.Errorf("LiteLLM /key/info returned %d: %s", resp.StatusCode, b)
+		return nil, 0, keyCallError("/key/info", resp)
 	}
 
 	var body struct {
 		Info struct {
+			Status         string         `json:"status"`
 			Spend          float64        `json:"spend"`
 			BudgetLimits   []budgetWindow `json:"budget_limits"`
 			MaxBudget      *float64       `json:"max_budget"`
@@ -76,6 +76,9 @@ func (c *Client) keyWindows(ctx context.Context, ref string) (windows []budgetWi
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return nil, 0, fmt.Errorf("decode key info: %w", err)
+	}
+	if body.Info.Status == keyStatusDeleted {
+		return nil, 0, fmt.Errorf("LiteLLM /key/info reports the key deleted: %w", keyprovider.ErrKeyNotFound)
 	}
 
 	if len(body.Info.BudgetLimits) > 0 {

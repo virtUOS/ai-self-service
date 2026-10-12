@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -131,8 +130,15 @@ func modelsFromRows(rows []spendRow, cutoff string) []keyprovider.ModelUsage {
 	return out
 }
 
+// keyStatusDeleted is the status /key/info reports for a deleted key. Since
+// LiteLLM 1.105 a delete is soft: the record stays readable, but the key no
+// longer authenticates and every other route answers 404 for it. Earlier
+// versions answer 404 here too.
+const keyStatusDeleted = "deleted"
+
 type keyInfoResponse struct {
 	Info struct {
+		Status        string   `json:"status"`
 		Spend         float64  `json:"spend"`
 		MaxBudget     *float64 `json:"max_budget"`
 		BudgetResetAt *string  `json:"budget_reset_at"`
@@ -159,11 +165,13 @@ func (c *Client) keyInfo(ctx context.Context, ref string) (keyInfoResponse, erro
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return info, fmt.Errorf("LiteLLM /key/info returned %d: %s", resp.StatusCode, b)
+		return info, keyCallError("/key/info", resp)
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		return info, fmt.Errorf("decode key info: %w", err)
+	}
+	if info.Info.Status == keyStatusDeleted {
+		return info, fmt.Errorf("LiteLLM /key/info reports the key deleted: %w", keyprovider.ErrKeyNotFound)
 	}
 	return info, nil
 }
@@ -276,8 +284,7 @@ func (c *Client) UpdateKeyLimits(ctx context.Context, ref, ownerID string, l key
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("LiteLLM /key/update returned %d: %s", resp.StatusCode, b)
+		return keyCallError("/key/update", resp)
 	}
 	return nil
 }

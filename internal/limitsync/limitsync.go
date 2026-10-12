@@ -14,6 +14,7 @@ package limitsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -82,7 +83,19 @@ func (s *Syncer) Status() (running bool, lastFinished time.Time) {
 type Result struct {
 	Synced int
 	Failed int
+	// Removed counts keys the gateway no longer has, whose records the run
+	// dropped (see database.Store.RemoveMissingKey).
+	Removed int
 }
+
+// outcome is what became of one key in a run.
+type outcome int
+
+const (
+	synced outcome = iota
+	failed
+	removed
+)
 
 // Run pushes limits to every out-of-date key once.
 //
@@ -125,10 +138,13 @@ func (s *Syncer) Run(ctx context.Context) (Result, error) {
 		}
 
 		outcomes, err := s.syncBatch(ctx, fresh)
-		for id, ok := range outcomes {
-			if ok {
+		for id, o := range outcomes {
+			switch o {
+			case synced:
 				res.Synced++
-			} else {
+			case removed:
+				res.Removed++
+			default:
 				res.Failed++
 				failedThisRun[id] = true
 			}
@@ -141,16 +157,16 @@ func (s *Syncer) Run(ctx context.Context) (Result, error) {
 }
 
 // syncBatch pushes a batch with up to s.workers pushes in flight. It returns
-// whether each attempted key succeeded. Keys skipped because ctx was cancelled
+// the outcome of each attempted key. Keys skipped because ctx was cancelled
 // are left out.
 //
 // An error means the outcome of a push could not be recorded. The run stops
 // then: a key whose result was not written would come back as pending at
 // once, and the run would push it again and again.
-func (s *Syncer) syncBatch(ctx context.Context, batch []database.LimitSyncTarget) (map[int64]bool, error) {
+func (s *Syncer) syncBatch(ctx context.Context, batch []database.LimitSyncTarget) (map[int64]outcome, error) {
 	var (
 		mu       sync.Mutex
-		outcomes = make(map[int64]bool, len(batch))
+		outcomes = make(map[int64]outcome, len(batch))
 		firstErr error
 		wg       sync.WaitGroup
 		slots    = make(chan struct{}, s.workers)
@@ -163,11 +179,11 @@ func (s *Syncer) syncBatch(ctx context.Context, batch []database.LimitSyncTarget
 		wg.Add(1)
 		go func(t database.LimitSyncTarget) {
 			defer func() { <-slots; wg.Done() }()
-			ok, attempted, err := s.syncOne(ctx, t)
+			o, attempted, err := s.syncOne(ctx, t)
 			mu.Lock()
 			defer mu.Unlock()
 			if attempted {
-				outcomes[t.KeyID] = ok
+				outcomes[t.KeyID] = o
 			}
 			if err != nil && firstErr == nil {
 				firstErr = err
@@ -181,24 +197,21 @@ func (s *Syncer) syncBatch(ctx context.Context, batch []database.LimitSyncTarget
 // syncOne pushes one key's limits and records the outcome. attempted is false
 // when ctx was cancelled mid-push: the key stays pending without a failure,
 // since nothing about it went wrong.
-func (s *Syncer) syncOne(ctx context.Context, t database.LimitSyncTarget) (ok, attempted bool, err error) {
+func (s *Syncer) syncOne(ctx context.Context, t database.LimitSyncTarget) (o outcome, attempted bool, err error) {
 	if t.ProfileID == nil {
 		// Never push empty limits: to the gateway they mean "unlimited".
-		return false, true, s.fail(ctx, t, "the user has no profile and there is no default profile")
+		return failed, true, s.fail(ctx, t, "the user has no profile and there is no default profile")
 	}
 	p, err := s.store.GetProfile(ctx, *t.ProfileID)
 	if err != nil {
 		if ctx.Err() != nil {
-			return false, false, nil
+			return failed, false, nil
 		}
-		return false, true, s.fail(ctx, t, fmt.Sprintf("load profile %d: %v", *t.ProfileID, err))
+		return failed, true, s.fail(ctx, t, fmt.Sprintf("load profile %d: %v", *t.ProfileID, err))
 	}
 
 	if err := s.keys.UpdateLimits(ctx, t.KeyRef, s.user(t.OIDCSub, t.Name, t.Email), p.Limits()); err != nil {
-		if ctx.Err() != nil {
-			return false, false, nil
-		}
-		return false, true, s.fail(ctx, t, err.Error())
+		return s.pushFailed(ctx, t, err)
 	}
 
 	// The alias carries the username (keyprovider.NewAlias), so a new name
@@ -209,20 +222,41 @@ func (s *Syncer) syncOne(ctx context.Context, t database.LimitSyncTarget) (ok, a
 			err = s.keys.UpdateAlias(ctx, t.KeyRef, alias)
 		}
 		if err != nil {
-			if ctx.Err() != nil {
-				return false, false, nil
-			}
-			return false, true, s.fail(ctx, t, err.Error())
+			return s.pushFailed(ctx, t, err)
 		}
 	}
 
 	if err := s.store.MarkLimitsSynced(ctx, t.KeyID, p.ID, p.LimitsRev, t.Name, t.Email); err != nil {
 		if ctx.Err() != nil {
-			return true, true, nil
+			return synced, true, nil
 		}
-		return false, true, fmt.Errorf("record limit sync of key %s: %w", t.KeyPrefix, err)
+		return failed, true, fmt.Errorf("record limit sync of key %s: %w", t.KeyPrefix, err)
 	}
-	return true, true, nil
+	return synced, true, nil
+}
+
+// pushFailed settles a push the gateway did not accept.
+//
+// A key the gateway no longer has was deleted outside the portal. No retry can
+// bring it back, and the portal cannot recreate it, so its record is dropped
+// instead of failing forever (issue #82); the owner can generate a new key.
+// Anything else is recorded as a failure and retried on the next run.
+func (s *Syncer) pushFailed(ctx context.Context, t database.LimitSyncTarget, err error) (outcome, bool, error) {
+	if ctx.Err() != nil {
+		return failed, false, nil
+	}
+	if !errors.Is(err, keyprovider.ErrKeyNotFound) {
+		return failed, true, s.fail(ctx, t, err.Error())
+	}
+	slog.Warn("key no longer exists in the gateway; removing it", "key_prefix", t.KeyPrefix, "user", t.Email, "err", err)
+	if _, rerr := s.store.RemoveMissingKey(ctx, t.KeyID, t.UserID, t.Email,
+		"key "+t.KeyPrefix+" no longer exists in the gateway (limit sync)"); rerr != nil {
+		if ctx.Err() != nil {
+			return failed, false, nil
+		}
+		return failed, true, fmt.Errorf("remove missing key %s: %w", t.KeyPrefix, rerr)
+	}
+	return removed, true, nil
 }
 
 // fail records why a key could not be synced. The returned error is only for
@@ -260,10 +294,10 @@ func (s *Syncer) Start(ctx context.Context, every time.Duration) {
 func (s *Syncer) runAndLog(ctx context.Context) {
 	res, err := s.Run(ctx)
 	if err != nil && ctx.Err() == nil {
-		slog.Error("limit sync run", "err", err, "synced", res.Synced, "failed", res.Failed)
+		slog.Error("limit sync run", "err", err, "synced", res.Synced, "failed", res.Failed, "removed", res.Removed)
 		return
 	}
-	if res.Synced > 0 || res.Failed > 0 {
-		slog.Info("limit sync run", "synced", res.Synced, "failed", res.Failed)
+	if res.Synced > 0 || res.Failed > 0 || res.Removed > 0 {
+		slog.Info("limit sync run", "synced", res.Synced, "failed", res.Failed, "removed", res.Removed)
 	}
 }

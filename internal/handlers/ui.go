@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -117,6 +118,11 @@ type dashboardData struct {
 	// load must not read as "you have no key".
 	ProfileError bool
 	KeyError     bool
+
+	// KeyGone reports that the user's key was deleted in the gateway, outside
+	// the portal, and the portal dropped its record of it. The page says so
+	// next to the button for a new one, rather than just showing no key.
+	KeyGone bool
 }
 
 // audit records a self-service action, attributing it to the user themselves.
@@ -130,6 +136,17 @@ func (u *UI) audit(r *http.Request, action string, user *database.User, detail s
 		Detail:       detail,
 	}); err != nil {
 		slog.Error("record audit event", "action", action, "err", err)
+	}
+}
+
+// removeMissingKey drops the record of a key the gateway no longer has. A
+// failure only means the record stays until the next attempt; the key does not
+// work either way, and replacing it handles a stale record too.
+func (u *UI) removeMissingKey(ctx context.Context, user *database.User, k *database.APIKey, where string) {
+	slog.Warn("key no longer exists in the gateway; removing it", "key_prefix", k.KeyPrefix, "user", user.Email, "noticed_by", where)
+	if _, err := u.store.RemoveMissingKey(ctx, k.ID, user.ID, user.Email,
+		"key "+k.KeyPrefix+" no longer exists in the gateway ("+where+")"); err != nil {
+		slog.Error("remove missing key", "key_prefix", k.KeyPrefix, "err", err)
 	}
 }
 
@@ -184,6 +201,17 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 
 	profileNotice := u.profileNotice(r.Context(), su.User, lang, expiryPending)
 
+	// A key the gateway no longer has was deleted outside the portal and
+	// cannot be restored. Drop the record and offer a new key instead of
+	// showing one that does not work. ExtendKey sends ?gone=1 after doing the
+	// same.
+	usage := u.userUsage(r.Context(), apiKey, u.cfg.LiteLLMUserID(su.User.OIDCSub), lang)
+	keyGone := r.URL.Query().Get("gone") == "1"
+	if usage.KeyMissing {
+		u.removeMissingKey(r.Context(), su.User, apiKey, "dashboard")
+		apiKey, usage, keyGone = nil, usageReport{}, true
+	}
+
 	if err := u.tmpl.Execute(w, dashboardData{
 		User:            su.User,
 		APIKey:          apiKey,
@@ -201,7 +229,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		PrivacyNotice:   privacyNotice(u.cfg, lang) != "",
 		Models:          models,
 		EmbeddingModels: u.models.Embeddings(r.Context()),
-		Usage:           u.userUsage(r.Context(), apiKey, u.cfg.LiteLLMUserID(su.User.OIDCSub), lang),
+		Usage:           usage,
 		CSRFToken:       u.csrf.Token(w, r),
 		Lang:            lang,
 		Langs:           i18n.Supported,
@@ -209,6 +237,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		TitleKey:        "app.title",
 		ProfileError:    profileErr,
 		KeyError:        keyErr,
+		KeyGone:         keyGone,
 	}); err != nil {
 		slog.Error("dashboard template", "err", err)
 	}
@@ -425,6 +454,11 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 	}
 	newExpiry := time.Now().AddDate(0, 0, u.keyDuration(profile))
 	if err := u.keys.UpdateExpiry(r.Context(), k.KeyRef, newExpiry); err != nil {
+		if errors.Is(err, keyprovider.ErrKeyNotFound) {
+			u.removeMissingKey(r.Context(), su.User, k, "extend")
+			http.Redirect(w, r, "/?gone=1", http.StatusFound)
+			return
+		}
 		httpError(w, r, http.StatusInternalServerError, "Failed to extend key", err)
 		return
 	}
@@ -598,6 +632,10 @@ type usageReport struct {
 	// gateway. The card says so, rather than passing off a shorter report as
 	// the whole picture.
 	Incomplete bool
+
+	// KeyMissing is set when the gateway no longer has the key at all: it was
+	// deleted outside the portal. Nothing else in the report is meaningful.
+	KeyMissing bool
 }
 
 // quotaWindowView is one quota window as the dashboard renders it.
@@ -651,6 +689,7 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 	if err != nil {
 		slog.Error("read quota", "err", err)
 		rep.Incomplete = true
+		rep.KeyMissing = rep.KeyMissing || errors.Is(err, keyprovider.ErrKeyNotFound)
 	} else if q.Limit > 0 {
 		rep.HasQuota = true
 		rep.Used, rep.Limit, rep.ResetsAt = q.Used, q.Limit, q.ResetsAt
@@ -660,6 +699,7 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 	rep.Windows, err = u.quotaWindows(ctx, k.KeyRef, ownerID, lang)
 	if err != nil {
 		rep.Incomplete = true
+		rep.KeyMissing = rep.KeyMissing || errors.Is(err, keyprovider.ErrKeyNotFound)
 	}
 
 	// With per-window figures the headline should name the window that binds,

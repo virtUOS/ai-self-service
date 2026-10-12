@@ -629,6 +629,38 @@ func (s *Store) DeleteAPIKey(ctx context.Context, keyID int64) error {
 	return err
 }
 
+// RemoveMissingKey drops the record of a key that no longer exists in the
+// gateway, and records that in the audit log. Such a key was deleted outside
+// the portal; it cannot be restored, so keeping the row would only leave the
+// owner with a key that does not work and the sync with one it cannot push.
+// The owner can generate a new key.
+//
+// It reports whether it removed anything: another request may have dropped
+// the row first, and then there is nothing to record.
+func (s *Store) RemoveMissingKey(ctx context.Context, keyID, ownerID int64, ownerEmail, detail string) (bool, error) {
+	removed := false
+	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		res, err := tx.NewDelete().Model((*APIKey)(nil)).Where("id = ?", keyID).Exec(ctx)
+		if err != nil {
+			return fmt.Errorf("delete key row: %w", err)
+		}
+		if n, err := res.RowsAffected(); err != nil || n == 0 {
+			return err
+		}
+		removed = true
+		_, err = tx.NewInsert().Model(&AuditEvent{
+			CreatedAt:    time.Now(),
+			Action:       AuditKeyMissing,
+			ActorEmail:   "system", // nobody in the portal deleted it
+			SubjectEmail: ownerEmail,
+			SubjectID:    &ownerID,
+			Detail:       detail,
+		}).Exec(ctx)
+		return err
+	})
+	return removed, err
+}
+
 // --- Sessions ---
 
 func (s *Store) CreateSession(ctx context.Context, userID int64, token, idToken string, expiresAt time.Time) error {
