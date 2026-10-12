@@ -45,7 +45,7 @@ func (p *Provider) UpdateLimits(ctx context.Context, ref, ownerID string, l keyp
 		}
 		l.Quotas = rest
 	}
-	return p.client.UpdateKeyLimits(ctx, ref, l)
+	return p.client.UpdateKeyLimits(ctx, ref, ownerID, l)
 }
 
 // Quota reports consumption against the enforced allowance.

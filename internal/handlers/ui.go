@@ -198,7 +198,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		PrivacyNotice:   privacyNotice(u.cfg, lang) != "",
 		Models:          models,
 		EmbeddingModels: u.models.Embeddings(r.Context()),
-		Usage:           u.userUsage(r.Context(), apiKey, su.User.OIDCSub, lang),
+		Usage:           u.userUsage(r.Context(), apiKey, u.cfg.LiteLLMUserID(su.User.OIDCSub), lang),
 		CSRFToken:       u.csrf.Token(w, r),
 		Lang:            lang,
 		Langs:           i18n.Supported,
@@ -298,7 +298,7 @@ func (u *UI) SessionStatus(w http.ResponseWriter, r *http.Request) {
 // same millisecond, so a clock-derived suffix is not actually unique.
 //
 // The alias is a label, not a binding — ownership is KeyRequest.OwnerID, which
-// is the subject. A username that changes later leaves old aliases reading the
+// is derived from the subject (config.Config.LiteLLMUserID). A username that changes later leaves old aliases reading the
 // old name, which is cosmetic and deliberately not chased with a rename.
 func keyAlias(sub, username string) (string, error) {
 	b := make([]byte, 4)
@@ -381,7 +381,7 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	result, err := u.keys.CreateKey(r.Context(), keyprovider.KeyRequest{
 		Alias:     alias,
 		Owner:     su.User.Email,
-		OwnerID:   su.User.OIDCSub,
+		OwnerID:   u.cfg.LiteLLMUserID(su.User.OIDCSub),
 		ExpiresAt: expiresAt,
 		Limits:    profile.Limits(),
 	})

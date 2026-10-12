@@ -131,7 +131,7 @@ func main() {
 
 	// Pushes profile limits to keys that are out of date, in the background:
 	// one admin change can affect thousands of keys.
-	syncer := limitsync.New(store, keys, cfg.LimitSyncWorkers)
+	syncer := limitsync.New(store, keys, cfg.LiteLLMUserID, cfg.LimitSyncWorkers)
 
 	ui := handlers.NewUI(cfg, store, sessions, oidcProvider, keys, csrf)
 	admin := handlers.NewAdmin(cfg, store, sessions, keys, csrf, syncer)

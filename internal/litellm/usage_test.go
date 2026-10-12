@@ -191,7 +191,7 @@ func TestUpdateKeyLimitsSendsBudget(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := NewClient(srv.URL, "mk").UpdateKeyLimits(context.Background(), "sk-x", keyprovider.Limits{
+	err := NewClient(srv.URL, "mk").UpdateKeyLimits(context.Background(), "sk-x", "", keyprovider.Limits{
 		Quotas: []keyprovider.QuotaWindow{{Budget: 0.001, Period: "1h"}},
 		Models: []string{"gpt-4o"},
 	})
@@ -222,11 +222,40 @@ func TestUpdateKeyLimitsClearsBudget(t *testing.T) {
 	defer srv.Close()
 
 	if err := NewClient(srv.URL, "mk").UpdateKeyLimits(
-		context.Background(), "sk-x", keyprovider.Limits{}); err != nil {
+		context.Background(), "sk-x", "", keyprovider.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(raw, `"max_budget":null`) {
 		t.Errorf("payload %s does not clear max_budget", raw)
+	}
+}
+
+// A push binds the key to its owner, so a key follows the owner to a new
+// internal user when the portal's user IDs change. Without an owner the
+// binding is left as it is.
+func TestUpdateKeyLimitsBindsTheOwner(t *testing.T) {
+	for _, tc := range []struct{ owner, want string }{
+		{"testing:sub-a", `"user_id":"testing:sub-a"`},
+		{"", ""},
+	} {
+		var raw string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			b, _ := io.ReadAll(r.Body)
+			raw = string(b)
+			w.Write([]byte("{}"))
+		}))
+
+		if err := NewClient(srv.URL, "mk").UpdateKeyLimits(
+			context.Background(), "sk-x", tc.owner, keyprovider.Limits{}); err != nil {
+			t.Fatal(err)
+		}
+		srv.Close()
+		if tc.want != "" && !strings.Contains(raw, tc.want) {
+			t.Errorf("owner %q: payload %s does not bind the key", tc.owner, raw)
+		}
+		if tc.want == "" && strings.Contains(raw, `"user_id"`) {
+			t.Errorf("no owner: payload %s sends a user_id", raw)
+		}
 	}
 }
 
@@ -244,7 +273,7 @@ func TestUpdateKeyLimitsOmitsNullModels(t *testing.T) {
 	defer srv.Close()
 
 	if err := NewClient(srv.URL, "mk").UpdateKeyLimits(
-		context.Background(), "sk-x", keyprovider.Limits{}); err != nil {
+		context.Background(), "sk-x", "", keyprovider.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(raw, `"models":null`) {
@@ -266,7 +295,7 @@ func TestUpdateKeyLimitsSendsModelList(t *testing.T) {
 	defer srv.Close()
 
 	if err := NewClient(srv.URL, "mk").UpdateKeyLimits(
-		context.Background(), "sk-x", keyprovider.Limits{Models: []string{"gpt-4o"}}); err != nil {
+		context.Background(), "sk-x", "", keyprovider.Limits{Models: []string{"gpt-4o"}}); err != nil {
 		t.Fatal(err)
 	}
 	m, ok := got["models"].([]any)
@@ -286,7 +315,7 @@ func TestUpdateKeyLimitsSendsStackedWindows(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := NewClient(srv.URL, "mk").UpdateKeyLimits(context.Background(), "sk-x", keyprovider.Limits{
+	err := NewClient(srv.URL, "mk").UpdateKeyLimits(context.Background(), "sk-x", "", keyprovider.Limits{
 		Quotas: []keyprovider.QuotaWindow{
 			{Budget: 0.01, Period: "24h"},
 			{Budget: 0.1, Period: "30d"},
@@ -323,7 +352,7 @@ func TestUpdateKeyLimitsSingleWindowStaysFlat(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := NewClient(srv.URL, "mk").UpdateKeyLimits(context.Background(), "sk-x", keyprovider.Limits{
+	if err := NewClient(srv.URL, "mk").UpdateKeyLimits(context.Background(), "sk-x", "", keyprovider.Limits{
 		Quotas: []keyprovider.QuotaWindow{{Budget: 0.001, Period: "1h"}},
 	}); err != nil {
 		t.Fatal(err)
@@ -348,7 +377,7 @@ func TestUpdateKeyLimitsClearsStackedWindows(t *testing.T) {
 	defer srv.Close()
 
 	if err := NewClient(srv.URL, "mk").UpdateKeyLimits(
-		context.Background(), "sk-x", keyprovider.Limits{}); err != nil {
+		context.Background(), "sk-x", "", keyprovider.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(raw, `"max_budget":null`) {

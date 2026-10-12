@@ -66,6 +66,9 @@ func (g *gatewayStub) setFailing(ref string, fail bool) {
 	g.failing[ref] = fail
 }
 
+// plainSub is the owner mapping of a portal without LITELLM_USER_ID_PREFIX.
+func plainSub(sub string) string { return sub }
+
 type fixture struct {
 	store *database.Store
 	ctx   context.Context
@@ -136,7 +139,7 @@ func TestRunPushesProfileLimitsToPendingKeys(t *testing.T) {
 	f.setTPM(t, 500)
 	a, b := f.addKey(t, "a"), f.addKey(t, "b")
 
-	res, err := New(f.store, f.gw, 1).Run(f.ctx)
+	res, err := New(f.store, f.gw, plainSub, 1).Run(f.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +160,7 @@ func TestRunPushesProfileLimitsToPendingKeys(t *testing.T) {
 	}
 
 	// Nothing changed, so a second run pushes nothing.
-	res, err = New(f.store, f.gw, 1).Run(f.ctx)
+	res, err = New(f.store, f.gw, plainSub, 1).Run(f.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +176,7 @@ func TestFailedKeyIsRetriedOnTheNextRun(t *testing.T) {
 	bad, good := f.addKey(t, "bad"), f.addKey(t, "good")
 	f.gw.setFailing(bad, true)
 
-	res, err := New(f.store, f.gw, 1).Run(f.ctx)
+	res, err := New(f.store, f.gw, plainSub, 1).Run(f.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +193,7 @@ func TestFailedKeyIsRetriedOnTheNextRun(t *testing.T) {
 	}
 
 	f.gw.setFailing(bad, false)
-	if _, err := New(f.store, f.gw, 1).Run(f.ctx); err != nil {
+	if _, err := New(f.store, f.gw, plainSub, 1).Run(f.ctx); err != nil {
 		t.Fatal(err)
 	}
 	if st := f.status(t); st.Pending != 0 {
@@ -211,7 +214,7 @@ func TestEditDuringRunIsPickedUpBySameRun(t *testing.T) {
 		once.Do(func() { f.setTPM(t, 200) })
 	}
 
-	if _, err := New(f.store, f.gw, 1).Run(f.ctx); err != nil {
+	if _, err := New(f.store, f.gw, plainSub, 1).Run(f.ctx); err != nil {
 		t.Fatal(err)
 	}
 	if n := f.gw.pushCount(ref); n != 2 {
@@ -235,7 +238,7 @@ func TestKeyWithoutProfileIsNeverPushedEmptyLimits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := New(f.store, f.gw, 1).Run(f.ctx)
+	res, err := New(f.store, f.gw, plainSub, 1).Run(f.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +260,7 @@ func TestParallelWorkersSyncEveryKey(t *testing.T) {
 		f.addKey(t, fmt.Sprintf("u%02d", i))
 	}
 
-	res, err := New(f.store, f.gw, 4).Run(f.ctx)
+	res, err := New(f.store, f.gw, plainSub, 4).Run(f.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +276,7 @@ func TestParallelWorkersSyncEveryKey(t *testing.T) {
 // context ends.
 func TestKickStartsARun(t *testing.T) {
 	f := newFixture(t)
-	s := New(f.store, f.gw, 1)
+	s := New(f.store, f.gw, plainSub, 1)
 	ctx, cancel := context.WithCancel(f.ctx)
 	done := make(chan struct{})
 	go func() {
@@ -322,11 +325,26 @@ func TestExpiredKeyIsNotPushed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := New(f.store, f.gw, 1).Run(f.ctx)
+	res, err := New(f.store, f.gw, plainSub, 1).Run(f.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.Synced != 0 || res.Failed != 0 || f.gw.pushCount(ref) != 0 {
 		t.Errorf("result = %+v, pushes = %d; want nothing pushed", res, f.gw.pushCount(ref))
+	}
+}
+
+// The sync binds each key to the gateway user the portal names its owner by,
+// not to the bare subject, so a prefixed portal keeps its own allowances.
+func TestRunPushesTheMappedOwner(t *testing.T) {
+	f := newFixture(t)
+	ref := f.addKey(t, "a")
+
+	prefixed := func(sub string) string { return "testing:" + sub }
+	if _, err := New(f.store, f.gw, prefixed, 1).Run(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.gw.owners[ref]; got != "testing:a" {
+		t.Errorf("owner = %q, want testing:a", got)
 	}
 }

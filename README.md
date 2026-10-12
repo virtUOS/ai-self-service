@@ -48,6 +48,7 @@ in:
 | `OIDC_CLIENT_SECRET` | yes      | —           | OIDC client secret                                                 |
 | `OIDC_REDIRECT_URL`  | yes      | —           | Callback URL (must match OIDC client config)                       |
 | `FRONTEND_URL`       | yes      | —           | Public base URL of this app (shown to users as the API base URL)   |
+| `LITELLM_USER_ID_PREFIX` | no   |             | Only for several portals on one gateway; see [Several portals on one gateway](#several-portals-on-one-gateway) |
 | `ADMIN_ROLE`         | no       | —           | IdP role that grants the admin panel; supersedes `ADMIN_IDS` and grants made in the panel |
 | `ADMIN_IDS`          | no       | —           | Comma-separated admins, each an OIDC subject **or** an email. Always grant, and cannot be removed from the panel — this is the recovery path if the last admin is removed |
 | `ADMIN_EMAILS`       | no       | —           | Deprecated alias for `ADMIN_IDS`; still read, email entries only   |
@@ -284,6 +285,27 @@ user's profile, key or usage, it says so rather than showing defaults.
 Clearing a quota sends an explicit `null`. LiteLLM leaves an omitted field
 untouched, so a profile that loses its allowance would otherwise keep enforcing
 the previous one.
+
+### Several portals on one gateway
+
+A person's budget, the widest quota window of their profile, is held on a
+LiteLLM internal user rather than on their key, so it survives a key rotation.
+That user is named after the person's OIDC subject. Two portals that use the
+same gateway and the same identity provider therefore share every person's
+budget, and each portal's limit sync overwrites what the other one set.
+
+Give every portal on a shared gateway but at most one its own
+`LITELLM_USER_ID_PREFIX`. Its users are then named `<prefix>:<subject>`, and
+the portals no longer touch each other's budgets. A single portal needs no
+prefix, and existing deployments keep their users and budgets unchanged.
+
+Set the prefix before the portal issues its first key. Changing it later is
+not supported: keys stay bound to the old users, and keep counting against
+their budgets, until each key is updated again. If it has to be done, run
+`ai-self-service -resync-limits` afterwards. The sync then moves every
+unexpired key to the new users, which start with nothing spent. The old users
+are left in the gateway; don't delete them while another portal's keys still
+belong to them, as deleting a LiteLLM user also deletes its keys.
 
 ## Usage reporting
 
