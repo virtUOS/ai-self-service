@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
@@ -17,7 +20,7 @@ func TestGenerateKeyUsesThePrefixedOwner(t *testing.T) {
 	if len(fake.Created) != 1 {
 		t.Fatalf("created %d keys, want 1", len(fake.Created))
 	}
-	if got := fake.Created[0].OwnerID; got != "testing:sub-1" {
+	if got := fake.Created[0].User.ID; got != "testing:sub-1" {
 		t.Errorf("owner id = %q, want testing:sub-1", got)
 	}
 	// The alias is a label for people reading LiteLLM's UI and keeps the
@@ -44,5 +47,42 @@ func TestDashboardReadsThePrefixedOwnersQuota(t *testing.T) {
 	}
 	if strings.Contains(body, "quota-full") {
 		t.Error("dashboard shows the unprefixed user's nearly spent quota")
+	}
+}
+
+// A new key labels its owner's gateway user with their name, and with their
+// email only where LITELLM_USER_EMAIL allows it.
+func TestGenerateKeyLabelsTheOwner(t *testing.T) {
+	for _, withEmail := range []bool{false, true} {
+		ui, fake, _, _ := newTestUI(t, fmt.Sprintf("uid-label-%v", withEmail))
+		ui.cfg.LiteLLMUserEmail = withEmail
+
+		post(t, ui, ui.GenerateKey, "/key/generate")
+		if len(fake.Created) != 1 {
+			t.Fatalf("created %d keys, want 1", len(fake.Created))
+		}
+		u := fake.Created[0].User
+		wantEmail := ""
+		if withEmail {
+			wantEmail = "s@uni-osnabrueck.de"
+		}
+		if u.Name != "S" || u.Email != wantEmail {
+			t.Errorf("email option %v: user = %+v, want name S and email %q", withEmail, u, wantEmail)
+		}
+	}
+}
+
+// The new key records what its owner was labelled with, so the limit sync
+// does not push it again straight away.
+func TestGenerateKeyIsNotPendingAfterwards(t *testing.T) {
+	ui, _, store, _ := newTestUI(t, "uid-recorded")
+	post(t, ui, ui.GenerateKey, "/key/generate")
+
+	pending, err := store.PendingLimitSyncs(context.Background(), time.Now().Add(time.Hour), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Errorf("pending = %+v, want the new key up to date", pending)
 	}
 }

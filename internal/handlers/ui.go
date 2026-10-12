@@ -33,11 +33,16 @@ type UI struct {
 	models   *modelCache
 	usage    *usageCache
 
+	// kickSync starts a limit sync run. A login may bring a new name or
+	// email, which the owner's gateway user is labelled with; the run pushes
+	// it without waiting for the interval. Nil in tests.
+	kickSync func()
+
 	// privacyTmpl renders /privacy, the deployment's privacy notice.
 	privacyTmpl *template.Template
 }
 
-func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager, oidc *oidcpkg.Provider, keys keyprovider.Provider, csrf *session.CSRF) *UI {
+func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager, oidc *oidcpkg.Provider, keys keyprovider.Provider, csrf *session.CSRF, kickSync func()) *UI {
 	tmpl := parseDashboardTemplate()
 	// Only some gateways can enumerate models; the dashboard omits the list
 	// when the provider cannot.
@@ -49,7 +54,7 @@ func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager,
 	}
 	return &UI{cfg: cfg, store: store, sessions: sessions, oidc: oidc, keys: keys,
 		tmpl: tmpl, privacyTmpl: parsePrivacyTemplate(), flash: newKeyFlash(), csrf: csrf,
-		models: newModelCache(lister), usage: usage}
+		models: newModelCache(lister), usage: usage, kickSync: kickSync}
 }
 
 func (u *UI) requireSession(r *http.Request) (*session.SessionUser, error) {
@@ -229,6 +234,11 @@ func (u *UI) Callback(w http.ResponseWriter, r *http.Request) {
 		httpError(w, r, http.StatusInternalServerError, "Failed to load user", err)
 		return
 	}
+	// The login updated the stored name and email. If either changed, the
+	// user's key is now pending; a run with nothing pending costs one query.
+	if u.kickSync != nil {
+		u.kickSync()
+	}
 
 	token, err := u.sessions.Create(r.Context(), user.ID, result.IDToken)
 	if err != nil {
@@ -297,9 +307,11 @@ func (u *UI) SessionStatus(w http.ResponseWriter, r *http.Request) {
 // The suffix is random rather than a timestamp: two rotations can land in the
 // same millisecond, so a clock-derived suffix is not actually unique.
 //
-// The alias is a label, not a binding — ownership is KeyRequest.OwnerID, which
-// is derived from the subject (config.Config.LiteLLMUserID). A username that changes later leaves old aliases reading the
-// old name, which is cosmetic and deliberately not chased with a rename.
+// The alias is a label, not a binding — ownership is KeyRequest.User, whose ID
+// is derived from the subject (config.Config.LiteLLMUserID). A username that
+// changes later leaves old aliases reading the old name, which is cosmetic and
+// deliberately not chased with a rename. The gateway user's own label does
+// follow the name; see the limit sync.
 func keyAlias(sub, username string) (string, error) {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {
@@ -381,7 +393,7 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	result, err := u.keys.CreateKey(r.Context(), keyprovider.KeyRequest{
 		Alias:     alias,
 		Owner:     su.User.Email,
-		OwnerID:   u.cfg.LiteLLMUserID(su.User.OIDCSub),
+		User:      u.cfg.LiteLLMUser(su.User.OIDCSub, su.User.Name, su.User.Email),
 		ExpiresAt: expiresAt,
 		Limits:    profile.Limits(),
 	})
@@ -400,12 +412,14 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	// If an admin changed the profile since it was read above, the key is out
 	// of date the moment it is stored, and the sync pushes the newer limits.
 	if err := u.store.ReplaceAPIKey(r.Context(), &database.APIKey{
-		UserID:          su.User.ID,
-		KeyRef:          result.Ref,
-		KeyPrefix:       prefix,
-		ExpiresAt:       expiresAt,
-		SyncedProfileID: &profile.ID,
-		SyncedRev:       &profile.LimitsRev,
+		UserID:           su.User.ID,
+		KeyRef:           result.Ref,
+		KeyPrefix:        prefix,
+		ExpiresAt:        expiresAt,
+		SyncedProfileID:  &profile.ID,
+		SyncedRev:        &profile.LimitsRev,
+		SyncedOwnerName:  &su.User.Name,
+		SyncedOwnerEmail: &su.User.Email,
 	}); err != nil {
 		// The key exists upstream but could not be recorded, so nothing can
 		// ever revoke it through this app. Revoke it now rather than leaking it.

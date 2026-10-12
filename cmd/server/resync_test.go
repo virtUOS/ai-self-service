@@ -42,7 +42,7 @@ func TestResyncLimitsMarksEveryKey(t *testing.T) {
 		if err := store.ReplaceAPIKey(ctx, k); err != nil {
 			t.Fatal(err)
 		}
-		if err := store.MarkLimitsSynced(ctx, k.ID, def.ID, def.LimitsRev); err != nil {
+		if err := store.MarkLimitsSynced(ctx, k.ID, def.ID, def.LimitsRev, u.Name, u.Email); err != nil {
 			t.Fatal(err)
 		}
 	}

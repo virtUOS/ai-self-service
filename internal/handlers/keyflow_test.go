@@ -59,7 +59,7 @@ func newTestUI(t *testing.T, name string) (*UI, *keyprovider.Fake, *database.Sto
 	t.Setenv("SESSION_TOKEN", token)
 
 	ui := NewUI(&config.Config{KeyDurationDays: 90, FrontendURL: "http://x"},
-		store, sessions, nil, fake, csrf)
+		store, sessions, nil, fake, csrf, nil)
 	return ui, fake, store, user
 }
 
@@ -194,8 +194,8 @@ func TestGenerateKeyUsesDistinctAliasPerRotation(t *testing.T) {
 		if strings.Contains(c.Alias, "@") {
 			t.Errorf("create %d: alias %q carries an email address", i, c.Alias)
 		}
-		if c.OwnerID != "sub-1" {
-			t.Errorf("create %d: owner id = %q, want the subject", i, c.OwnerID)
+		if c.User.ID != "sub-1" {
+			t.Errorf("create %d: owner id = %q, want the subject", i, c.User.ID)
 		}
 	}
 }

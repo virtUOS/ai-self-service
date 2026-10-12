@@ -99,6 +99,13 @@ type APIKey struct {
 	SyncedProfileID *int64 `bun:"synced_profile_id"`
 	SyncedRev       *int64 `bun:"synced_rev"`
 
+	// SyncedOwnerName and SyncedOwnerEmail are the owner's name and email as
+	// they were when this key was last pushed. The push labels the owner's
+	// gateway user with them, so the key is pending again when either changes.
+	// The email is recorded whether or not LITELLM_USER_EMAIL sends it.
+	SyncedOwnerName  *string `bun:"synced_owner_name"`
+	SyncedOwnerEmail *string `bun:"synced_owner_email"`
+
 	// SyncError and SyncFailedAt describe the last failed push. Both are
 	// cleared when a push succeeds.
 	SyncError    string     `bun:"sync_error,notnull"`

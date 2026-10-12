@@ -36,16 +36,16 @@ func (p *Provider) History(ctx context.Context, ref string, days int) (keyprovid
 //
 // Both halves are updated: a profile edit can change the widest window, which
 // lives on the user, as easily as a burst window, which lives on the key.
-func (p *Provider) UpdateLimits(ctx context.Context, ref, ownerID string, l keyprovider.Limits) error {
+func (p *Provider) UpdateLimits(ctx context.Context, ref string, user keyprovider.User, l keyprovider.Limits) error {
 	widest, rest := WidestWindow(effectiveWindows(l))
 
-	if ownerID != "" {
-		if err := p.client.UpsertUser(ctx, ownerID, userBudget(widest)); err != nil {
+	if user.ID != "" {
+		if err := p.client.UpsertUser(ctx, user, userBudget(widest)); err != nil {
 			return err
 		}
 		l.Quotas = rest
 	}
-	return p.client.UpdateKeyLimits(ctx, ref, ownerID, l)
+	return p.client.UpdateKeyLimits(ctx, ref, user.ID, l)
 }
 
 // Quota reports consumption against the enforced allowance.
@@ -103,9 +103,9 @@ func (p *Provider) EmbeddingModels(ctx context.Context) (map[string]bool, error)
 // it would be the dangerous direction — a retry would then find no allowance
 // and could issue a key that enforces nothing.
 func (p *Provider) CreateKey(ctx context.Context, req keyprovider.KeyRequest) (keyprovider.KeyResult, error) {
-	if req.OwnerID != "" {
+	if req.User.ID != "" {
 		widest, rest := WidestWindow(effectiveWindows(req.Limits))
-		if err := p.client.UpsertUser(ctx, req.OwnerID, userBudget(widest)); err != nil {
+		if err := p.client.UpsertUser(ctx, req.User, userBudget(widest)); err != nil {
 			return keyprovider.KeyResult{}, err
 		}
 		req.Limits.Quotas = rest
@@ -140,7 +140,7 @@ func (p *Provider) toKeyParams(req keyprovider.KeyRequest) KeyParams {
 		Models:   models,
 		TPMLimit: req.Limits.TokensPerMinute,
 		RPMLimit: req.Limits.RequestsPerMinute,
-		UserID:   req.OwnerID,
+		UserID:   req.User.ID,
 		Metadata: map[string]any{"user_email": req.Owner},
 	}
 

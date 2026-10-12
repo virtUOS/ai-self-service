@@ -22,6 +22,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"slices"
 	"strconv"
@@ -70,7 +71,7 @@ func (g e2eGateway) createKey(t *testing.T, owner string, limits keyprovider.Lim
 	// Aliases are unique across the gateway, so a rotation needs a new one.
 	alias := owner + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	k, err := g.CreateKey(context.Background(), keyprovider.KeyRequest{
-		Alias: alias, Owner: owner, OwnerID: owner, Limits: limits,
+		Alias: alias, Owner: owner, User: keyprovider.User{ID: owner}, Limits: limits,
 		ExpiresAt: time.Now().AddDate(0, 0, 1),
 	})
 	if err != nil {
@@ -185,7 +186,7 @@ func TestE2EKeyLifecycle(t *testing.T) {
 	}
 
 	// New limits reach both halves: the key's window and the owner's.
-	err := g.UpdateLimits(ctx, k.Ref, owner, keyprovider.Limits{
+	err := g.UpdateLimits(ctx, k.Ref, keyprovider.User{ID: owner}, keyprovider.Limits{
 		Quotas: []keyprovider.QuotaWindow{{Budget: 2, Period: "1h"}, {Budget: 7, Period: "30d"}},
 	})
 	if err != nil {
@@ -442,7 +443,7 @@ func TestE2EUpdateLimitsMovesKeyToNewOwner(t *testing.T) {
 		return nil
 	})
 
-	if err := g.UpdateLimits(ctx, k.Ref, newOwner, limits); err != nil {
+	if err := g.UpdateLimits(ctx, k.Ref, keyprovider.User{ID: newOwner}, limits); err != nil {
 		t.Fatalf("update limits with the new owner: %v", err)
 	}
 	g.mustComplete(t, k.Secret, "mock-small")
@@ -463,5 +464,86 @@ func TestE2EUpdateLimitsMovesKeyToNewOwner(t *testing.T) {
 	}
 	if !near(after.Used, before.Used) {
 		t.Errorf("old owner's spend moved from %v to %v after the key left it", before.Used, after.Used)
+	}
+}
+
+// e2eUser reads a user back from the gateway, with the keys it owns.
+func (g e2eGateway) e2eUser(t *testing.T, id string) (alias, email string, keys int) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet,
+		g.baseURL+"/user/info?user_id="+url.QueryEscape(id), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+envOr("LITELLM_MASTER_KEY", "sk-local-dev"))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var info struct {
+		UserInfo struct {
+			Alias *string `json:"user_alias"`
+			Email *string `json:"user_email"`
+		} `json:"user_info"`
+		Keys []json.RawMessage `json:"keys"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatalf("decode /user/info: %v", err)
+	}
+	if info.UserInfo.Alias != nil {
+		alias = *info.UserInfo.Alias
+	}
+	if info.UserInfo.Email != nil {
+		email = *info.UserInfo.Email
+	}
+	return alias, email, len(info.Keys)
+}
+
+// A user is created labelled, owning no key of LiteLLM's making, and an
+// existing user picks up a new name and address.
+func TestE2EUpsertUserLabelsTheUser(t *testing.T) {
+	g := newE2EGateway(t)
+	ctx := context.Background()
+	id := e2eOwner(t)
+	email := id + "@e2e.invalid"
+
+	if err := g.client.UpsertUser(ctx, keyprovider.User{ID: id, Name: "alice", Email: email}, nil); err != nil {
+		t.Fatal(err)
+	}
+	alias, gotEmail, keys := g.e2eUser(t, id)
+	if alias != "alice" || gotEmail != email || keys != 0 {
+		t.Errorf("created user: alias %q, email %q, %d keys; want alice, %s, no keys", alias, gotEmail, keys, email)
+	}
+
+	renamed := "renamed-" + email
+	if err := g.client.UpsertUser(ctx, keyprovider.User{ID: id, Name: "Alice", Email: renamed}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if alias, gotEmail, _ := g.e2eUser(t, id); alias != "Alice" || gotEmail != renamed {
+		t.Errorf("updated user: alias %q, email %q; want Alice and %s", alias, gotEmail, renamed)
+	}
+}
+
+// /user/new refuses a user whose address another one holds, but /user/update
+// creates a user it does not find, so the upsert still succeeds and the second
+// user carries the same address. A duplicate is therefore not an error here;
+// LITELLM_USER_EMAIL is opt-in because LiteLLM's own SSO login matches users
+// by address, and then picks one of them.
+func TestE2EUpsertUserToleratesADuplicateEmail(t *testing.T) {
+	g := newE2EGateway(t)
+	ctx := context.Background()
+	first := e2eOwner(t)
+	email := first + "@e2e.invalid"
+	if err := g.client.UpsertUser(ctx, keyprovider.User{ID: first, Email: email}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	second := first + "-other"
+	if err := g.client.UpsertUser(ctx, keyprovider.User{ID: second, Name: "bob", Email: email}, nil); err != nil {
+		t.Fatalf("second user with the same email: %v", err)
+	}
+	if alias, gotEmail, keys := g.e2eUser(t, second); alias != "bob" || gotEmail != email || keys != 0 {
+		t.Errorf("second user: alias %q, email %q, %d keys; want bob, %s, no keys", alias, gotEmail, keys, email)
 	}
 }

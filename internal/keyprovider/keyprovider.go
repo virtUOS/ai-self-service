@@ -31,18 +31,30 @@ type Limits struct {
 	Quotas []QuotaWindow
 }
 
+// User is the person a key belongs to, as the provider should know them.
+type User struct {
+	// ID identifies the person to the provider, stably across key rotations.
+	// A provider that can hold an allowance against a person rather than a
+	// key enforces the widest quota window there, so that regenerating a key
+	// no longer resets it. Empty means the provider falls back to enforcing
+	// everything on the key alone.
+	ID string
+	// Name labels the person in the provider's own UI. Empty leaves the label
+	// as it is.
+	Name string
+	// Email is recorded on the person in the provider, where it may have to
+	// be unique. Empty leaves it as it is.
+	Email string
+}
+
 // KeyRequest describes a key to be created.
 type KeyRequest struct {
 	// Alias identifies the key in the provider's own UI.
 	Alias string
 	// Owner is recorded as metadata so a key can be traced back to a person.
 	Owner string
-	// OwnerID identifies the person to the provider, stably across key
-	// rotations. A provider that can hold an allowance against a person rather
-	// than a key enforces the widest quota window there, so that regenerating
-	// a key no longer resets it. Empty means the provider falls back to
-	// enforcing everything on the key alone.
-	OwnerID   string
+	// User is the person the key is bound to.
+	User      User
 	ExpiresAt time.Time
 	Limits    Limits
 }
@@ -190,8 +202,9 @@ type Provider interface {
 	// profiles get edited, and without this the portal would advertise limits
 	// the gateway does not enforce.
 	//
-	// ownerID identifies the person the key belongs to, so that a provider
-	// enforcing part of the allowance against the person can update that too.
-	// Empty means enforce everything on the key.
-	UpdateLimits(ctx context.Context, ref, ownerID string, limits Limits) error
+	// user is the person the key belongs to, so that a provider enforcing
+	// part of the allowance against the person can update that too, along
+	// with how the person is labelled there. An empty ID means enforce
+	// everything on the key.
+	UpdateLimits(ctx context.Context, ref string, user User, limits Limits) error
 }

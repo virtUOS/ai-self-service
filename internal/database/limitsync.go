@@ -18,8 +18,8 @@ import (
 //
 // A key's effective profile is its owner's own profile, or the default one for
 // owners without one. The key is pending when that profile is not the one it
-// was last pushed from, when the profile's limits changed since, or when there
-// is no such profile at all. The last case is never pushed, since there are no
+// was last pushed from, when the profile's limits changed since, when the
+// owner's name or email changed since, or when there is no such profile at all. The last case is never pushed, since there are no
 // limits to push; it stays pending so the sync reports it as a failure rather
 // than leaving a key with whatever it had.
 //
@@ -34,8 +34,9 @@ import (
 const pendingLimitSyncs = `
 WITH effective AS (
 	SELECT k.id AS key_id, k.key_ref, k.key_prefix, k.user_id,
-	       u.oidc_sub, u.email,
+	       u.oidc_sub, u.email, u.name,
 	       k.synced_profile_id, k.synced_rev, k.sync_error, k.sync_failed_at,
+	       k.synced_owner_name, k.synced_owner_email,
 	       COALESCE(u.profile_id,
 	                (SELECT id FROM profiles WHERE is_default <> 0 ORDER BY id LIMIT 1)) AS profile_id
 	FROM api_keys AS k
@@ -48,6 +49,8 @@ WITH effective AS (
 	WHERE p.id IS NULL
 	   OR effective.synced_profile_id IS NOT effective.profile_id
 	   OR effective.synced_rev IS NOT p.limits_rev
+	   OR effective.synced_owner_name IS NOT effective.name
+	   OR effective.synced_owner_email IS NOT effective.email
 )
 `
 
@@ -60,6 +63,7 @@ type LimitSyncTarget struct {
 	UserID    int64  `bun:"user_id"`
 	OIDCSub   string `bun:"oidc_sub"`
 	Email     string `bun:"email"`
+	Name      string `bun:"name"`
 
 	// ProfileID is the owner's effective profile: their own, or the default.
 	// Nil when they have none and no default exists.
@@ -86,7 +90,7 @@ type LimitSyncTarget struct {
 func (s *Store) PendingLimitSyncs(ctx context.Context, notFailedSince time.Time, limit int) ([]LimitSyncTarget, error) {
 	var rows []LimitSyncTarget
 	err := s.db.NewRaw(pendingLimitSyncs+`
-		SELECT key_id, key_ref, key_prefix, user_id, oidc_sub, email,
+		SELECT key_id, key_ref, key_prefix, user_id, oidc_sub, email, name,
 		       profile_id, sync_error, sync_failed_at
 		FROM pending
 		WHERE sync_failed_at IS NULL OR sync_failed_at < ?
@@ -96,15 +100,19 @@ func (s *Store) PendingLimitSyncs(ctx context.Context, notFailedSince time.Time,
 }
 
 // MarkLimitsSynced records that a key now carries the limits of the given
-// profile revision, and clears any earlier failure.
+// profile revision, and that its owner was labelled with the given name and
+// email. It clears any earlier failure.
 //
-// The revision is the one the sync read before pushing, not the profile's
-// current one: if an admin edited the profile while the push was in flight,
-// the key must stay pending so the newer limits reach it too.
-func (s *Store) MarkLimitsSynced(ctx context.Context, keyID, profileID, rev int64) error {
+// The revision, name and email are the ones the sync read before pushing, not
+// the current ones: if an admin edited the profile, or the owner logged in
+// with a new name, while the push was in flight, the key must stay pending so
+// the newer values reach it too.
+func (s *Store) MarkLimitsSynced(ctx context.Context, keyID, profileID, rev int64, ownerName, ownerEmail string) error {
 	_, err := s.db.NewUpdate().Model((*APIKey)(nil)).
 		Set("synced_profile_id = ?", profileID).
 		Set("synced_rev = ?", rev).
+		Set("synced_owner_name = ?", ownerName).
+		Set("synced_owner_email = ?", ownerEmail).
 		Set("sync_error = ''").
 		Set("sync_failed_at = NULL").
 		Where("id = ?", keyID).Exec(ctx)
