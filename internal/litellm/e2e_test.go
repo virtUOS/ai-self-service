@@ -416,3 +416,52 @@ func TestE2EOwnerQuotaIsEnforced(t *testing.T) {
 	}
 	t.Fatal("six requests went through on a budget for about two")
 }
+
+// A push binds the key to the owner it names, so when a portal starts naming
+// its users with LITELLM_USER_ID_PREFIX, the next sync moves each key to the
+// prefixed user. Spend from then on counts against the new owner only, and the
+// ':' the prefix adds is accepted in a user ID.
+func TestE2EUpdateLimitsMovesKeyToNewOwner(t *testing.T) {
+	g := newE2EGateway(t)
+	ctx := context.Background()
+	oldOwner := e2eOwner(t)
+	newOwner := "zz-e2e-prefix:" + oldOwner
+	limits := keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{{Budget: 10, Period: "30d"}}}
+
+	k := g.createKey(t, oldOwner, limits)
+	g.mustComplete(t, k.Secret, "mock-small")
+	var before keyprovider.Quota
+	eventually(t, "spend on the old owner", func() error {
+		var err error
+		if before, err = g.Quota(ctx, k.Ref, oldOwner); err != nil {
+			return err
+		}
+		if before.Used <= 0 {
+			return fmt.Errorf("used = %v", before.Used)
+		}
+		return nil
+	})
+
+	if err := g.UpdateLimits(ctx, k.Ref, newOwner, limits); err != nil {
+		t.Fatalf("update limits with the new owner: %v", err)
+	}
+	g.mustComplete(t, k.Secret, "mock-small")
+
+	eventually(t, "spend on the new owner", func() error {
+		q, err := g.Quota(ctx, k.Ref, newOwner)
+		if err != nil {
+			return err
+		}
+		if q.Limit != 10 || q.Used <= 0 {
+			return fmt.Errorf("new owner: used %v of %v, want spend against 10", q.Used, q.Limit)
+		}
+		return nil
+	})
+	after, err := g.Quota(ctx, k.Ref, oldOwner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !near(after.Used, before.Used) {
+		t.Errorf("old owner's spend moved from %v to %v after the key left it", before.Used, after.Used)
+	}
+}

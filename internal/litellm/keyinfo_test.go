@@ -138,7 +138,7 @@ func TestManagementRoutesSendTheRefVerbatim(t *testing.T) {
 	if err := c.UpdateKeyExpiry(ctx, ref, time.Now().Add(24*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.UpdateKeyLimits(ctx, ref, keyprovider.Limits{}); err != nil {
+	if err := c.UpdateKeyLimits(ctx, ref, "", keyprovider.Limits{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.DeleteKey(ctx, ref); err != nil {

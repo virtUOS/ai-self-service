@@ -36,6 +36,7 @@ const maxErrorLen = 500
 type Syncer struct {
 	store   *database.Store
 	keys    gateway
+	ownerID func(sub string) string
 	workers int
 	kick    chan struct{}
 
@@ -45,11 +46,16 @@ type Syncer struct {
 }
 
 // New returns a Syncer that pushes with the given number of parallel workers.
-func New(store *database.Store, keys gateway, workers int) *Syncer {
+//
+// ownerID names the gateway user that holds a key owner's allowance, given
+// their OIDC subject (config.Config.LiteLLMUserID). Every push binds the key to
+// that user, so the key, the dashboard and the sync always agree on it.
+func New(store *database.Store, keys gateway, ownerID func(sub string) string, workers int) *Syncer {
 	if workers < 1 {
 		workers = 1
 	}
-	return &Syncer{store: store, keys: keys, workers: workers, kick: make(chan struct{}, 1)}
+	return &Syncer{store: store, keys: keys, ownerID: ownerID, workers: workers,
+		kick: make(chan struct{}, 1)}
 }
 
 // Kick asks for a run as soon as possible. It never blocks: kicks that arrive
@@ -186,7 +192,7 @@ func (s *Syncer) syncOne(ctx context.Context, t database.LimitSyncTarget) (ok, a
 		return false, true, s.fail(ctx, t, fmt.Sprintf("load profile %d: %v", *t.ProfileID, err))
 	}
 
-	if err := s.keys.UpdateLimits(ctx, t.KeyRef, t.OIDCSub, p.Limits()); err != nil {
+	if err := s.keys.UpdateLimits(ctx, t.KeyRef, s.ownerID(t.OIDCSub), p.Limits()); err != nil {
 		if ctx.Err() != nil {
 			return false, false, nil
 		}

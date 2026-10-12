@@ -13,6 +13,14 @@ type Config struct {
 	LiteLLMBaseURL   string
 	LiteLLMMasterKey string
 
+	// LiteLLMUserIDPrefix sets this portal's people apart from those of other
+	// portals on the same gateway. A person's allowance lives on a LiteLLM
+	// internal user, so two portals that name their users alike share every
+	// budget, and each one's limit sync rewrites the other's (issue #82). Empty
+	// keeps the plain OIDC subject, which is what the portal always used, so a
+	// single deployment needs no migration. See LiteLLMUserID.
+	LiteLLMUserIDPrefix string
+
 	OIDCIssuerURL    string
 	OIDCClientID     string
 	OIDCClientSecret string
@@ -128,6 +136,12 @@ func Load() (*Config, error) {
 
 	cfg.AdminRole = strings.TrimSpace(os.Getenv("ADMIN_ROLE"))
 
+	prefix := strings.TrimSpace(os.Getenv("LITELLM_USER_ID_PREFIX"))
+	if !validUserIDPrefix(prefix) {
+		return nil, fmt.Errorf("LITELLM_USER_ID_PREFIX may only contain letters, digits, '-', '_' and '.': %q", prefix)
+	}
+	cfg.LiteLLMUserIDPrefix = prefix
+
 	// ADMIN_IDS supersedes ADMIN_EMAILS but does not replace it: an existing
 	// deployment keeps working untouched, and both are read so an operator can
 	// migrate one admin at a time.
@@ -230,6 +244,35 @@ func parseTrustedProxies(raw string) ([]netip.Prefix, error) {
 		prefixes = append(prefixes, p.Masked())
 	}
 	return prefixes, nil
+}
+
+// validUserIDPrefix reports whether a prefix is safe to put in front of a
+// subject. The separator, ':', is excluded so the prefix always ends where the
+// subject starts.
+func validUserIDPrefix(p string) bool {
+	for _, r := range p {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
+			r == '-', r == '_', r == '.':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// LiteLLMUserID is the LiteLLM internal user that holds a person's allowance.
+// It is the one place that ID is built: the key, the limit sync and the
+// dashboard must all name the same user.
+//
+// The ID is derived, never stored, so changing the prefix of a portal that
+// already has keys leaves those keys on the old users until each is pushed
+// again. -resync-limits does that for all of them.
+func (c *Config) LiteLLMUserID(sub string) string {
+	if c.LiteLLMUserIDPrefix == "" {
+		return sub
+	}
+	return c.LiteLLMUserIDPrefix + ":" + sub
 }
 
 // readNotice reads a privacy notice file, or nothing when no path is given.

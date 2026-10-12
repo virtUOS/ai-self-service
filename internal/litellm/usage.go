@@ -208,11 +208,19 @@ func (c *Client) KeySpend(ctx context.Context, ref string) (float64, error) {
 // Fields are sent explicitly rather than omitted when empty. LiteLLM leaves an
 // omitted field untouched, so clearing a quota has to send null — otherwise a
 // profile that loses its allowance keeps enforcing the previous one.
-func (c *Client) UpdateKeyLimits(ctx context.Context, ref string, l keyprovider.Limits) error {
+//
+// A non-empty ownerID also binds the key to that internal user. The binding
+// is set on every push rather than only at creation, so a key follows its
+// owner when the portal's user IDs change (LITELLM_USER_ID_PREFIX); the
+// gateway enforces the new owner's allowance from the next request on.
+func (c *Client) UpdateKeyLimits(ctx context.Context, ref, ownerID string, l keyprovider.Limits) error {
 	payload := map[string]any{
 		"key":       ref,
 		"tpm_limit": l.TokensPerMinute,
 		"rpm_limit": l.RequestsPerMinute,
+	}
+	if ownerID != "" {
+		payload["user_id"] = ownerID
 	}
 
 	// An unrestricted profile sends an empty list, not null. /key/update
