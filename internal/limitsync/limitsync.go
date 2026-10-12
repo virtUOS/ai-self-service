@@ -25,7 +25,7 @@ import (
 
 // gateway is the slice of the key provider the sync needs.
 type gateway interface {
-	UpdateLimits(ctx context.Context, ref, ownerID string, limits keyprovider.Limits) error
+	UpdateLimits(ctx context.Context, ref string, user keyprovider.User, limits keyprovider.Limits) error
 }
 
 // maxErrorLen caps the stored failure reason. Gateway errors carry the
@@ -36,7 +36,7 @@ const maxErrorLen = 500
 type Syncer struct {
 	store   *database.Store
 	keys    gateway
-	ownerID func(sub string) string
+	user    func(sub, name, email string) keyprovider.User
 	workers int
 	kick    chan struct{}
 
@@ -47,14 +47,15 @@ type Syncer struct {
 
 // New returns a Syncer that pushes with the given number of parallel workers.
 //
-// ownerID names the gateway user that holds a key owner's allowance, given
-// their OIDC subject (config.Config.LiteLLMUserID). Every push binds the key to
-// that user, so the key, the dashboard and the sync always agree on it.
-func New(store *database.Store, keys gateway, ownerID func(sub string) string, workers int) *Syncer {
+// user describes the gateway user that holds a key owner's allowance, given
+// their OIDC subject, name and email (config.Config.LiteLLMUser). Every push
+// binds the key to that user and labels it, so the key, the dashboard and the
+// sync always agree on it.
+func New(store *database.Store, keys gateway, user func(sub, name, email string) keyprovider.User, workers int) *Syncer {
 	if workers < 1 {
 		workers = 1
 	}
-	return &Syncer{store: store, keys: keys, ownerID: ownerID, workers: workers,
+	return &Syncer{store: store, keys: keys, user: user, workers: workers,
 		kick: make(chan struct{}, 1)}
 }
 
@@ -192,14 +193,14 @@ func (s *Syncer) syncOne(ctx context.Context, t database.LimitSyncTarget) (ok, a
 		return false, true, s.fail(ctx, t, fmt.Sprintf("load profile %d: %v", *t.ProfileID, err))
 	}
 
-	if err := s.keys.UpdateLimits(ctx, t.KeyRef, s.ownerID(t.OIDCSub), p.Limits()); err != nil {
+	if err := s.keys.UpdateLimits(ctx, t.KeyRef, s.user(t.OIDCSub, t.Name, t.Email), p.Limits()); err != nil {
 		if ctx.Err() != nil {
 			return false, false, nil
 		}
 		return false, true, s.fail(ctx, t, err.Error())
 	}
 
-	if err := s.store.MarkLimitsSynced(ctx, t.KeyID, p.ID, p.LimitsRev); err != nil {
+	if err := s.store.MarkLimitsSynced(ctx, t.KeyID, p.ID, p.LimitsRev, t.Name, t.Email); err != nil {
 		if ctx.Err() != nil {
 			return true, true, nil
 		}

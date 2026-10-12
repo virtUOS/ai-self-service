@@ -47,15 +47,19 @@ func (f *limitSyncFixture) addUserWithKey(t *testing.T, sub, email string) (*Use
 	return u, k
 }
 
-// markSynced records the profile's current revision on the key, as a
-// successful push would.
+// markSynced records the profile's current revision and the owner's current
+// name and email on the key, as a successful push would.
 func (f *limitSyncFixture) markSynced(t *testing.T, k *APIKey, p *Profile) {
 	t.Helper()
 	cur, err := f.s.GetProfile(f.ctx, p.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.s.MarkLimitsSynced(f.ctx, k.ID, cur.ID, cur.LimitsRev); err != nil {
+	owner, err := f.s.GetUserByID(f.ctx, k.UserID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.s.MarkLimitsSynced(f.ctx, k.ID, cur.ID, cur.LimitsRev, owner.Name, owner.Email); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -392,5 +396,44 @@ func TestLimitSyncStatusIgnoresExpiredKeys(t *testing.T) {
 	}
 	if st.Pending != 0 || st.Failed != 0 || len(st.RecentFailures) != 0 {
 		t.Errorf("status = %+v, want nothing pending", st)
+	}
+}
+
+// A login with a new name or email changes what the owner's gateway user is
+// labelled with, so their key is pending until a push records the new values.
+func TestOwnerNameOrEmailChangeMarksTheKey(t *testing.T) {
+	for _, tc := range []struct{ name, email string }{
+		{"renamed", "a@uni-osnabrueck.de"},
+		{"sub-a", "new@uni-osnabrueck.de"},
+	} {
+		t.Run(tc.name+"/"+tc.email, func(t *testing.T) {
+			f := newLimitSyncFixture(t, "ls-owner-"+tc.name)
+			if _, err := f.s.GetOrCreateUser(f.ctx, "sub-a", tc.email, tc.name); err != nil {
+				t.Fatal(err)
+			}
+			got := f.pending(t)
+			if len(got) != 1 || got[0].KeyID != f.key.ID {
+				t.Fatalf("pending = %+v, want the owner's key", got)
+			}
+			if got[0].Name != tc.name || got[0].Email != tc.email {
+				t.Errorf("target owner = %q/%q, want the new values", got[0].Name, got[0].Email)
+			}
+
+			f.markSynced(t, f.key, f.def)
+			if got := f.pending(t); len(got) != 0 {
+				t.Errorf("pending = %+v after the push was recorded, want nothing", got)
+			}
+		})
+	}
+}
+
+// A login that changes nothing leaves the key alone.
+func TestUnchangedLoginLeavesTheKey(t *testing.T) {
+	f := newLimitSyncFixture(t, "ls-owner-same")
+	if _, err := f.s.GetOrCreateUser(f.ctx, "sub-a", "a@uni-osnabrueck.de", "sub-a"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.pending(t); len(got) != 0 {
+		t.Errorf("pending = %+v, want nothing", got)
 	}
 }

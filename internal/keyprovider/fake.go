@@ -22,8 +22,8 @@ type Fake struct {
 	Deleted   []string
 	Extended  []string
 	Relimited []string
-	// RelimitedOwners records the owner passed alongside each Relimited ref.
-	RelimitedOwners []string
+	// RelimitedUsers records the user passed alongside each Relimited ref.
+	RelimitedUsers []User
 
 	// LimitsByRef is the live limits per key, updated by UpdateLimits.
 	LimitsByRef map[string]Limits
@@ -100,7 +100,7 @@ func (f *Fake) History(_ context.Context, ref string, _ int) (History, error) {
 }
 
 // UpdateLimits records a re-application of limits to an existing key.
-func (f *Fake) UpdateLimits(_ context.Context, ref, ownerID string, l Limits) error {
+func (f *Fake) UpdateLimits(_ context.Context, ref string, user User, l Limits) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.LimitsErr != nil {
@@ -111,7 +111,7 @@ func (f *Fake) UpdateLimits(_ context.Context, ref, ownerID string, l Limits) er
 	}
 	f.LimitsByRef[ref] = l
 	f.Relimited = append(f.Relimited, ref)
-	f.RelimitedOwners = append(f.RelimitedOwners, ownerID)
+	f.RelimitedUsers = append(f.RelimitedUsers, user)
 	return nil
 }
 

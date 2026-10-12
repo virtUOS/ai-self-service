@@ -38,3 +38,36 @@ func TestLiteLLMUserIDPrefixRejectsSeparatorsAndSpaces(t *testing.T) {
 		})
 	}
 }
+
+// The email reaches the gateway user only when the option is on: LiteLLM
+// refuses an address another user holds, so it must be unique everywhere.
+func TestLiteLLMUserCarriesTheEmailOnlyWhenEnabled(t *testing.T) {
+	for _, tc := range []struct {
+		env, want string
+	}{
+		{"", ""},
+		{"false", ""},
+		{"true", "a@uni-osnabrueck.de"},
+	} {
+		t.Run("LITELLM_USER_EMAIL="+tc.env, func(t *testing.T) {
+			setRequiredEnv(t)
+			t.Setenv("LITELLM_USER_EMAIL", tc.env)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			u := cfg.LiteLLMUser("sub-a", "alice", "a@uni-osnabrueck.de")
+			if u.ID != "sub-a" || u.Name != "alice" || u.Email != tc.want {
+				t.Errorf("user = %+v, want sub-a, alice and email %q", u, tc.want)
+			}
+		})
+	}
+}
+
+func TestLiteLLMUserEmailRejectsNonsense(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("LITELLM_USER_EMAIL", "sometimes")
+	if _, err := Load(); err == nil {
+		t.Error("Load accepted LITELLM_USER_EMAIL=sometimes")
+	}
+}

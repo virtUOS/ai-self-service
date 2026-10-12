@@ -52,9 +52,9 @@ func TestCreateKeyPutsWidestWindowOnTheOwner(t *testing.T) {
 	g := newGatewayStub(t)
 
 	_, err := NewProvider(NewClient(g.srv.URL, "mk")).CreateKey(context.Background(), keyprovider.KeyRequest{
-		Alias:   "someone@uni-osnabrueck.de",
-		Owner:   "someone@uni-osnabrueck.de",
-		OwnerID: "oidc-sub-123",
+		Alias: "someone@uni-osnabrueck.de",
+		Owner: "someone@uni-osnabrueck.de",
+		User:  keyprovider.User{ID: "oidc-sub-123"},
 		Limits: keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{
 			{Budget: 0.0001, Period: "1h"},
 			{Budget: 0.1, Period: "30d"},
@@ -114,7 +114,7 @@ func TestCreateKeyUpsertsOwnerBeforeIssuingKey(t *testing.T) {
 	defer srv.Close()
 
 	_, err := NewProvider(NewClient(srv.URL, "mk")).CreateKey(context.Background(), keyprovider.KeyRequest{
-		Alias: "a", Owner: "a", OwnerID: "sub-1",
+		Alias: "a", Owner: "a", User: keyprovider.User{ID: "sub-1"},
 		Limits: keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{{Budget: 0.00001, Period: "30d"}}},
 	})
 	if err != nil {
@@ -131,7 +131,7 @@ func TestCreateKeySingleWindowGoesToTheOwner(t *testing.T) {
 	g := newGatewayStub(t)
 
 	_, err := NewProvider(NewClient(g.srv.URL, "mk")).CreateKey(context.Background(), keyprovider.KeyRequest{
-		Alias: "a", Owner: "a", OwnerID: "sub-1",
+		Alias: "a", Owner: "a", User: keyprovider.User{ID: "sub-1"},
 		Limits: keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{{Budget: 0.05, Period: "7d"}}},
 	})
 	if err != nil {
@@ -153,7 +153,7 @@ func TestCreateKeyWithoutQuotaClearsOwnerBudget(t *testing.T) {
 	g := newGatewayStub(t)
 
 	_, err := NewProvider(NewClient(g.srv.URL, "mk")).CreateKey(context.Background(), keyprovider.KeyRequest{
-		Alias: "a", Owner: "a", OwnerID: "sub-1",
+		Alias: "a", Owner: "a", User: keyprovider.User{ID: "sub-1"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -222,7 +222,7 @@ func TestQuotaFallsBackToTheKeyForUntrackedOwners(t *testing.T) {
 func TestUpdateLimitsAppliesBothHalves(t *testing.T) {
 	g := newGatewayStub(t)
 
-	err := NewProvider(NewClient(g.srv.URL, "mk")).UpdateLimits(context.Background(), "sk-1", "sub-1",
+	err := NewProvider(NewClient(g.srv.URL, "mk")).UpdateLimits(context.Background(), "sk-1", keyprovider.User{ID: "sub-1"},
 		keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{
 			{Budget: 0.0001, Period: "1h"},
 			{Budget: 0.2, Period: "30d"},

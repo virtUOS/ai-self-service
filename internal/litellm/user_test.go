@@ -6,7 +6,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
 
 // The gateway has no upsert route: /user/new answers 409 once the user exists.
@@ -25,7 +28,7 @@ func TestUpsertUserFallsBackToUpdateOnConflict(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", &UserBudget{Budget: 0.0001, Period: "30d"})
+	err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), keyprovider.User{ID: "u1"}, &UserBudget{Budget: 0.0001, Period: "30d"})
 	if err != nil {
 		t.Fatalf("upsert failed on an existing user: %v", err)
 	}
@@ -43,7 +46,7 @@ func TestUpsertUserCreatesWhenAbsent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", &UserBudget{Budget: 0.0001, Period: "30d"}); err != nil {
+	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), keyprovider.User{ID: "u1"}, &UserBudget{Budget: 0.0001, Period: "30d"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(paths) != 1 || paths[0] != "/user/new" {
@@ -62,7 +65,7 @@ func TestUpsertUserSendsSingleWindowAsSpend(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", &UserBudget{Budget: 0.1, Period: "30d"}); err != nil {
+	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), keyprovider.User{ID: "u1"}, &UserBudget{Budget: 0.1, Period: "30d"}); err != nil {
 		t.Fatal(err)
 	}
 	if got := body["max_budget"]; got != 0.1 {
@@ -87,7 +90,7 @@ func TestUpsertUserClearsBudgetWhenNil(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", nil); err != nil {
+	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), keyprovider.User{ID: "u1"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, f := range []string{"max_budget", "budget_duration"} {
@@ -144,81 +147,96 @@ func TestUserQuotaTreatsMissingUserAsNoUsage(t *testing.T) {
 	}
 }
 
-// /user/new does not only create the user: it also mints a key for them and
-// returns it. That key carries no alias and no expiry, and the portal never
-// records it, so leaving it behind strands a live credential that nothing can
-// revoke. It must be deleted as soon as the user is created.
-func TestUpsertUserRevokesTheKeyUserNewMints(t *testing.T) {
-	var paths []string
-	var deleted []string
+// recordBodies is a gateway that records each request body by path, and
+// answers /user/new with the given status.
+func recordBodies(t *testing.T, newStatus int, newBody string) (*httptest.Server, map[string]map[string]any) {
+	t.Helper()
+	bodies := map[string]map[string]any{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		paths = append(paths, r.URL.Path)
-		switch r.URL.Path {
-		case "/user/new":
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"user_id":"u1","key":"sk-minted-by-user-new"}`))
-		case "/key/delete":
-			var body struct {
-				Keys []string `json:"keys"`
-			}
-			b, _ := io.ReadAll(r.Body)
-			json.Unmarshal(b, &body)
-			deleted = append(deleted, body.Keys...)
-			w.WriteHeader(http.StatusOK)
-		default:
-			w.WriteHeader(http.StatusOK)
-		}
-	}))
-	defer srv.Close()
-
-	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", nil); err != nil {
-		t.Fatal(err)
-	}
-	if len(deleted) != 1 || deleted[0] != "sk-minted-by-user-new" {
-		t.Errorf("deleted = %v, want the key /user/new returned; an orphan key is left live otherwise", deleted)
-	}
-	if len(paths) != 2 || paths[0] != "/user/new" || paths[1] != "/key/delete" {
-		t.Errorf("call sequence = %v, want [/user/new /key/delete]", paths)
-	}
-}
-
-// The 409 path means the user already existed, so no key was minted and there
-// is nothing to revoke. Deleting on that path would target an empty key.
-func TestUpsertUserDeletesNothingOnConflict(t *testing.T) {
-	var paths []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		paths = append(paths, r.URL.Path)
+		var body map[string]any
+		b, _ := io.ReadAll(r.Body)
+		json.Unmarshal(b, &body)
+		bodies[r.URL.Path] = body
 		if r.URL.Path == "/user/new" {
-			w.WriteHeader(http.StatusConflict)
+			w.WriteHeader(newStatus)
+			w.Write([]byte(newBody))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
+	return srv, bodies
+}
 
-	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", nil); err != nil {
+// Without auto_create_key, /user/new also mints a key: one with no alias and
+// no expiry, which the portal never records and so could never revoke.
+// /user/update has no such field, so it is not sent there.
+func TestUpsertUserAsksForNoKey(t *testing.T) {
+	srv, bodies := recordBodies(t, http.StatusConflict, `{}`)
+	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), keyprovider.User{ID: "u1"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range paths {
-		if p == "/key/delete" {
-			t.Errorf("call sequence = %v, want no /key/delete when the user already existed", paths)
+	if v, ok := bodies["/user/new"]["auto_create_key"]; !ok || v != false {
+		t.Errorf("/user/new auto_create_key = %v, want false", v)
+	}
+	if _, ok := bodies["/user/update"]["auto_create_key"]; ok {
+		t.Errorf("/user/update was sent auto_create_key: %v", bodies["/user/update"])
+	}
+}
+
+// The alias and email label the user in LiteLLM's UI, and go to both routes so
+// an existing user picks up a changed name or address.
+func TestUpsertUserSendsAliasAndEmail(t *testing.T) {
+	srv, bodies := recordBodies(t, http.StatusConflict, `{}`)
+	u := keyprovider.User{ID: "u1", Name: "alice", Email: "a@uni-osnabrueck.de"}
+	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), u, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/user/new", "/user/update"} {
+		b := bodies[path]
+		if b["user_alias"] != "alice" || b["user_email"] != "a@uni-osnabrueck.de" {
+			t.Errorf("%s alias/email = %v/%v, want alice and the address", path, b["user_alias"], b["user_email"])
 		}
 	}
 }
 
-// A create that returns no key needs no cleanup, and must not fail the upsert:
-// the user exists, which is what the caller needed.
-func TestUpsertUserToleratesResponseWithoutKey(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/key/delete" {
-			t.Errorf("deleted a key though /user/new returned none")
+// Empty fields are left out rather than sent empty, so the email option being
+// off never clears an address set some other way.
+func TestUpsertUserOmitsEmptyAliasAndEmail(t *testing.T) {
+	srv, bodies := recordBodies(t, http.StatusConflict, `{}`)
+	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), keyprovider.User{ID: "u1"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/user/new", "/user/update"} {
+		for _, field := range []string{"user_alias", "user_email"} {
+			if _, ok := bodies[path][field]; ok {
+				t.Errorf("%s sent %s for an empty value", path, field)
+			}
 		}
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"user_id":"u1"}`))
+	}
+}
+
+// /user/new also answers 409 when another user holds the email. The update
+// that follows then fails, and the error must carry the 409's reason, or it
+// reads as if the portal's own user were missing.
+func TestUpsertUserReportsTheConflictWhenTheUpdateFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/user/new" {
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte(`{"error":"User with email a@uni-osnabrueck.de already exists"}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":"user not found"}`))
 	}))
 	defer srv.Close()
 
-	if err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), "u1", nil); err != nil {
-		t.Fatal(err)
+	u := keyprovider.User{ID: "u1", Email: "a@uni-osnabrueck.de"}
+	err := NewClient(srv.URL, "mk").UpsertUser(context.Background(), u, nil)
+	if err == nil {
+		t.Fatal("upsert succeeded though the update failed")
+	}
+	if !strings.Contains(err.Error(), "already exists") || !strings.Contains(err.Error(), "user not found") {
+		t.Errorf("error %q does not carry both answers", err)
 	}
 }

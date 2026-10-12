@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
 
 type Config struct {
@@ -20,6 +22,14 @@ type Config struct {
 	// keeps the plain OIDC subject, which is what the portal always used, so a
 	// single deployment needs no migration. See LiteLLMUserID.
 	LiteLLMUserIDPrefix string
+
+	// LiteLLMUserEmail records people's email addresses on their LiteLLM
+	// users, which makes them findable in LiteLLM's UI: its user search only
+	// matches IDs and addresses. It is off by default because LiteLLM refuses
+	// to create a user whose address another user already holds, and its own
+	// SSO login matches users by address. Turn it on only where every address
+	// is unique across everything connected to the gateway.
+	LiteLLMUserEmail bool
 
 	OIDCIssuerURL    string
 	OIDCClientID     string
@@ -141,6 +151,12 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("LITELLM_USER_ID_PREFIX may only contain letters, digits, '-', '_' and '.': %q", prefix)
 	}
 	cfg.LiteLLMUserIDPrefix = prefix
+
+	userEmail, err := strconv.ParseBool(envOr("LITELLM_USER_EMAIL", "false"))
+	if err != nil {
+		return nil, fmt.Errorf("LITELLM_USER_EMAIL must be true or false: %w", err)
+	}
+	cfg.LiteLLMUserEmail = userEmail
 
 	// ADMIN_IDS supersedes ADMIN_EMAILS but does not replace it: an existing
 	// deployment keeps working untouched, and both are read so an operator can
@@ -273,6 +289,17 @@ func (c *Config) LiteLLMUserID(sub string) string {
 		return sub
 	}
 	return c.LiteLLMUserIDPrefix + ":" + sub
+}
+
+// LiteLLMUser is the LiteLLM internal user a person's keys are bound to: its
+// ID (see LiteLLMUserID), the name it is labelled with, and the email address
+// when LITELLM_USER_EMAIL allows recording it.
+func (c *Config) LiteLLMUser(sub, name, email string) keyprovider.User {
+	u := keyprovider.User{ID: c.LiteLLMUserID(sub), Name: name}
+	if c.LiteLLMUserEmail {
+		u.Email = email
+	}
+	return u
 }
 
 // readNotice reads a privacy notice file, or nothing when no path is given.

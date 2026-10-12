@@ -49,6 +49,7 @@ in:
 | `OIDC_REDIRECT_URL`  | yes      | —           | Callback URL (must match OIDC client config)                       |
 | `FRONTEND_URL`       | yes      | —           | Public base URL of this app (shown to users as the API base URL)   |
 | `LITELLM_USER_ID_PREFIX` | no   |             | Only for several portals on one gateway; see [Several portals on one gateway](#several-portals-on-one-gateway) |
+| `LITELLM_USER_EMAIL` | no       | `false`     | Record people's email addresses on their LiteLLM users, so LiteLLM's user search finds them. Only where addresses are unique across everything connected to the gateway; see [People in LiteLLM](#people-in-litellm) |
 | `ADMIN_ROLE`         | no       | —           | IdP role that grants the admin panel; supersedes `ADMIN_IDS` and grants made in the panel |
 | `ADMIN_IDS`          | no       | —           | Comma-separated admins, each an OIDC subject **or** an email. Always grant, and cannot be removed from the panel — this is the recovery path if the last admin is removed |
 | `ADMIN_EMAILS`       | no       | —           | Deprecated alias for `ADMIN_IDS`; still read, email entries only   |
@@ -232,7 +233,9 @@ everything that can change what a key should enforce:
 - an admin moves a user to another profile,
 - another profile becomes the default (this affects every user without a
   profile of their own),
-- a time-limited assignment runs out.
+- a time-limited assignment runs out,
+- a person logs in with a new username or email address, which their LiteLLM
+  user is labelled with (see [People in LiteLLM](#people-in-litellm)).
 
 Renaming a profile, rewording its description or changing its key validity
 does not touch any key, because none of that changes what the gateway
@@ -285,6 +288,26 @@ user's profile, key or usage, it says so rather than showing defaults.
 Clearing a quota sends an explicit `null`. LiteLLM leaves an omitted field
 untouched, so a profile that loses its allowance would otherwise keep enforcing
 the previous one.
+
+### People in LiteLLM
+
+Each person with a key has a LiteLLM internal user, which holds their budget.
+The portal labels it with the person's username (`user_alias`), so LiteLLM's
+user list shows who is who. When someone logs in with a new username, the
+limit sync updates the label.
+
+With `LITELLM_USER_EMAIL=true` the portal also records the person's email
+address on their user. That is what makes them findable: LiteLLM's user
+search only matches user IDs and addresses. Turn it on only where every
+address is unique across everything connected to the gateway, other portals
+included. LiteLLM's own SSO login, for its admin UI, looks users up by
+address, and with two users sharing one it attaches the login to either of
+them. Turning the option on or off changes nothing until each key is pushed
+again; run `ai-self-service -resync-limits` to do that for all of them.
+Turning it off does not remove addresses already recorded.
+
+After upgrading to the version that added the labels, the first sync updates
+every unexpired key once, so every user is labelled.
 
 ### Several portals on one gateway
 

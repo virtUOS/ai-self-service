@@ -19,17 +19,19 @@ type gatewayStub struct {
 	mu         sync.Mutex
 	pushes     []string
 	owners     map[string]string
+	users      map[string]keyprovider.User
 	limits     map[string]keyprovider.Limits
 	failing    map[string]bool
 	beforePush func(ref string)
 }
 
 func newGatewayStub() *gatewayStub {
-	return &gatewayStub{owners: map[string]string{}, limits: map[string]keyprovider.Limits{},
+	return &gatewayStub{owners: map[string]string{}, users: map[string]keyprovider.User{},
+		limits:  map[string]keyprovider.Limits{},
 		failing: map[string]bool{}}
 }
 
-func (g *gatewayStub) UpdateLimits(_ context.Context, ref, ownerID string, l keyprovider.Limits) error {
+func (g *gatewayStub) UpdateLimits(_ context.Context, ref string, user keyprovider.User, l keyprovider.Limits) error {
 	g.mu.Lock()
 	hook := g.beforePush
 	g.mu.Unlock()
@@ -43,7 +45,8 @@ func (g *gatewayStub) UpdateLimits(_ context.Context, ref, ownerID string, l key
 	if g.failing[ref] {
 		return errors.New("gateway says no")
 	}
-	g.owners[ref] = ownerID
+	g.owners[ref] = user.ID
+	g.users[ref] = user
 	g.limits[ref] = l
 	return nil
 }
@@ -66,8 +69,11 @@ func (g *gatewayStub) setFailing(ref string, fail bool) {
 	g.failing[ref] = fail
 }
 
-// plainSub is the owner mapping of a portal without LITELLM_USER_ID_PREFIX.
-func plainSub(sub string) string { return sub }
+// plainUser is the owner mapping of a portal with neither
+// LITELLM_USER_ID_PREFIX nor LITELLM_USER_EMAIL.
+func plainUser(sub, name, _ string) keyprovider.User {
+	return keyprovider.User{ID: sub, Name: name}
+}
 
 type fixture struct {
 	store *database.Store
@@ -139,7 +145,7 @@ func TestRunPushesProfileLimitsToPendingKeys(t *testing.T) {
 	f.setTPM(t, 500)
 	a, b := f.addKey(t, "a"), f.addKey(t, "b")
 
-	res, err := New(f.store, f.gw, plainSub, 1).Run(f.ctx)
+	res, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +166,7 @@ func TestRunPushesProfileLimitsToPendingKeys(t *testing.T) {
 	}
 
 	// Nothing changed, so a second run pushes nothing.
-	res, err = New(f.store, f.gw, plainSub, 1).Run(f.ctx)
+	res, err = New(f.store, f.gw, plainUser, 1).Run(f.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +182,7 @@ func TestFailedKeyIsRetriedOnTheNextRun(t *testing.T) {
 	bad, good := f.addKey(t, "bad"), f.addKey(t, "good")
 	f.gw.setFailing(bad, true)
 
-	res, err := New(f.store, f.gw, plainSub, 1).Run(f.ctx)
+	res, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +199,7 @@ func TestFailedKeyIsRetriedOnTheNextRun(t *testing.T) {
 	}
 
 	f.gw.setFailing(bad, false)
-	if _, err := New(f.store, f.gw, plainSub, 1).Run(f.ctx); err != nil {
+	if _, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx); err != nil {
 		t.Fatal(err)
 	}
 	if st := f.status(t); st.Pending != 0 {
@@ -214,7 +220,7 @@ func TestEditDuringRunIsPickedUpBySameRun(t *testing.T) {
 		once.Do(func() { f.setTPM(t, 200) })
 	}
 
-	if _, err := New(f.store, f.gw, plainSub, 1).Run(f.ctx); err != nil {
+	if _, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx); err != nil {
 		t.Fatal(err)
 	}
 	if n := f.gw.pushCount(ref); n != 2 {
@@ -238,7 +244,7 @@ func TestKeyWithoutProfileIsNeverPushedEmptyLimits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := New(f.store, f.gw, plainSub, 1).Run(f.ctx)
+	res, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +266,7 @@ func TestParallelWorkersSyncEveryKey(t *testing.T) {
 		f.addKey(t, fmt.Sprintf("u%02d", i))
 	}
 
-	res, err := New(f.store, f.gw, plainSub, 4).Run(f.ctx)
+	res, err := New(f.store, f.gw, plainUser, 4).Run(f.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +282,7 @@ func TestParallelWorkersSyncEveryKey(t *testing.T) {
 // context ends.
 func TestKickStartsARun(t *testing.T) {
 	f := newFixture(t)
-	s := New(f.store, f.gw, plainSub, 1)
+	s := New(f.store, f.gw, plainUser, 1)
 	ctx, cancel := context.WithCancel(f.ctx)
 	done := make(chan struct{})
 	go func() {
@@ -325,7 +331,7 @@ func TestExpiredKeyIsNotPushed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := New(f.store, f.gw, plainSub, 1).Run(f.ctx)
+	res, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,11 +346,49 @@ func TestRunPushesTheMappedOwner(t *testing.T) {
 	f := newFixture(t)
 	ref := f.addKey(t, "a")
 
-	prefixed := func(sub string) string { return "testing:" + sub }
+	prefixed := func(sub, name, email string) keyprovider.User {
+		return keyprovider.User{ID: "testing:" + sub, Name: name, Email: email}
+	}
 	if _, err := New(f.store, f.gw, prefixed, 1).Run(f.ctx); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.gw.owners[ref]; got != "testing:a" {
 		t.Errorf("owner = %q, want testing:a", got)
+	}
+}
+
+// The push labels the owner's gateway user with their name and, where the
+// mapping allows, their email, and records both so the key is left alone
+// until either changes.
+func TestRunLabelsTheOwnerAndRecordsIt(t *testing.T) {
+	f := newFixture(t)
+	ref := f.addKey(t, "a")
+	withEmail := func(sub, name, email string) keyprovider.User {
+		return keyprovider.User{ID: sub, Name: name, Email: email}
+	}
+	if _, err := New(f.store, f.gw, withEmail, 1).Run(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if u := f.gw.users[ref]; u.Name != "a" || u.Email != "a@uni-osnabrueck.de" {
+		t.Errorf("pushed user = %+v, want name a and its email", u)
+	}
+
+	// Nothing changed, so the next run pushes nothing.
+	if _, err := New(f.store, f.gw, withEmail, 1).Run(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.gw.pushCount(ref); n != 1 {
+		t.Errorf("pushes = %d, want 1", n)
+	}
+
+	// A login with a new name makes the next run push again.
+	if _, err := f.store.GetOrCreateUser(f.ctx, "a", "a@uni-osnabrueck.de", "Alice"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(f.store, f.gw, withEmail, 1).Run(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if u := f.gw.users[ref]; f.gw.pushCount(ref) != 2 || u.Name != "Alice" {
+		t.Errorf("after the rename: pushes = %d, user = %+v; want a second push as Alice", f.gw.pushCount(ref), u)
 	}
 }
