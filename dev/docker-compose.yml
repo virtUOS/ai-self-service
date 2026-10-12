@@ -19,20 +19,13 @@ services:
   # is needed: log in as either user in mock-users.json by entering their
   # subject.
   oidc-mock:
-    image: ghcr.io/astral-sh/uv:python3.14-bookworm
-    command:
-      - sh
-      - -c
-      - >-
-        uvx --from oidc-provider-mock==0.4.8 python -m oidc_provider_mock
-        --host 0.0.0.0 --port 8081
-        --user-claims-file /users.json
+    image: ghcr.io/geigerzaehler/oidc-provider-mock:0.4.8
+    command: ["--port", "8081", "--user-claims-file", "/users.json"]
     ports:
       - "8081:8081"
     volumes:
       - ./mock-users.json:/users.json:ro,z
-    # Checked with python, not the /dev/tcp trick the Keycloak service uses:
-    # this image's sh is dash, which has no /dev/tcp.
+    # The image is python:slim, so python does the check.
     healthcheck:
       test:
         - CMD
