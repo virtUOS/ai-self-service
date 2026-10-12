@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"net/http"
 )
 
@@ -16,19 +17,30 @@ const (
 	csrfHeader    = "X-CSRF-Token"
 )
 
-// CSRF implements the signed double-submit cookie pattern.
+// CSRF protects mutating routes against cross-site request forgery in two
+// layers.
 //
 // SameSite=Lax alone is not sufficient: it still permits top-level cross-site
-// POSTs in some navigations and is unenforced on older browsers. Every mutating
-// route therefore requires a token that a cross-origin page cannot read.
+// POSTs in some navigations, is unenforced on older browsers, and does nothing
+// against a sibling host under the same parent domain, which counts as
+// same-site. Such a host can also plant cookies for the whole domain.
 //
-// The cookie holds a random value; the form carries an HMAC of that value keyed
-// by a server secret. An attacker can force a cookie but cannot forge the
-// matching signature, which is what makes this stronger than a plain
-// double-submit.
+// The first layer rejects any unsafe request a browser marks as coming from
+// another origin, same-site hosts included (http.CrossOriginProtection). It
+// reads Sec-Fetch-Site, and falls back to comparing Origin with the Host header
+// on browsers that do not send it; the reverse proxy must therefore keep Host,
+// which login already relies on.
+//
+// The second layer is a signed double-submit cookie. The cookie holds a random
+// value; the form carries an HMAC of that value keyed by a server secret. An
+// attacker can force a cookie but cannot forge the matching signature. With
+// COOKIE_SECURE the cookie is a __Host- cookie (see CookieName), so another host
+// cannot plant a cookie and token pair it got by visiting the site itself.
 type CSRF struct {
 	secret []byte
 	secure bool
+	cookie string
+	origin *http.CrossOriginProtection
 }
 
 // NewCSRF creates a CSRF protector.
@@ -48,12 +60,21 @@ func NewCSRF(secure bool, seed string) (*CSRF, error) {
 		if _, err := rand.Read(secret); err != nil {
 			return nil, fmt.Errorf("generate CSRF secret: %w", err)
 		}
-		return &CSRF{secret: secret, secure: secure}, nil
+		return newCSRF(secret, secure), nil
 	}
 
 	// Domain-separated so the seed cannot be replayed against another use.
 	sum := sha256.Sum256([]byte("ai-self-service/csrf\x00" + seed))
-	return &CSRF{secret: sum[:], secure: secure}, nil
+	return newCSRF(sum[:], secure), nil
+}
+
+func newCSRF(secret []byte, secure bool) *CSRF {
+	return &CSRF{
+		secret: secret,
+		secure: secure,
+		cookie: CookieName(csrfCookieName, secure),
+		origin: http.NewCrossOriginProtection(),
+	}
 }
 
 func (c *CSRF) sign(value string) string {
@@ -71,7 +92,7 @@ const csrfCookieMaxAge = 12 * 60 * 60
 // if the request does not already carry one.
 func (c *CSRF) Token(w http.ResponseWriter, r *http.Request) string {
 	var value string
-	if ck, err := r.Cookie(csrfCookieName); err == nil && ck.Value != "" {
+	if ck, err := r.Cookie(c.cookie); err == nil && ck.Value != "" {
 		value = ck.Value
 	} else {
 		b := make([]byte, 32)
@@ -80,7 +101,7 @@ func (c *CSRF) Token(w http.ResponseWriter, r *http.Request) string {
 		}
 		value = base64.RawURLEncoding.EncodeToString(b)
 		http.SetCookie(w, &http.Cookie{
-			Name:     csrfCookieName,
+			Name:     c.cookie,
 			Value:    value,
 			Path:     "/",
 			MaxAge:   csrfCookieMaxAge,
@@ -92,7 +113,8 @@ func (c *CSRF) Token(w http.ResponseWriter, r *http.Request) string {
 	return c.sign(value)
 }
 
-// Protect rejects unsafe-method requests whose token does not match the cookie.
+// Protect rejects unsafe-method requests that come from another origin or whose
+// token does not match the cookie.
 func (c *CSRF) Protect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -101,7 +123,16 @@ func (c *CSRF) Protect(next http.Handler) http.Handler {
 			return
 		}
 
-		ck, err := r.Cookie(csrfCookieName)
+		// Before the token check, so a cross-origin request is refused
+		// without parsing its body.
+		if err := c.origin.Check(r); err != nil {
+			slog.Info("cross-origin request blocked", "method", r.Method, "path", r.URL.Path,
+				"sec_fetch_site", r.Header.Get("Sec-Fetch-Site"), "origin", r.Header.Get("Origin"))
+			http.Error(w, "Cross-origin request blocked. Open the page on this site and try again.", http.StatusForbidden)
+			return
+		}
+
+		ck, err := r.Cookie(c.cookie)
 		if err != nil || ck.Value == "" {
 			http.Error(w, "Missing CSRF cookie. Reload the page and try again.", http.StatusForbidden)
 			return
