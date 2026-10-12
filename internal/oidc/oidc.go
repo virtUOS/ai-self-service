@@ -16,6 +16,7 @@ import (
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/virtuos/ai-self-service/internal/config"
 	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/ai-self-service/internal/session"
 	"golang.org/x/oauth2"
 )
 
@@ -104,7 +105,7 @@ func (p *Provider) LoginHandler(w http.ResponseWriter, r *http.Request) {
 
 	state := generateState()
 	http.SetCookie(w, &http.Cookie{
-		Name:     "oidc_state_" + state,
+		Name:     p.stateCookie(state),
 		Value:    state,
 		Path:     "/",
 		MaxAge:   300,
@@ -115,6 +116,12 @@ func (p *Provider) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, p.oauthConfig.AuthCodeURL(state), http.StatusFound)
 }
 
+// stateCookie names the cookie that carries a login's state. It is a __Host-
+// cookie when cookies are Secure, so a sibling host cannot plant one.
+func (p *Provider) stateCookie(state string) string {
+	return session.CookieName("oidc_state_"+state, p.cfg.CookieSecure)
+}
+
 type CallbackResult struct {
 	UserInfo *UserInfo
 	IDToken  string
@@ -122,11 +129,11 @@ type CallbackResult struct {
 
 func (p *Provider) HandleCallback(w http.ResponseWriter, r *http.Request) (*CallbackResult, error) {
 	state := r.URL.Query().Get("state")
-	cookie, err := r.Cookie("oidc_state_" + state)
+	cookie, err := r.Cookie(p.stateCookie(state))
 	if err != nil || cookie.Value != state {
 		return nil, fmt.Errorf("invalid state")
 	}
-	http.SetCookie(w, &http.Cookie{Name: "oidc_state_" + state, Value: "", Path: "/", MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: p.stateCookie(state), Value: "", Path: "/", MaxAge: -1, Secure: p.cfg.CookieSecure})
 
 	tokens, err := p.oauthConfig.Exchange(r.Context(), r.URL.Query().Get("code"))
 	if err != nil {
