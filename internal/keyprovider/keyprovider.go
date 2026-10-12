@@ -9,8 +9,14 @@ package keyprovider
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrKeyNotFound reports that a key no longer exists in the gateway, so no
+// retry can bring it back: it was deleted outside the portal. Providers wrap
+// it, so callers test with errors.Is.
+var ErrKeyNotFound = errors.New("key not found in the gateway")
 
 // Limits are the constraints applied to an issued key.
 type Limits struct {

@@ -24,14 +24,16 @@ type gatewayStub struct {
 	aliases map[string][]string
 
 	aliasFailing bool
-	limits       map[string]keyprovider.Limits
-	failing      map[string]bool
-	beforePush   func(ref string)
+	// missing holds refs the gateway no longer has.
+	missing    map[string]bool
+	limits     map[string]keyprovider.Limits
+	failing    map[string]bool
+	beforePush func(ref string)
 }
 
 func newGatewayStub() *gatewayStub {
 	return &gatewayStub{owners: map[string]string{}, users: map[string]keyprovider.User{},
-		aliases: map[string][]string{},
+		aliases: map[string][]string{}, missing: map[string]bool{},
 		limits:  map[string]keyprovider.Limits{},
 		failing: map[string]bool{}}
 }
@@ -47,6 +49,9 @@ func (g *gatewayStub) UpdateLimits(_ context.Context, ref string, user keyprovid
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.pushes = append(g.pushes, ref)
+	if g.missing[ref] {
+		return fmt.Errorf("LiteLLM /key/update returned 404: %w", keyprovider.ErrKeyNotFound)
+	}
 	if g.failing[ref] {
 		return errors.New("gateway says no")
 	}
@@ -463,5 +468,53 @@ func TestFailedRelabelIsRetried(t *testing.T) {
 	}
 	if res.Synced != 1 || len(f.gw.aliases[ref]) != 1 {
 		t.Errorf("retry: result = %+v, aliases = %v; want it synced and relabelled", res, f.gw.aliases[ref])
+	}
+}
+
+// A key the gateway no longer has was deleted outside the portal. The run
+// drops its record with an audit entry instead of failing it on every run
+// (issue #82), and leaves the other keys alone.
+func TestRunRemovesAKeyTheGatewayNoLongerHas(t *testing.T) {
+	f := newFixture(t)
+	gone, kept := f.addKey(t, "a"), f.addKey(t, "b")
+	f.gw.missing[gone] = true
+
+	res, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Removed != 1 || res.Synced != 1 || res.Failed != 0 {
+		t.Errorf("result = %+v, want one removed and one synced", res)
+	}
+	u, err := f.store.GetUserByOIDCSub(f.ctx, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k, err := f.store.GetAPIKeyByUser(f.ctx, u.ID); err != nil || k != nil {
+		t.Errorf("a's key = %+v, err = %v; want the record gone", k, err)
+	}
+	if st := f.status(t); st.Pending != 0 || st.Failed != 0 {
+		t.Errorf("status = %+v, want nothing left pending or failed", st)
+	}
+
+	events, err := f.store.ListAuditEvents(f.ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Action != database.AuditKeyMissing ||
+		events[0].SubjectEmail != "a@uni-osnabrueck.de" || !strings.Contains(events[0].Detail, gone) {
+		t.Errorf("audit = %+v, want one key.missing entry for a's key", events)
+	}
+
+	// Nothing is retried: the next run has nothing to do.
+	f.setTPM(t, 500)
+	if _, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.gw.pushCount(gone); n != 1 {
+		t.Errorf("pushes to the removed key = %d, want 1", n)
+	}
+	if n := f.gw.pushCount(kept); n != 2 {
+		t.Errorf("pushes to the kept key = %d, want 2", n)
 	}
 }

@@ -129,6 +129,7 @@ const (
 	AuditKeyExtended    = "key.extended"
 	AuditKeyDeleted     = "key.deleted"
 	AuditKeyRevoked     = "key.revoked" // by an admin, not the owner
+	AuditKeyMissing     = "key.missing" // deleted in the gateway, outside the portal
 	AuditProfileSet     = "user.profile_set"
 	AuditProfileExpired = "user.profile_expired" // by the deadline, not an admin
 	AuditAdminGranted   = "admin.granted"

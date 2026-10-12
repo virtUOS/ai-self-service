@@ -163,7 +163,9 @@ over emails above. The admin panel at `/admin` provides:
   revocation is written to the audit log.
 - **Audit log** — the 50 most recent key and profile changes, recording who did
   what to whom. Rows outlive the key and user they describe, so revoking does
-  not erase the history.
+  not erase the history. Changes nobody in the portal made, such as a profile
+  deadline passing or a key found deleted in the gateway (`key.missing`), are
+  recorded with `system` as the actor.
 - **Limit sync status** — a card above the tabs says whether all keys
   carry their profile's current limits yet. If not, it shows how many are still
   waiting, whether an update is running, which keys failed and why, and each
@@ -264,6 +266,19 @@ is retried every `LIMIT_SYNC_INTERVAL`. The admin panel lists failed keys with
 the gateway's error. A key whose owner has no profile at all, because no
 default profile exists, is never updated with empty limits, which the gateway
 would read as "unlimited"; it is reported as failed instead.
+
+**Keys deleted in the gateway.** A key deleted in LiteLLM directly, outside
+the portal, cannot be restored: the portal does not have what it would need to
+recreate it. When the sync, the dashboard or an extension finds that the
+gateway no longer has a key, the portal removes its record, logs a warning and
+writes a `key.missing` entry to the audit log. The owner's dashboard says the
+key was deleted and offers a new one. Deleting or revoking a key the gateway
+no longer has succeeds, since the key is gone either way.
+
+This trusts the gateway's answer. A portal pointed at the wrong LiteLLM, or at
+one whose database was reset, sees every key as missing and removes every
+record; check `LITELLM_BASE_URL` before starting a portal against a new
+gateway.
 
 **After upgrading** to the version that introduced the sync, every existing
 key counts as out of date once, so the first run updates all keys. With many
