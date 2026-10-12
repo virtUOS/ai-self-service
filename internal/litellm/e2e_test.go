@@ -71,7 +71,7 @@ func (g e2eGateway) createKey(t *testing.T, owner string, limits keyprovider.Lim
 	// Aliases are unique across the gateway, so a rotation needs a new one.
 	alias := owner + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	k, err := g.CreateKey(context.Background(), keyprovider.KeyRequest{
-		Alias: alias, Owner: owner, User: keyprovider.User{ID: owner}, Limits: limits,
+		Alias: alias, User: keyprovider.User{ID: owner}, Limits: limits,
 		ExpiresAt: time.Now().AddDate(0, 0, 1),
 	})
 	if err != nil {
@@ -545,5 +545,69 @@ func TestE2EUpsertUserToleratesADuplicateEmail(t *testing.T) {
 	}
 	if alias, gotEmail, keys := g.e2eUser(t, second); alias != "bob" || gotEmail != email || keys != 0 {
 		t.Errorf("second user: alias %q, email %q, %d keys; want bob, %s, no keys", alias, gotEmail, keys, email)
+	}
+}
+
+// e2eKeyInfo reads a key's alias and metadata back from the gateway.
+func (g e2eGateway) e2eKeyInfo(t *testing.T, ref string) (alias string, metadata map[string]any) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, g.baseURL+"/key/info?key="+url.QueryEscape(ref), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+envOr("LITELLM_MASTER_KEY", "sk-local-dev"))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var info struct {
+		Info struct {
+			Alias    string         `json:"key_alias"`
+			Metadata map[string]any `json:"metadata"`
+		} `json:"info"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		t.Fatalf("decode /key/info: %v", err)
+	}
+	return info.Info.Alias, info.Info.Metadata
+}
+
+// A relabel changes the alias and nothing else; in particular it leaves the
+// key's metadata alone, where LiteLLM keeps settings an admin made.
+func TestE2EUpdateAliasRelabelsTheKey(t *testing.T) {
+	g := newE2EGateway(t)
+	ctx := context.Background()
+	owner := e2eOwner(t)
+	k := g.createKey(t, owner, keyprovider.Limits{})
+
+	if _, metadata := g.e2eKeyInfo(t, k.Ref); len(metadata) != 0 {
+		t.Errorf("new key carries metadata %v, want none", metadata)
+	}
+
+	// What an admin might set on the key in LiteLLM's UI.
+	body, _ := json.Marshal(map[string]any{"key": k.Ref, "metadata": map[string]any{"admin_note": "keep"}})
+	req, err := http.NewRequest(http.MethodPost, g.baseURL+"/key/update", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+envOr("LITELLM_MASTER_KEY", "sk-local-dev"))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	alias := owner + "-relabelled"
+	if err := g.UpdateAlias(ctx, k.Ref, alias); err != nil {
+		t.Fatal(err)
+	}
+	got, metadata := g.e2eKeyInfo(t, k.Ref)
+	if got != alias {
+		t.Errorf("alias = %q, want %q", got, alias)
+	}
+	if metadata["admin_note"] != "keep" {
+		t.Errorf("metadata = %v after the relabel, want the admin's note kept", metadata)
 	}
 }

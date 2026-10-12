@@ -293,8 +293,14 @@ the previous one.
 
 Each person with a key has a LiteLLM internal user, which holds their budget.
 The portal labels it with the person's username (`user_alias`), so LiteLLM's
-user list shows who is who. When someone logs in with a new username, the
-limit sync updates the label.
+user list shows who is who. Each key is bound to that user, and its alias,
+`<subject>-<username>-<random>`, names the person as well. When someone logs
+in with a new username, the limit sync updates both labels.
+
+Keys carry no email address. Keys issued before this version still have one
+in their metadata, which is left as it is: rewriting a key's metadata would
+also replace settings an admin made there in LiteLLM. It goes when the key is
+regenerated.
 
 With `LITELLM_USER_EMAIL=true` the portal also records the person's email
 address on their user. That is what makes them findable: LiteLLM's user
@@ -307,7 +313,7 @@ again; run `ai-self-service -resync-limits` to do that for all of them.
 Turning it off does not remove addresses already recorded.
 
 After upgrading to the version that added the labels, the first sync updates
-every unexpired key once, so every user is labelled.
+every unexpired key once, so every user and key is labelled.
 
 ### Several portals on one gateway
 

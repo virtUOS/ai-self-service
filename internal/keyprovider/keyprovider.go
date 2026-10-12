@@ -51,8 +51,6 @@ type User struct {
 type KeyRequest struct {
 	// Alias identifies the key in the provider's own UI.
 	Alias string
-	// Owner is recorded as metadata so a key can be traced back to a person.
-	Owner string
 	// User is the person the key is bound to.
 	User      User
 	ExpiresAt time.Time
@@ -207,4 +205,8 @@ type Provider interface {
 	// with how the person is labelled there. An empty ID means enforce
 	// everything on the key.
 	UpdateLimits(ctx context.Context, ref string, user User, limits Limits) error
+
+	// UpdateAlias relabels an existing key, so the label follows its owner's
+	// username (see NewAlias). The alias must be unique, as on creation.
+	UpdateAlias(ctx context.Context, ref, alias string) error
 }

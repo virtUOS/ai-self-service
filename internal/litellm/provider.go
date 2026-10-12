@@ -128,6 +128,11 @@ func (p *Provider) UpdateExpiry(ctx context.Context, ref string, expiresAt time.
 	return p.client.UpdateKeyExpiry(ctx, ref, expiresAt)
 }
 
+// UpdateAlias relabels a key in LiteLLM's UI.
+func (p *Provider) UpdateAlias(ctx context.Context, ref, alias string) error {
+	return p.client.UpdateKeyAlias(ctx, ref, alias)
+}
+
 // toKeyParams converts the neutral request into LiteLLM's wire shape.
 func (p *Provider) toKeyParams(req keyprovider.KeyRequest) KeyParams {
 	models := req.Limits.Models
@@ -141,7 +146,6 @@ func (p *Provider) toKeyParams(req keyprovider.KeyRequest) KeyParams {
 		TPMLimit: req.Limits.TokensPerMinute,
 		RPMLimit: req.Limits.RequestsPerMinute,
 		UserID:   req.User.ID,
-		Metadata: map[string]any{"user_email": req.Owner},
 	}
 
 	// The allowance is already a spend cap, so it goes to the gateway as is.

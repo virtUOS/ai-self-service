@@ -44,7 +44,6 @@ type KeyParams struct {
 	BudgetLimits   []BudgetWindow `json:"budget_limits,omitempty"`
 	UserID         string         `json:"user_id,omitempty"`
 	Duration       string         `json:"duration,omitempty"`
-	Metadata       map[string]any `json:"metadata,omitempty"`
 }
 
 type createKeyResponse struct {
@@ -116,6 +115,27 @@ func (c *Client) UpdateKeyExpiry(ctx context.Context, ref string, expiresAt time
 		"key":      ref,
 		"duration": fmt.Sprintf("%dd", int(time.Until(expiresAt).Hours()/24)+1),
 	})
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.do(ctx, http.MethodPost, "/key/update", body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("LiteLLM /key/update returned %d: %s", resp.StatusCode, b)
+	}
+	return nil
+}
+
+// UpdateKeyAlias relabels a key. Only the alias is sent, so the key's limits
+// and metadata stay as they are.
+func (c *Client) UpdateKeyAlias(ctx context.Context, ref, alias string) error {
+	body, err := json.Marshal(map[string]any{"key": ref, "key_alias": alias})
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-package handlers
+package keyprovider
 
 import (
 	"strings"
@@ -9,8 +9,8 @@ import (
 // and carries the username so LiteLLM's UI stays readable. The email must not
 // appear: the IdP can reassign an address, which would leave the gateway
 // labelling a key with someone else's.
-func TestKeyAliasUsesSubjectAndUsername(t *testing.T) {
-	alias, err := keyAlias("7ca16f0b-d201-459e", "rgaritafigue")
+func TestNewAliasUsesSubjectAndUsername(t *testing.T) {
+	alias, err := NewAlias("7ca16f0b-d201-459e", "rgaritafigue")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,10 +24,10 @@ func TestKeyAliasUsesSubjectAndUsername(t *testing.T) {
 
 // Rotation creates the replacement while the old key is still live, so two
 // aliases built from the same identity must not collide.
-func TestKeyAliasIsUniquePerCall(t *testing.T) {
+func TestNewAliasIsUniquePerCall(t *testing.T) {
 	seen := make(map[string]bool)
 	for range 50 {
-		alias, err := keyAlias("sub-1", "user")
+		alias, err := NewAlias("sub-1", "user")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -40,8 +40,8 @@ func TestKeyAliasIsUniquePerCall(t *testing.T) {
 
 // A user whose IdP sends no username still gets a usable alias rather than one
 // with an empty segment in the middle.
-func TestKeyAliasWithoutUsername(t *testing.T) {
-	alias, err := keyAlias("sub-1", "")
+func TestNewAliasWithoutUsername(t *testing.T) {
+	alias, err := NewAlias("sub-1", "")
 	if err != nil {
 		t.Fatal(err)
 	}

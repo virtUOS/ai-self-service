@@ -26,6 +26,7 @@ import (
 // gateway is the slice of the key provider the sync needs.
 type gateway interface {
 	UpdateLimits(ctx context.Context, ref string, user keyprovider.User, limits keyprovider.Limits) error
+	UpdateAlias(ctx context.Context, ref, alias string) error
 }
 
 // maxErrorLen caps the stored failure reason. Gateway errors carry the
@@ -198,6 +199,21 @@ func (s *Syncer) syncOne(ctx context.Context, t database.LimitSyncTarget) (ok, a
 			return false, false, nil
 		}
 		return false, true, s.fail(ctx, t, err.Error())
+	}
+
+	// The alias carries the username (keyprovider.NewAlias), so a new name
+	// gets a new alias. Keys from before the name was recorded get one once.
+	if t.SyncedOwnerName == nil || *t.SyncedOwnerName != t.Name {
+		alias, err := keyprovider.NewAlias(t.OIDCSub, t.Name)
+		if err == nil {
+			err = s.keys.UpdateAlias(ctx, t.KeyRef, alias)
+		}
+		if err != nil {
+			if ctx.Err() != nil {
+				return false, false, nil
+			}
+			return false, true, s.fail(ctx, t, err.Error())
+		}
 	}
 
 	if err := s.store.MarkLimitsSynced(ctx, t.KeyID, p.ID, p.LimitsRev, t.Name, t.Email); err != nil {
