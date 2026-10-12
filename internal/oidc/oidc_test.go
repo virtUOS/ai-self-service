@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/virtuos/ai-self-service/internal/config"
+	"github.com/virtuos/ai-self-service/internal/oidc/oidctest"
 )
 
-func newTestProvider(t *testing.T, m *mockKeycloak) *Provider {
+func newTestProvider(t *testing.T, m *oidctest.Server) *Provider {
 	t.Helper()
 	cfg := &config.Config{
 		OIDCIssuerURL:    m.Issuer(),
@@ -28,7 +29,7 @@ func newTestProvider(t *testing.T, m *mockKeycloak) *Provider {
 }
 
 func TestDiscoveryFindsEndSessionEndpoint(t *testing.T) {
-	m := newMockKeycloak(t)
+	m := oidctest.NewServer(t)
 	p := newTestProvider(t, m)
 	url := p.LogoutURL("some-id-token")
 	if !strings.Contains(url, "/protocol/openid-connect/logout") {
@@ -40,7 +41,7 @@ func TestDiscoveryFindsEndSessionEndpoint(t *testing.T) {
 }
 
 func TestValidateLogoutTokenAcceptsValid(t *testing.T) {
-	m := newMockKeycloak(t)
+	m := oidctest.NewServer(t)
 	p := newTestProvider(t, m)
 	tok := m.SignLogoutToken(t, "user-sub-123", "ai-self-service", false)
 
@@ -56,7 +57,7 @@ func TestValidateLogoutTokenAcceptsValid(t *testing.T) {
 // The spec forbids a nonce in a logout token; accepting one would let an
 // ordinary id_token be replayed as a logout instruction.
 func TestValidateLogoutTokenRejectsNonce(t *testing.T) {
-	m := newMockKeycloak(t)
+	m := oidctest.NewServer(t)
 	p := newTestProvider(t, m)
 	tok := m.SignLogoutToken(t, "user-sub-123", "ai-self-service", true)
 
@@ -67,10 +68,10 @@ func TestValidateLogoutTokenRejectsNonce(t *testing.T) {
 
 // A plain id_token has no backchannel-logout event and must not log anyone out.
 func TestValidateLogoutTokenRejectsPlainIDToken(t *testing.T) {
-	m := newMockKeycloak(t)
+	m := oidctest.NewServer(t)
 	p := newTestProvider(t, m)
 	idToken, err := m.SignIDToken(
-		MockClaims{Sub: "user-sub-123", Email: "a@uni-osnabrueck.de"},
+		oidctest.Claims{Sub: "user-sub-123", Email: "a@uni-osnabrueck.de"},
 		"ai-self-service", time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +83,7 @@ func TestValidateLogoutTokenRejectsPlainIDToken(t *testing.T) {
 
 // Tokens minted for a different client must not be honoured.
 func TestValidateLogoutTokenRejectsWrongAudience(t *testing.T) {
-	m := newMockKeycloak(t)
+	m := oidctest.NewServer(t)
 	p := newTestProvider(t, m)
 	tok := m.SignLogoutToken(t, "user-sub-123", "some-other-client", false)
 
@@ -92,7 +93,7 @@ func TestValidateLogoutTokenRejectsWrongAudience(t *testing.T) {
 }
 
 func TestLoginMovesToRedirectURLHost(t *testing.T) {
-	p := newTestProvider(t, newMockKeycloak(t))
+	p := newTestProvider(t, oidctest.NewServer(t))
 	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8080/login?next=x", nil)
 	rec := httptest.NewRecorder()
 	p.LoginHandler(rec, req)
@@ -111,7 +112,7 @@ func TestLoginMovesToRedirectURLHost(t *testing.T) {
 }
 
 func TestLoginOnRedirectURLHostStartsAuth(t *testing.T) {
-	m := newMockKeycloak(t)
+	m := oidctest.NewServer(t)
 	p := newTestProvider(t, m)
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/login", nil)
 	rec := httptest.NewRecorder()
@@ -128,7 +129,7 @@ func TestLoginOnRedirectURLHostStartsAuth(t *testing.T) {
 // A proxy that rewrites Host would never match; after one hop the login must
 // proceed rather than redirect forever.
 func TestLoginDoesNotLoopWhenHostIsRewritten(t *testing.T) {
-	m := newMockKeycloak(t)
+	m := oidctest.NewServer(t)
 	p := newTestProvider(t, m)
 	req := httptest.NewRequest(http.MethodGet, "http://upstream:8080/login?canonical=1", nil)
 	rec := httptest.NewRecorder()

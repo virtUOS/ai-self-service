@@ -1,4 +1,5 @@
-package oidc
+// Package oidctest provides an in-process OIDC issuer for tests.
+package oidctest
 
 import (
 	"crypto/rand"
@@ -9,6 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,36 +18,39 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 )
 
-// mockKeycloak is an in-process OIDC issuer shaped like the university's
-// Keycloak realm (login.uni-osnabrueck.de/realms/virtuos): same endpoint
-// layout, same claim set, and back-channel logout support.
+// Server is an in-process OIDC issuer shaped like the university's Keycloak
+// realm (login.uni-osnabrueck.de/realms/virtuos): same endpoint layout, same
+// claim set, and back-channel logout support.
 //
 // It exists so the auth paths can be exercised in CI without a live IdP or a
 // Docker dependency. It is deliberately minimal: it signs tokens with a
 // throwaway RSA key and serves only what the app actually reads.
-type mockKeycloak struct {
+type Server struct {
 	server *httptest.Server
 	key    *rsa.PrivateKey
 	keyID  string
-	// AuthCode maps an issued authorization code to the claims it represents.
-	codes map[string]MockClaims
+
+	mu sync.Mutex
+	// codes maps an issued authorization code to the claims it represents.
+	codes map[string]Claims
 }
 
-// MockClaims are the identity fields Keycloak issues that this app consumes.
-type MockClaims struct {
+// Claims are the identity fields Keycloak issues that this app consumes.
+type Claims struct {
 	Sub               string
 	Email             string
 	Name              string
 	PreferredUsername string
 }
 
-func newMockKeycloak(t *testing.T) *mockKeycloak {
+// NewServer starts an issuer that is shut down when the test ends.
+func NewServer(t *testing.T) *Server {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	m := &mockKeycloak{key: key, keyID: "mock-key-1", codes: map[string]MockClaims{}}
+	m := &Server{key: key, keyID: "mock-key-1", codes: map[string]Claims{}}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
@@ -75,18 +80,29 @@ func newMockKeycloak(t *testing.T) *mockKeycloak {
 		}}})
 	})
 
-	// Exchanges an authorization code for an id_token, as Keycloak would.
+	// Exchanges an authorization code for an id_token, as Keycloak would. A
+	// code is good for one exchange.
 	mux.HandleFunc("/protocol/openid-connect/token", func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "bad form", http.StatusBadRequest)
 			return
 		}
-		claims, ok := m.codes[r.FormValue("code")]
+		code := r.FormValue("code")
+		m.mu.Lock()
+		claims, ok := m.codes[code]
+		delete(m.codes, code)
+		m.mu.Unlock()
 		if !ok {
 			http.Error(w, `{"error":"invalid_grant"}`, http.StatusBadRequest)
 			return
 		}
-		idToken, err := m.SignIDToken(claims, r.FormValue("client_id"), time.Now().Add(time.Hour))
+		// The oauth2 package sends the client credentials as HTTP Basic auth
+		// unless told otherwise, and in the form only as a fallback.
+		clientID := r.FormValue("client_id")
+		if id, _, ok := r.BasicAuth(); ok {
+			clientID = id
+		}
+		idToken, err := m.SignIDToken(claims, clientID, time.Now().Add(time.Hour))
 		if err != nil {
 			http.Error(w, "sign", http.StatusInternalServerError)
 			return
@@ -104,12 +120,17 @@ func newMockKeycloak(t *testing.T) *mockKeycloak {
 	return m
 }
 
-func (m *mockKeycloak) Issuer() string { return m.server.URL }
+// Issuer is the issuer URL, which is also where discovery is served.
+func (m *Server) Issuer() string { return m.server.URL }
 
-// IssueCode registers an authorization code redeemable for these claims.
-func (m *mockKeycloak) IssueCode(code string, c MockClaims) { m.codes[code] = c }
+// IssueCode registers an authorization code redeemable once for these claims.
+func (m *Server) IssueCode(code string, c Claims) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.codes[code] = c
+}
 
-func (m *mockKeycloak) signer(t *testing.T) jose.Signer {
+func (m *Server) signer(t *testing.T) jose.Signer {
 	t.Helper()
 	sk := jose.SigningKey{Algorithm: jose.RS256, Key: m.key}
 	opts := (&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", m.keyID)
@@ -121,7 +142,7 @@ func (m *mockKeycloak) signer(t *testing.T) jose.Signer {
 }
 
 // SignIDToken mints an id_token with the standard Keycloak claim set.
-func (m *mockKeycloak) SignIDToken(c MockClaims, aud string, expiry time.Time) (string, error) {
+func (m *Server) SignIDToken(c Claims, aud string, expiry time.Time) (string, error) {
 	sk := jose.SigningKey{Algorithm: jose.RS256, Key: m.key}
 	opts := (&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", m.keyID)
 	signer, err := jose.NewSigner(sk, opts)
@@ -144,7 +165,7 @@ func (m *mockKeycloak) SignIDToken(c MockClaims, aud string, expiry time.Time) (
 
 // SignLogoutToken mints a back-channel logout token per the OIDC spec: it
 // carries the backchannel-logout event and must NOT carry a nonce.
-func (m *mockKeycloak) SignLogoutToken(t *testing.T, sub, aud string, withNonce bool) string {
+func (m *Server) SignLogoutToken(t *testing.T, sub, aud string, withNonce bool) string {
 	t.Helper()
 	claims := map[string]any{
 		"iss": m.server.URL,
