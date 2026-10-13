@@ -275,6 +275,10 @@ writes a `key.missing` entry to the audit log. The owner's dashboard says the
 key was deleted and offers a new one. Deleting or revoking a key the gateway
 no longer has succeeds, since the key is gone either way.
 
+Only LiteLLM's own "not found" answer counts. A 404 from anything in front of
+it, such as a reverse proxy whose route changed or a maintenance page, is an
+ordinary failure: the record is kept and the call retried.
+
 This trusts the gateway's answer. A portal pointed at the wrong LiteLLM, or at
 one whose database was reset, sees every key as missing and removes every
 record; check `LITELLM_BASE_URL` before starting a portal against a new

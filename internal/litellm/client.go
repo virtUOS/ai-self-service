@@ -106,28 +106,52 @@ func (c *Client) DeleteKey(ctx context.Context, ref string) error {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
 	// A key that is not there is what a delete asks for: it was removed
 	// outside the portal, and the caller can drop its own record of it.
-	if resp.StatusCode == http.StatusNotFound {
+	err = keyCallError("/key/delete", resp)
+	if errors.Is(err, keyprovider.ErrKeyNotFound) {
 		slog.Info("key to delete was already gone from LiteLLM")
 		return nil
 	}
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("LiteLLM /key/delete returned %d: %s", resp.StatusCode, b)
-	}
-	return nil
+	return err
 }
 
-// keyCallError describes a failed call about one key. A 404 means the key no
-// longer exists, which no retry can change, so it wraps
+// keyCallError describes a failed call about one key. LiteLLM's answer that
+// the key no longer exists, which no retry can change, wraps
 // keyprovider.ErrKeyNotFound for callers to act on.
 func keyCallError(route string, resp *http.Response) error {
 	b, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode == http.StatusNotFound {
+	if resp.StatusCode == http.StatusNotFound && isLiteLLMNotFound(b) {
 		return fmt.Errorf("LiteLLM %s returned 404: %s: %w", route, b, keyprovider.ErrKeyNotFound)
 	}
 	return fmt.Errorf("LiteLLM %s returned %d: %s", route, resp.StatusCode, b)
+}
+
+// isLiteLLMNotFound reports whether a 404 body is LiteLLM's own error answer,
+// {"error": {..., "code": "404"}}, rather than one from something in front of
+// it: a proxy whose route changed, a maintenance page, or an unknown route,
+// which LiteLLM answers as {"detail": "Not Found"}. Such a 404 says nothing
+// about the key, and reading it as a missing key would drop the record of a key
+// that still works (issue #108).
+//
+// Only the envelope and its code are checked. The message and type differ from
+// route to route, /key/delete even reports an internal_server_error, and
+// LiteLLM may reword them in any release.
+func isLiteLLMNotFound(body []byte) bool {
+	var envelope struct {
+		Error *struct {
+			Code json.RawMessage `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &envelope) != nil || envelope.Error == nil {
+		return false
+	}
+	// The code is sent as a string, but accept a number too.
+	code := strings.Trim(string(envelope.Error.Code), `"`)
+	return code == "404"
 }
 
 func (c *Client) UpdateKeyExpiry(ctx context.Context, ref string, expiresAt time.Time) error {

@@ -47,6 +47,54 @@ func TestDeleteKeyStillFailsOnOtherErrors(t *testing.T) {
 	}
 }
 
+// 404s that are not LiteLLM's answer about the key: a proxy in front of the
+// gateway, a maintenance page, and LiteLLM's own answer to an unknown route.
+var foreignNotFound = map[string]string{
+	"html":          `<html><body><h1>404 Not Found</h1></body></html>`,
+	"empty":         ``,
+	"unknown route": `{"detail":"Not Found"}`,
+	"other json":    `{"error":"not found"}`,
+	"other code":    `{"error":{"message":"Key not found.","code":"400"}}`,
+}
+
+// A 404 that does not come from LiteLLM says nothing about the key, so the
+// delete fails and the portal keeps its record of a key that may be live.
+func TestDeleteKeyFailsOnAForeignNotFound(t *testing.T) {
+	for name, body := range foreignNotFound {
+		c := gatewayAnswering(t, http.StatusNotFound, body)
+		if err := c.DeleteKey(context.Background(), "abc"); err == nil {
+			t.Errorf("%s: delete reported success", name)
+		}
+	}
+}
+
+// Nor does such a 404 report a missing key from any other key route.
+func TestForeignNotFoundIsNotAMissingKey(t *testing.T) {
+	ctx := context.Background()
+	for name, body := range foreignNotFound {
+		c := gatewayAnswering(t, http.StatusNotFound, body)
+		for route, call := range map[string]func() error{
+			"limits": func() error { return c.UpdateKeyLimits(ctx, "abc", "", keyprovider.Limits{}) },
+			"alias":  func() error { return c.UpdateKeyAlias(ctx, "abc", "x") },
+			"expiry": func() error { return c.UpdateKeyExpiry(ctx, "abc", testExpiry()) },
+			"quota":  func() error { _, err := c.KeyQuota(ctx, "abc"); return err },
+		} {
+			if err := call(); err == nil || errors.Is(err, keyprovider.ErrKeyNotFound) {
+				t.Errorf("%s, %s: err = %v, want a plain failure", name, route, err)
+			}
+		}
+	}
+}
+
+// The code may come as a number, and the message may change.
+func TestNotFoundEnvelopeIgnoresWording(t *testing.T) {
+	c := gatewayAnswering(t, http.StatusNotFound, `{"error":{"message":"Token does not exist","type":"x","code":404}}`)
+	err := c.UpdateKeyAlias(context.Background(), "abc", "x")
+	if !errors.Is(err, keyprovider.ErrKeyNotFound) {
+		t.Errorf("err = %v, want ErrKeyNotFound", err)
+	}
+}
+
 // Every update of a missing key reports ErrKeyNotFound, so the caller can
 // stop retrying it.
 func TestKeyUpdatesReportAMissingKey(t *testing.T) {
