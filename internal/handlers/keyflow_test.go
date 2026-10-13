@@ -281,6 +281,41 @@ func TestExtendKeyUsesProfileDuration(t *testing.T) {
 	}
 }
 
+// An expired key is never pushed, so one whose profile changed while it was
+// expired still carries the old limits. Extending it has to start a sync, and
+// only once the stored expiry has moved, or the run still finds it expired.
+func TestExtendKeyStartsALimitSync(t *testing.T) {
+	ui, _, store, user := newTestUI(t, "kf-extend-sync")
+	ctx := context.Background()
+
+	post(t, ui, ui.GenerateKey, "/key/generate")
+	k, err := store.GetAPIKeyByUser(ctx, user.ID)
+	if err != nil || k == nil {
+		t.Fatalf("no key after generate: %v", err)
+	}
+	if err := store.UpdateAPIKeyExpiry(ctx, k.ID, time.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	var kicks, kicksAfterExpiryMoved int
+	ui.kickSync = func() {
+		kicks++
+		if cur, _ := store.GetAPIKeyByUser(ctx, user.ID); cur != nil && cur.ExpiresAt.After(time.Now()) {
+			kicksAfterExpiryMoved++
+		}
+	}
+
+	if rec := post(t, ui, ui.ExtendKey, "/key/extend"); rec.Code != http.StatusFound {
+		t.Fatalf("extend returned %d", rec.Code)
+	}
+	if kicks != 1 {
+		t.Fatalf("limit sync started %d times, want 1", kicks)
+	}
+	if kicksAfterExpiryMoved != 1 {
+		t.Error("limit sync started while the stored key was still expired")
+	}
+}
+
 func TestDeleteKeyRevokesUpstream(t *testing.T) {
 	ui, fake, store, user := newTestUI(t, "kf6")
 	post(t, ui, ui.GenerateKey, "/key/generate")
