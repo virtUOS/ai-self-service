@@ -375,9 +375,17 @@ func updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile) (*Profile, erro
 //
 // An update returns the profile as it was before, with its windows, read in
 // the same transaction, so the audit log can say what changed. A create
-// returns nil.
-func (s *Store) SaveProfile(ctx context.Context, p *Profile, quotas []ProfileQuota) (prev *Profile, err error) {
+// returns nil. Both return the names of the profiles the save demoted from
+// default, which the log records as well.
+func (s *Store) SaveProfile(ctx context.Context, p *Profile, quotas []ProfileQuota) (prev *Profile, demoted []string, err error) {
 	err = s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if p.IsDefault {
+			if err := tx.NewSelect().Model((*Profile)(nil)).Column("name").
+				Where("is_default <> 0 AND id <> ?", p.ID).
+				Order("id").Scan(ctx, &demoted); err != nil {
+				return fmt.Errorf("read default profile: %w", err)
+			}
+		}
 		var err error
 		if p.ID == 0 {
 			err = createProfileTx(ctx, tx, p)
@@ -390,9 +398,9 @@ func (s *Store) SaveProfile(ctx context.Context, p *Profile, quotas []ProfileQuo
 		return setProfileQuotasTx(ctx, tx, p.ID, quotas)
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return prev, nil
+	return prev, demoted, nil
 }
 
 // sameLimit compares two optional limits, where nil means unlimited.

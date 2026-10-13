@@ -335,12 +335,14 @@ func (a *Admin) CreateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := a.store.SaveProfile(r.Context(), p, quotas); err != nil {
+	_, demoted, err := a.store.SaveProfile(r.Context(), p, quotas)
+	if err != nil {
 		slog.Error("create profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+create+profile", http.StatusFound)
 		return
 	}
 	a.audit(r, database.AuditProfileCreated, p.Name, nil, describeProfile(p, quotas))
+	a.auditDemoted(r, demoted)
 	http.Redirect(w, r, "/admin?flash=Profile+created", http.StatusFound)
 }
 
@@ -348,8 +350,9 @@ func (a *Admin) CreateProfile(w http.ResponseWriter, r *http.Request) {
 func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	defer a.kickSync()
 
+	// SaveProfile creates a profile for id 0, which an update must never do.
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
+	if err != nil || id < 1 {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
@@ -369,7 +372,7 @@ func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	p.ID = id
 
-	prev, err := a.store.SaveProfile(r.Context(), p, quotas)
+	prev, demoted, err := a.store.SaveProfile(r.Context(), p, quotas)
 	if errors.Is(err, database.ErrDefaultProfile) {
 		slog.Info("refused to un-default the default profile", "profile", id)
 		http.Redirect(w, r, "/admin?flash=The+default+profile+must+stay+the+default.+Mark+another+profile+as+default+instead.", http.StatusFound)
@@ -384,7 +387,17 @@ func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	if detail := diffProfile(prev, p, quotas); detail != "" {
 		a.audit(r, database.AuditProfileUpdated, p.Name, nil, detail)
 	}
+	a.auditDemoted(r, demoted)
 	http.Redirect(w, r, "/admin?flash=Profile+updated", http.StatusFound)
+}
+
+// auditDemoted records the profiles a save demoted from default. Every user
+// without a profile of their own moved off their limits, so the change is
+// worth a row of its own, not only the "now default" on the new one.
+func (a *Admin) auditDemoted(r *http.Request, names []string) {
+	for _, name := range names {
+		a.audit(r, database.AuditProfileUpdated, name, nil, "no longer default")
+	}
 }
 
 // DeleteProfile handles POST /admin/profiles/{id}/delete.

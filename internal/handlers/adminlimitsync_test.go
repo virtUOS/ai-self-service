@@ -69,6 +69,16 @@ func newSyncTestAdmin(t *testing.T, name string) (*Admin, *database.Store, strin
 
 func postAdminForm(t *testing.T, h http.HandlerFunc, token, path string, id int64, form url.Values) *httptest.ResponseRecorder {
 	t.Helper()
+	rec := serveAdminForm(h, token, path, id, form)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("%s: status %d, want a redirect", path, rec.Code)
+	}
+	return rec
+}
+
+// serveAdminForm posts form to h as the admin with the given session, with id
+// as the route's {id}, and returns the response whatever its status.
+func serveAdminForm(h http.HandlerFunc, token, path string, id int64, form url.Values) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: token})
@@ -77,9 +87,6 @@ func postAdminForm(t *testing.T, h http.HandlerFunc, token, path string, id int6
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	rec := httptest.NewRecorder()
 	h(rec, req)
-	if rec.Code != http.StatusFound {
-		t.Fatalf("%s: status %d, want a redirect", path, rec.Code)
-	}
 	return rec
 }
 
