@@ -76,13 +76,31 @@ func (s *Store) RunMigrations(ctx context.Context) error {
 // A failure is logged, not returned: the migration is committed and will not
 // run again, and refusing to start would not bring the scrub back either.
 func (s *Store) scrubFreePages(ctx context.Context) {
-	for _, stmt := range []string{`VACUUM`, `PRAGMA wal_checkpoint(TRUNCATE)`} {
-		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
-			slog.Warn("could not scrub old plaintext keys from the database file; run VACUUM on it by hand",
-				"stmt", stmt, "err", err)
-			return
-		}
+	if err := s.scrub(ctx); err != nil {
+		slog.Warn("could not scrub old plaintext keys from the database file; run VACUUM on it by hand",
+			"err", err)
 	}
+}
+
+// scrub runs VACUUM and truncates the WAL.
+//
+// A checkpoint that another connection keeps from finishing, by still reading
+// an older snapshot, is not an error to SQLite: it reports it in the first
+// column of the pragma's result row. The vacuumed pages then stay in the WAL
+// and the old ones in the file, so that counts as a failure here.
+func (s *Store) scrub(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, `VACUUM`); err != nil {
+		return fmt.Errorf("VACUUM: %w", err)
+	}
+	var busy, logFrames, checkpointed int
+	if err := s.db.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).
+		Scan(&busy, &logFrames, &checkpointed); err != nil {
+		return fmt.Errorf("wal_checkpoint: %w", err)
+	}
+	if busy != 0 {
+		return errors.New("wal_checkpoint: another connection kept it from finishing")
+	}
+	return nil
 }
 
 // SeedDefaultProfile makes sure a default profile exists.
