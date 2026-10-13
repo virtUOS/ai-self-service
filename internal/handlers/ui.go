@@ -469,6 +469,13 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 	metrics.KeyOperations.WithLabelValues("extend", "success").Inc()
 	u.audit(r, database.AuditKeyExtended, su.User, "until "+newExpiry.Format("2006-01-02"))
 
+	// An expired key is never pushed, so it may have missed a profile change
+	// and now works again with the old limits. Push it now rather than on the
+	// next interval.
+	if u.kickSync != nil {
+		u.kickSync()
+	}
+
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
