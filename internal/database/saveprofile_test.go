@@ -29,7 +29,7 @@ func TestSaveProfileCreatesAndUpdates(t *testing.T) {
 	ctx := context.Background()
 
 	p := &Profile{Name: "students", Description: "d", Models: []string{"a"}}
-	prev, err := s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 5, Period: "24h"}})
+	prev, _, err := s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 5, Period: "24h"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestSaveProfileCreatesAndUpdates(t *testing.T) {
 	}
 
 	p.Description = "changed"
-	prev, err = s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 2, Period: "1h"}, {Budget: 10, Period: "7d"}})
+	prev, _, err = s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 2, Period: "1h"}, {Budget: 10, Period: "7d"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestSaveProfileCreateRollsBackWhenQuotasFail(t *testing.T) {
 	ctx := context.Background()
 
 	p := &Profile{Name: "half", Description: "d"}
-	if _, err := s.SaveProfile(ctx, p, twoWindowsForOnePeriod); err == nil {
+	if _, _, err := s.SaveProfile(ctx, p, twoWindowsForOnePeriod); err == nil {
 		t.Fatal("save with two windows for one period succeeded")
 	}
 
@@ -93,7 +93,7 @@ func TestSaveProfileUpdateRollsBackWhenQuotasFail(t *testing.T) {
 	ctx := context.Background()
 
 	p := &Profile{Name: "staff", Description: "before", Models: []string{"a"}}
-	if _, err := s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 5, Period: "24h"}}); err != nil {
+	if _, _, err := s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 5, Period: "24h"}}); err != nil {
 		t.Fatal(err)
 	}
 	before, err := s.GetProfile(ctx, p.ID)
@@ -102,7 +102,7 @@ func TestSaveProfileUpdateRollsBackWhenQuotasFail(t *testing.T) {
 	}
 
 	edit := &Profile{ID: p.ID, Name: "staff", Description: "after", Models: []string{"a", "b"}}
-	if _, err := s.SaveProfile(ctx, edit, twoWindowsForOnePeriod); err == nil {
+	if _, _, err := s.SaveProfile(ctx, edit, twoWindowsForOnePeriod); err == nil {
 		t.Fatal("save with two windows for one period succeeded")
 	}
 
@@ -126,11 +126,11 @@ func TestSaveProfileRefusesToUndefaultAndSavesNothing(t *testing.T) {
 
 	def := &Profile{Name: "default", Description: "before", IsDefault: true,
 		Quotas: []ProfileQuota{{Budget: 5, Period: "24h"}}}
-	if _, err := s.SaveProfile(ctx, def, def.Quotas); err != nil {
+	if _, _, err := s.SaveProfile(ctx, def, def.Quotas); err != nil {
 		t.Fatal(err)
 	}
 	edit := &Profile{ID: def.ID, Name: def.Name, Description: "changed"}
-	_, err := s.SaveProfile(ctx, edit, []ProfileQuota{{Budget: 1, Period: "1h"}})
+	_, _, err := s.SaveProfile(ctx, edit, []ProfileQuota{{Budget: 1, Period: "1h"}})
 	if !errors.Is(err, ErrDefaultProfile) {
 		t.Fatalf("err = %v, want ErrDefaultProfile", err)
 	}

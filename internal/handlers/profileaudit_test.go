@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 	"testing"
 
@@ -83,6 +84,85 @@ func TestProfileChangesAreAudited(t *testing.T) {
 		"name: students → pupils; models: a, b → a, b, c; quota 24h: 5 → 10; quota 7d: 20 → none")
 	checkProfileEvent(t, events[2], database.AuditProfileDeleted, "pupils",
 		"models a, b, c; tpm 1000; quotas 24h 10; valid 90d")
+}
+
+// The panel only posts updates for profiles it lists, so id 0 comes from a
+// hand-made request. SaveProfile reads id 0 as "create", so passing it on
+// created a profile that no audit row recorded.
+func TestUpdatingProfileZeroIsRefused(t *testing.T) {
+	a, store, token, _ := newSyncTestAdmin(t, "paudit-zero")
+	ctx := context.Background()
+	before, err := store.ListProfiles(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := serveAdminForm(a.UpdateProfile, token, "/admin/profiles/0", 0, url.Values{
+		"name":              {"unlisted"},
+		"key_duration_days": {"90"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	after, err := store.ListProfiles(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Errorf("%d profiles after the update, want %d", len(after), len(before))
+	}
+	if events := auditEvents(t, store); len(events) != 0 {
+		t.Errorf("audit = %+v, want none", events)
+	}
+}
+
+// Making a profile the default demotes the previous one, and every user
+// without a profile of their own moves to the new default's limits. The log
+// records the demotion too, whether the new default is created or edited.
+func TestDemotingTheDefaultProfileIsAudited(t *testing.T) {
+	a, store, token, _ := newSyncTestAdmin(t, "paudit-default")
+	ctx := context.Background()
+	seeded, err := store.GetDefaultProfile(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	postAdminForm(t, a.CreateProfile, token, "/admin/profiles", 0, url.Values{
+		"name":              {"staff"},
+		"key_duration_days": {"90"},
+		"is_default":        {"on"},
+	})
+	students := url.Values{"name": {"students"}, "key_duration_days": {"90"}}
+	postAdminForm(t, a.CreateProfile, token, "/admin/profiles", 0, students)
+	profiles, err := store.ListProfiles(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var studentsID int64
+	for _, p := range profiles {
+		if p.Name == "students" {
+			studentsID = p.ID
+		}
+	}
+	if studentsID == 0 {
+		t.Fatal("students not created")
+	}
+	students.Set("is_default", "on")
+	postAdminForm(t, a.UpdateProfile, token, "/admin/profiles/1", studentsID, students)
+	// Saving the default unchanged demotes nothing, least of all itself.
+	postAdminForm(t, a.UpdateProfile, token, "/admin/profiles/1", studentsID, students)
+
+	events := auditEvents(t, store)
+	if len(events) != 5 {
+		t.Fatalf("audit = %+v, want two creates, a promotion and two demotions", events)
+	}
+	checkProfileEvent(t, events[0], database.AuditProfileCreated, "staff",
+		"models all; quotas unlimited; valid 90d; default")
+	checkProfileEvent(t, events[1], database.AuditProfileUpdated, seeded.Name, "no longer default")
+	checkProfileEvent(t, events[2], database.AuditProfileCreated, "students",
+		"models all; quotas unlimited; valid 90d")
+	checkProfileEvent(t, events[3], database.AuditProfileUpdated, "students", "now default")
+	checkProfileEvent(t, events[4], database.AuditProfileUpdated, "staff", "no longer default")
 }
 
 // A refused delete deleted nothing, so it is not recorded as a deletion.
