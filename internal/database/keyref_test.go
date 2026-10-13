@@ -3,11 +3,16 @@ package database
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/sqlitedialect"
+	"github.com/uptrace/bun/driver/sqliteshim"
 	"github.com/uptrace/bun/migrate"
 
 	"github.com/virtuos/ai-self-service/internal/database/migrations"
@@ -71,6 +76,54 @@ func TestMigrationHashesStoredKeys(t *testing.T) {
 	}
 	if err := s.ExecRaw(ctx, `SELECT litellm_key FROM api_keys`); err == nil {
 		t.Error("api_keys.litellm_key still exists after the migration")
+	}
+}
+
+// A TRUNCATE checkpoint cannot finish while another connection still reads an
+// older snapshot, and SQLite reports that in the pragma's busy column rather
+// than as an error. A scrub stopped there leaves the old pages in the file, so
+// it must not pass as done.
+func TestScrubReportsABlockedCheckpoint(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "data.db")
+	// As Open, but with a short busy timeout: the checkpoint waits that long
+	// for the reader before it gives up.
+	sqldb, err := sql.Open(sqliteshim.ShimName,
+		"file:"+path+"?_journal_mode=WAL&_busy_timeout=50&_txlock=immediate&_foreign_keys=on")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewStore(bun.NewDB(sqldb, sqlitedialect.New()))
+	t.Cleanup(func() { s.Close() })
+	if err := s.RunMigrations(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetOrCreateUser(ctx, "s1", "a@b.c", "A"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Another process reading, such as a backup: its open statement holds a
+	// snapshot from before the scrub.
+	other, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { other.Close() })
+	rows, err := other.QueryContext(ctx, `SELECT id FROM users`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rows.Next() {
+		t.Fatal("no user to read")
+	}
+
+	if err := s.scrub(ctx); err == nil || !strings.Contains(err.Error(), "wal_checkpoint") {
+		t.Errorf("scrub with a reader = %v, want the blocked checkpoint reported", err)
+	}
+
+	rows.Close()
+	if err := s.scrub(ctx); err != nil {
+		t.Errorf("scrub once the reader is done = %v, want nil", err)
 	}
 }
 
