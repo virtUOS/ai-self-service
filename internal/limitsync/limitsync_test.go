@@ -146,7 +146,7 @@ func (f *fixture) setTPM(t *testing.T, tpm int64) {
 		t.Fatal(err)
 	}
 	p.TPMLimit = &tpm
-	if err := f.store.UpdateProfile(f.ctx, p); err != nil {
+	if _, _, err := f.store.UpdateProfile(f.ctx, p, p.Quotas); err != nil {
 		t.Fatal(err)
 	}
 }

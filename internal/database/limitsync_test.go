@@ -76,7 +76,7 @@ func (f *limitSyncFixture) pending(t *testing.T) []LimitSyncTarget {
 func (f *limitSyncFixture) createProfile(t *testing.T, name string, tpm int64) *Profile {
 	t.Helper()
 	p := &Profile{Name: name, TPMLimit: &tpm}
-	if err := f.s.CreateProfile(f.ctx, p); err != nil {
+	if _, err := f.s.CreateProfile(f.ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	return p
@@ -115,7 +115,7 @@ func TestProfileEditMarksKeysOnlyForLimitChanges(t *testing.T) {
 	p := f.def
 
 	p.Description = "reworded"
-	if err := f.s.UpdateProfile(f.ctx, p); err != nil {
+	if _, _, err := f.s.UpdateProfile(f.ctx, p, p.Quotas); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.pending(t); len(got) != 0 {
@@ -124,7 +124,7 @@ func TestProfileEditMarksKeysOnlyForLimitChanges(t *testing.T) {
 
 	tpm := int64(1000)
 	p.TPMLimit = &tpm
-	if err := f.s.UpdateProfile(f.ctx, p); err != nil {
+	if _, _, err := f.s.UpdateProfile(f.ctx, p, p.Quotas); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.pending(t); len(got) != 1 {
@@ -133,7 +133,7 @@ func TestProfileEditMarksKeysOnlyForLimitChanges(t *testing.T) {
 
 	f.markSynced(t, f.key, p)
 	p.Models = []string{"gpt-x"}
-	if err := f.s.UpdateProfile(f.ctx, p); err != nil {
+	if _, _, err := f.s.UpdateProfile(f.ctx, p, p.Quotas); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.pending(t); len(got) != 1 {
@@ -144,7 +144,7 @@ func TestProfileEditMarksKeysOnlyForLimitChanges(t *testing.T) {
 func TestQuotaChangeMarksKeys(t *testing.T) {
 	f := newLimitSyncFixture(t, "ls-quota")
 	windows := []ProfileQuota{{Budget: 5, Period: "24h"}, {Budget: 20, Period: "7d"}}
-	if err := f.s.SetProfileQuotas(f.ctx, f.def.ID, windows); err != nil {
+	if _, _, err := f.s.UpdateProfile(f.ctx, f.def, windows); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.pending(t); len(got) != 1 {
@@ -154,14 +154,14 @@ func TestQuotaChangeMarksKeys(t *testing.T) {
 
 	// The same windows in a different order enforce the same thing.
 	same := []ProfileQuota{{Budget: 20, Period: "7d"}, {Budget: 5, Period: "24h"}}
-	if err := f.s.SetProfileQuotas(f.ctx, f.def.ID, same); err != nil {
+	if _, _, err := f.s.UpdateProfile(f.ctx, f.def, same); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.pending(t); len(got) != 0 {
 		t.Fatalf("pending = %d after re-saving the same windows, want 0", len(got))
 	}
 
-	if err := f.s.SetProfileQuotas(f.ctx, f.def.ID, nil); err != nil {
+	if _, _, err := f.s.UpdateProfile(f.ctx, f.def, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.pending(t); len(got) != 1 {
@@ -196,7 +196,7 @@ func TestChangingTheDefaultMarksUnassignedUsers(t *testing.T) {
 
 	newDefault := f.createProfile(t, "new default", 20)
 	newDefault.IsDefault = true
-	if err := f.s.UpdateProfile(f.ctx, newDefault); err != nil {
+	if _, _, err := f.s.UpdateProfile(f.ctx, newDefault, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -372,7 +372,7 @@ func TestProfileEditSkipsExpiredKeys(t *testing.T) {
 
 	tpm := int64(42)
 	f.def.TPMLimit = &tpm
-	if err := f.s.UpdateProfile(f.ctx, f.def); err != nil {
+	if _, _, err := f.s.UpdateProfile(f.ctx, f.def, f.def.Quotas); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.pending(t); len(got) != 0 {

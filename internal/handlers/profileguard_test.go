@@ -55,7 +55,7 @@ func TestAdminCannotDeleteAnAssignedProfile(t *testing.T) {
 	a, store, token, _ := newSyncTestAdmin(t, "pguard-inuse")
 	ctx := context.Background()
 	p := &database.Profile{Name: "lecturers"}
-	if err := store.CreateProfile(ctx, p); err != nil {
+	if _, err := store.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	u, err := store.GetOrCreateUser(ctx, "sub-x", "x@uni-osnabrueck.de", "X")
@@ -81,7 +81,7 @@ func TestAdminCannotClearAProfileName(t *testing.T) {
 	a, store, token, _ := newSyncTestAdmin(t, "pguard-noname")
 	ctx := context.Background()
 	p := &database.Profile{Name: "lecturers"}
-	if err := store.CreateProfile(ctx, p); err != nil {
+	if _, err := store.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 

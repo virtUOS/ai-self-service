@@ -42,7 +42,7 @@ func TestRunLeavesFutureDeadlines(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := &database.Profile{Name: "raised"}
-	if err := store.CreateProfile(ctx, p); err != nil {
+	if _, err := store.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	tomorrow := time.Now().Add(24 * time.Hour)
@@ -73,7 +73,7 @@ func TestRunRevertsToTheDefaultProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := &database.Profile{Name: "raised"}
-	if err := store.CreateProfile(ctx, p); err != nil {
+	if _, err := store.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	yesterday := time.Now().Add(-time.Hour)
@@ -107,10 +107,10 @@ func TestRunRevertsToTheChosenProfile(t *testing.T) {
 	}
 	from := &database.Profile{Name: "raised"}
 	to := &database.Profile{Name: "restricted"}
-	if err := store.CreateProfile(ctx, from); err != nil {
+	if _, err := store.CreateProfile(ctx, from, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateProfile(ctx, to); err != nil {
+	if _, err := store.CreateProfile(ctx, to, nil); err != nil {
 		t.Fatal(err)
 	}
 	yesterday := time.Now().Add(-time.Hour)
@@ -143,10 +143,10 @@ func TestRunLeavesThePushToTheLimitSync(t *testing.T) {
 	}
 	from := &database.Profile{Name: "raised"}
 	to := &database.Profile{Name: "restricted"}
-	if err := store.CreateProfile(ctx, from); err != nil {
+	if _, err := store.CreateProfile(ctx, from, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateProfile(ctx, to); err != nil {
+	if _, err := store.CreateProfile(ctx, to, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.CreateAPIKey(ctx, &database.APIKey{
@@ -193,7 +193,7 @@ func TestRunRevokesTheKeyWhenAsked(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := &database.Profile{Name: "raised"}
-	if err := store.CreateProfile(ctx, p); err != nil {
+	if _, err := store.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.CreateAPIKey(ctx, &database.APIKey{
@@ -243,7 +243,7 @@ func TestRunIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := &database.Profile{Name: "raised"}
-	if err := store.CreateProfile(ctx, p); err != nil {
+	if _, err := store.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	yesterday := time.Now().Add(-time.Hour)
@@ -282,7 +282,7 @@ func TestRunKeepsTheDeadlineWhenTheGatewayFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := &database.Profile{Name: "raised"}
-	if err := store.CreateProfile(ctx, p); err != nil {
+	if _, err := store.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.CreateAPIKey(ctx, &database.APIKey{

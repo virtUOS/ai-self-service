@@ -259,7 +259,7 @@ func TestExtendKeyUsesProfileDuration(t *testing.T) {
 	ctx := context.Background()
 
 	p := &database.Profile{Name: "students", KeyDurationDays: 30}
-	if err := store.CreateProfile(ctx, p); err != nil {
+	if _, err := store.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SetUserProfile(ctx, user.ID, &p.ID); err != nil {
@@ -387,10 +387,7 @@ func TestGenerateKeyPassesQuotaToProvider(t *testing.T) {
 	ctx := context.Background()
 
 	p := &database.Profile{Name: "students"}
-	if err := store.CreateProfile(ctx, p); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.SetProfileQuotas(ctx, p.ID, []database.ProfileQuota{
+	if _, err := store.CreateProfile(ctx, p, []database.ProfileQuota{
 		{Budget: 0.1, Period: "24h"},
 	}); err != nil {
 		t.Fatal(err)

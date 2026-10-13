@@ -11,10 +11,7 @@ func seedProfileWithQuotas(t *testing.T, s *Store, name string, isDefault bool) 
 	ctx := context.Background()
 
 	p := &Profile{Name: name, Description: "d", IsDefault: isDefault}
-	if err := s.CreateProfile(ctx, p); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{
+	if _, err := s.CreateProfile(ctx, p, []ProfileQuota{
 		{Budget: 0.0001, Period: "1h"},
 		{Budget: 0.1, Period: "30d"},
 	}); err != nil {
@@ -133,7 +130,7 @@ func TestListProfilesIncludesProfilesWithoutQuotas(t *testing.T) {
 	if err := s.RunMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateProfile(ctx, &Profile{Name: "unlimited", Description: "d"}); err != nil {
+	if _, err := s.CreateProfile(ctx, &Profile{Name: "unlimited", Description: "d"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	seedProfileWithQuotas(t, s, "capped", false)

@@ -196,21 +196,16 @@ func (s *Store) GetProfile(ctx context.Context, id int64) (*Profile, error) {
 	return p, nil
 }
 
-// SetProfileQuotas replaces a profile's allowance windows.
+// setProfileQuotasTx replaces a profile's allowance windows.
 //
 // Replace rather than merge: a window an admin removed must stop being
-// enforced. Done in one transaction so a profile is never briefly unlimited.
+// enforced. It runs in the transaction that saves the profile, so a profile is
+// never saved without its windows, which would read as unlimited.
 //
 // A set that differs from the stored one raises the profile's LimitsRev, which
 // marks every key on the profile for the limit sync. Saving the same windows
 // again does not, so re-saving a profile for an unrelated edit does not push
 // to every key it covers.
-func (s *Store) SetProfileQuotas(ctx context.Context, profileID int64, quotas []ProfileQuota) error {
-	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		return setProfileQuotasTx(ctx, tx, profileID, quotas)
-	})
-}
-
 func setProfileQuotasTx(ctx context.Context, tx bun.Tx, profileID int64, quotas []ProfileQuota) error {
 	rows := make([]ProfileQuota, 0, len(quotas))
 	for _, q := range quotas {
@@ -282,12 +277,25 @@ func (s *Store) GetDefaultProfile(ctx context.Context) (*Profile, error) {
 	return p, nil
 }
 
-// CreateProfile inserts a profile. Marking it default demotes the previous
-// default in the same transaction, since the database permits only one.
-func (s *Store) CreateProfile(ctx context.Context, p *Profile) error {
-	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		return createProfileTx(ctx, tx, p)
+// CreateProfile inserts a profile with its quota windows, in one transaction:
+// a failure at either step saves nothing. Marking it default demotes the
+// previous default, since the database permits only one, and returns the names
+// of the profiles it demoted, which the audit log records.
+func (s *Store) CreateProfile(ctx context.Context, p *Profile, quotas []ProfileQuota) (demoted []string, err error) {
+	err = s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		var err error
+		if demoted, err = demotedDefaults(ctx, tx, p); err != nil {
+			return err
+		}
+		if err := createProfileTx(ctx, tx, p); err != nil {
+			return err
+		}
+		return setProfileQuotasTx(ctx, tx, p.ID, quotas)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return demoted, nil
 }
 
 func createProfileTx(ctx context.Context, tx bun.Tx, p *Profile) error {
@@ -312,6 +320,21 @@ func createProfileTx(ctx context.Context, tx bun.Tx, p *Profile) error {
 	return err
 }
 
+// demotedDefaults returns the names of the profiles that saving p demotes
+// from default: none unless p is marked as the default.
+func demotedDefaults(ctx context.Context, tx bun.Tx, p *Profile) ([]string, error) {
+	if !p.IsDefault {
+		return nil, nil
+	}
+	var names []string
+	if err := tx.NewSelect().Model((*Profile)(nil)).Column("name").
+		Where("is_default <> 0 AND id <> ?", p.ID).
+		Order("id").Scan(ctx, &names); err != nil {
+		return nil, fmt.Errorf("read default profile: %w", err)
+	}
+	return names, nil
+}
+
 // clearDefaultProfile demotes every default profile except keepID (0 keeps none).
 func clearDefaultProfile(ctx context.Context, tx bun.Tx, keepID int64) error {
 	q := tx.NewUpdate().Model((*Profile)(nil)).
@@ -324,18 +347,34 @@ func clearDefaultProfile(ctx context.Context, tx bun.Tx, keepID int64) error {
 	return err
 }
 
-// UpdateProfile saves a profile, demoting any other default when this one is
-// marked as such. Saving the default as not the default returns
-// ErrDefaultProfile.
+// UpdateProfile saves an existing profile and replaces its quota windows, in
+// one transaction: a failure at either step saves nothing. It never creates a
+// profile; for an ID that does not exist it returns an error wrapping
+// sql.ErrNoRows. Marking the profile default demotes any other default, and
+// saving the default as not the default returns ErrDefaultProfile.
 //
-// A change to the models or the TPM/RPM limits raises LimitsRev, which marks
-// every key on the profile for the limit sync. The quota windows are not
-// touched; SaveProfile saves them with the profile.
-func (s *Store) UpdateProfile(ctx context.Context, p *Profile) error {
-	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		_, err := updateProfileTx(ctx, tx, p)
-		return err
+// A change to the models or the TPM/RPM limits raises LimitsRev, as does a
+// change to the windows, which marks every key on the profile for the limit
+// sync.
+//
+// It returns the profile as it was before, with its windows, read in the same
+// transaction, so the audit log can say what changed, and the names of the
+// profiles the save demoted from default, which the log records as well.
+func (s *Store) UpdateProfile(ctx context.Context, p *Profile, quotas []ProfileQuota) (prev *Profile, demoted []string, err error) {
+	err = s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		var err error
+		if demoted, err = demotedDefaults(ctx, tx, p); err != nil {
+			return err
+		}
+		if prev, err = updateProfileTx(ctx, tx, p); err != nil {
+			return err
+		}
+		return setProfileQuotasTx(ctx, tx, p.ID, quotas)
 	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return prev, demoted, nil
 }
 
 // updateProfileTx saves p and returns the profile as it was before, with its
@@ -384,41 +423,6 @@ func updateProfileTx(ctx context.Context, tx bun.Tx, p *Profile) (*Profile, erro
 		return nil, err
 	}
 	return current, nil
-}
-
-// SaveProfile creates a profile (when p.ID is 0) or updates it, and replaces
-// its quota windows, in one transaction. A profile is never left saved without
-// the windows the admin gave it, which would read as unlimited. It refuses as
-// CreateProfile and UpdateProfile do, and a refusal saves nothing.
-//
-// An update returns the profile as it was before, with its windows, read in
-// the same transaction, so the audit log can say what changed. A create
-// returns nil. Both return the names of the profiles the save demoted from
-// default, which the log records as well.
-func (s *Store) SaveProfile(ctx context.Context, p *Profile, quotas []ProfileQuota) (prev *Profile, demoted []string, err error) {
-	err = s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		if p.IsDefault {
-			if err := tx.NewSelect().Model((*Profile)(nil)).Column("name").
-				Where("is_default <> 0 AND id <> ?", p.ID).
-				Order("id").Scan(ctx, &demoted); err != nil {
-				return fmt.Errorf("read default profile: %w", err)
-			}
-		}
-		var err error
-		if p.ID == 0 {
-			err = createProfileTx(ctx, tx, p)
-		} else {
-			prev, err = updateProfileTx(ctx, tx, p)
-		}
-		if err != nil {
-			return err
-		}
-		return setProfileQuotasTx(ctx, tx, p.ID, quotas)
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	return prev, demoted, nil
 }
 
 // sameLimit compares two optional limits, where nil means unlimited.

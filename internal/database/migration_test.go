@@ -57,7 +57,7 @@ func TestSingleDefaultProfile(t *testing.T) {
 	if err := s.RunMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateProfile(ctx, &Profile{Name: "d1", IsDefault: true}); err != nil {
+	if _, err := s.CreateProfile(ctx, &Profile{Name: "d1", IsDefault: true}, nil); err != nil {
 		t.Fatalf("first default: %v", err)
 	}
 	now := time.Now()
@@ -69,7 +69,7 @@ func TestSingleDefaultProfile(t *testing.T) {
 	}
 	// Non-default profiles must still be unrestricted.
 	for _, n := range []string{"p1", "p2", "p3"} {
-		if err := s.CreateProfile(ctx, &Profile{Name: n}); err != nil {
+		if _, err := s.CreateProfile(ctx, &Profile{Name: n}, nil); err != nil {
 			t.Fatalf("non-default profile %s rejected: %v", n, err)
 		}
 	}

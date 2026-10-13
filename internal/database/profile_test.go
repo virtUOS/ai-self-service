@@ -31,10 +31,10 @@ func TestCreateDefaultProfileDemotesPrevious(t *testing.T) {
 	s := migratedStore(t, "pf1")
 	ctx := context.Background()
 
-	if err := s.CreateProfile(ctx, &Profile{Name: "students", IsDefault: true}); err != nil {
+	if _, err := s.CreateProfile(ctx, &Profile{Name: "students", IsDefault: true}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateProfile(ctx, &Profile{Name: "lecturers", IsDefault: true}); err != nil {
+	if _, err := s.CreateProfile(ctx, &Profile{Name: "lecturers", IsDefault: true}, nil); err != nil {
 		t.Fatalf("second default rejected instead of taking over: %v", err)
 	}
 	if n := countDefaults(t, s); n != 1 {
@@ -54,16 +54,16 @@ func TestUpdateProfileToDefaultDemotesPrevious(t *testing.T) {
 	s := migratedStore(t, "pf2")
 	ctx := context.Background()
 
-	if err := s.CreateProfile(ctx, &Profile{Name: "students", IsDefault: true}); err != nil {
+	if _, err := s.CreateProfile(ctx, &Profile{Name: "students", IsDefault: true}, nil); err != nil {
 		t.Fatal(err)
 	}
 	other := &Profile{Name: "lecturers"}
-	if err := s.CreateProfile(ctx, other); err != nil {
+	if _, err := s.CreateProfile(ctx, other, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	other.IsDefault = true
-	if err := s.UpdateProfile(ctx, other); err != nil {
+	if _, _, err := s.UpdateProfile(ctx, other, nil); err != nil {
 		t.Fatalf("promoting to default failed: %v", err)
 	}
 	if n := countDefaults(t, s); n != 1 {
@@ -81,11 +81,11 @@ func TestUpdateDefaultProfileKeepsItself(t *testing.T) {
 	ctx := context.Background()
 
 	p := &Profile{Name: "students", IsDefault: true, Description: "before"}
-	if err := s.CreateProfile(ctx, p); err != nil {
+	if _, err := s.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	p.Description = "after"
-	if err := s.UpdateProfile(ctx, p); err != nil {
+	if _, _, err := s.UpdateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	if n := countDefaults(t, s); n != 1 {
@@ -100,12 +100,12 @@ func TestUpdateProfileRefusesToUndefault(t *testing.T) {
 	ctx := context.Background()
 
 	p := &Profile{Name: "students", IsDefault: true, Description: "before"}
-	if err := s.CreateProfile(ctx, p); err != nil {
+	if _, err := s.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	p.IsDefault = false
 	p.Description = "after"
-	if err := s.UpdateProfile(ctx, p); !errors.Is(err, ErrDefaultProfile) {
+	if _, _, err := s.UpdateProfile(ctx, p, nil); !errors.Is(err, ErrDefaultProfile) {
 		t.Fatalf("err = %v, want ErrDefaultProfile", err)
 	}
 	d, err := s.GetDefaultProfile(ctx)
@@ -122,10 +122,7 @@ func TestDeleteProfileRefusesDefault(t *testing.T) {
 	ctx := context.Background()
 
 	p := &Profile{Name: "students", IsDefault: true}
-	if err := s.CreateProfile(ctx, p); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Budget: 1, Period: "1d"}}); err != nil {
+	if _, err := s.CreateProfile(ctx, p, []ProfileQuota{{Budget: 1, Period: "1d"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteProfile(ctx, p.ID); !errors.Is(err, ErrDefaultProfile) {
@@ -147,10 +144,7 @@ func TestDeleteProfileRefusesAssignedProfile(t *testing.T) {
 	ctx := context.Background()
 
 	p := &Profile{Name: "lecturers"}
-	if err := s.CreateProfile(ctx, p); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Budget: 1, Period: "1d"}}); err != nil {
+	if _, err := s.CreateProfile(ctx, p, []ProfileQuota{{Budget: 1, Period: "1d"}}); err != nil {
 		t.Fatal(err)
 	}
 	for _, sub := range []string{"a", "b"} {
@@ -186,7 +180,7 @@ func TestProfileModelsRoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	p := &Profile{Name: "restricted", Models: []string{"Qwen/Qwen3.8-27B-FP8", "lernki/gpt-oss-120b"}}
-	if err := s.CreateProfile(ctx, p); err != nil {
+	if _, err := s.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.GetProfile(ctx, p.ID)
@@ -198,7 +192,7 @@ func TestProfileModelsRoundTrip(t *testing.T) {
 	}
 
 	p.Models = []string{"bge-m3"}
-	if err := s.UpdateProfile(ctx, p); err != nil {
+	if _, _, err := s.UpdateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = s.GetProfile(ctx, p.ID)
@@ -213,10 +207,7 @@ func TestProfileQuotaFieldsPersist(t *testing.T) {
 	ctx := context.Background()
 
 	p := &Profile{Name: "students", KeyDurationDays: 30}
-	if err := s.CreateProfile(ctx, p); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{
+	if _, err := s.CreateProfile(ctx, p, []ProfileQuota{
 		{Budget: 0.1, Period: "24h"},
 	}); err != nil {
 		t.Fatal(err)
@@ -234,10 +225,7 @@ func TestProfileQuotaFieldsPersist(t *testing.T) {
 	}
 
 	p.KeyDurationDays = 365
-	if err := s.UpdateProfile(ctx, p); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{
+	if _, _, err := s.UpdateProfile(ctx, p, []ProfileQuota{
 		{Budget: 0.5, Period: "30d"},
 	}); err != nil {
 		t.Fatal(err)
@@ -301,10 +289,10 @@ func TestSeedPromotesProfileNamedDefault(t *testing.T) {
 	ctx := context.Background()
 
 	p := &Profile{Name: "default", IsDefault: true, Description: "kept"}
-	if err := s.CreateProfile(ctx, p); err != nil {
+	if _, err := s.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateProfile(ctx, &Profile{Name: "lecturers"}); err != nil {
+	if _, err := s.CreateProfile(ctx, &Profile{Name: "lecturers"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.ExecRaw(ctx, "UPDATE profiles SET is_default = 0"); err != nil {
@@ -336,7 +324,7 @@ func TestSeedRefusesWithoutCandidate(t *testing.T) {
 	s := migratedStore(t, "seed-refuse")
 	ctx := context.Background()
 
-	if err := s.CreateProfile(ctx, &Profile{Name: "students", IsDefault: true}); err != nil {
+	if _, err := s.CreateProfile(ctx, &Profile{Name: "students", IsDefault: true}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.ExecRaw(ctx, "UPDATE profiles SET is_default = 0"); err != nil {

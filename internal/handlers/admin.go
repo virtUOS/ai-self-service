@@ -335,7 +335,7 @@ func (a *Admin) CreateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, demoted, err := a.store.SaveProfile(r.Context(), p, quotas)
+	demoted, err := a.store.CreateProfile(r.Context(), p, quotas)
 	if err != nil {
 		slog.Error("create profile", "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+create+profile", http.StatusFound)
@@ -350,7 +350,8 @@ func (a *Admin) CreateProfile(w http.ResponseWriter, r *http.Request) {
 func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	defer a.kickSync()
 
-	// SaveProfile creates a profile for id 0, which an update must never do.
+	// Profile IDs start at 1, so anything lower is a malformed URL, not a
+	// profile that has gone.
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil || id < 1 {
 		http.Error(w, "invalid id", http.StatusBadRequest)
@@ -372,7 +373,7 @@ func (a *Admin) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	p.ID = id
 
-	prev, demoted, err := a.store.SaveProfile(r.Context(), p, quotas)
+	prev, demoted, err := a.store.UpdateProfile(r.Context(), p, quotas)
 	if errors.Is(err, database.ErrDefaultProfile) {
 		slog.Info("refused to un-default the default profile", "profile", id)
 		http.Redirect(w, r, "/admin?flash=The+default+profile+must+stay+the+default.+Mark+another+profile+as+default+instead.", http.StatusFound)
