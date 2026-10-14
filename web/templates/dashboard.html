@@ -179,8 +179,8 @@
         </p>
       {{end}}
     {{else if .Usage.HasQuota}}
-      {{/* No per-window figures — spend logging is off, so consumption inside
-           each window cannot be summed. One bar for the window that binds.
+      {{/* No per-window figures — the gateway did not report consumption for
+           every window. One bar for the window that binds.
            Both figures are spend, straight from the gateway. */}}
       <p style="margin-bottom:.35rem">
         <strong>{{fmtPct .Usage.Used .Usage.QuotaPct}}</strong> {{T .Lang "dash.quota.used"}}

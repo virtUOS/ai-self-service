@@ -630,9 +630,8 @@ type usageReport struct {
 	// and the tightest binds: a user with room on their monthly allowance can
 	// still be blocked by an hourly cap.
 	//
-	// Empty when the gateway keeps no per-request log, since consumption per
-	// window is summed from it — the gateway tracks each window internally but
-	// does not report it. The card falls back to the single bar then.
+	// Empty when the gateway cannot report consumption for every window. The
+	// card falls back to the single bar then.
 	Windows []quotaWindowView
 
 	// Incomplete is set when part of the report could not be read from the
@@ -783,9 +782,9 @@ func quotaPct(used, limit float64) int {
 // quotaWindows reports each allowance window with what it has left.
 //
 // Returns nothing when the provider cannot report per-window figures, or when
-// consumption is unknown for any window — spend logging can be switched off,
-// and a bar drawn from a silent zero would promise an allowance the user may
-// not have. The card falls back to the single gateway-reported bar then. An
+// consumption is unknown for any window — a bar drawn from a silent zero would
+// promise an allowance the user may not have. The card falls back to the
+// single gateway-reported bar then. An
 // error means the gateway could not be read.
 func (u *UI) quotaWindows(ctx context.Context, ref, ownerID string, lang i18n.Lang) ([]quotaWindowView, error) {
 	reporter, ok := u.keys.(keyprovider.UsageReporter)

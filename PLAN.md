@@ -48,8 +48,9 @@ Phases 1–6 of the original assessment all shipped:
   (100k/day AND 1M/month); the gateway enforces each independently.
 - **A usage bar per quota window** — the card shows every allowance, since the
   tightest binds; the headline names the window closest to exhausted rather
-  than the widest. Consumption per window is summed from the spend log, as the
-  gateway tracks each window internally but reports only one total.
+  than the widest. Consumption per window is the gateway's own counter for it,
+  which LiteLLM reports since 1.105, so the dashboard no longer downloads the
+  spend log for it (#116).
 - **Quota follows the person** — the widest window is enforced on a LiteLLM
   internal user rather than the key, so regenerating a key no longer resets it
   (#26). Shorter burst windows stay on the key.

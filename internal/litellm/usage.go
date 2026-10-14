@@ -63,8 +63,7 @@ func (c *Client) History(ctx context.Context, ref string, days int) (keyprovider
 //
 // A date-string compare is the right granularity here: the chart and the
 // per-model table are both bucketed by UTC day, so a row either belongs to a
-// counted day or it does not. spentSince in windows.go is the other case — it
-// bounds an exact window start, so it parses the timestamp instead.
+// counted day or it does not.
 func dayCutoff(days int) string {
 	return time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
 }

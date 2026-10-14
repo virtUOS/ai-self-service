@@ -305,55 +305,79 @@ func TestE2EOwnerQuotaSurvivesRotation(t *testing.T) {
 	})
 }
 
-// The windows the dashboard draws count real spend from the log, against the
-// limits that were pushed.
-func TestE2EWindowsReportRealUsage(t *testing.T) {
-	g := newE2EGateway(t)
-	ctx := context.Background()
-	owner := e2eOwner(t)
+// Every shape a profile's windows can take upstream reports the gateway's own
+// figures: the widest window on the owner, and nothing, one flat window or
+// several in budget_limits on the key.
+func TestE2EWindowsByShape(t *testing.T) {
+	cases := []struct {
+		name    string
+		quotas  []keyprovider.QuotaWindow
+		periods []string
+	}{
+		{"no limit", nil, nil},
+		{"owner only", []keyprovider.QuotaWindow{{Budget: 20, Period: "7d"}}, []string{"7d"}},
+		{"owner and one key window", []keyprovider.QuotaWindow{
+			{Budget: 1, Period: "1h"}, {Budget: 20, Period: "7d"},
+		}, []string{"1h", "7d"}},
+		{"owner and two key windows", []keyprovider.QuotaWindow{
+			{Budget: 1, Period: "1h"}, {Budget: 5, Period: "24h"}, {Budget: 20, Period: "7d"},
+		}, []string{"1h", "24h", "7d"}},
+	}
 
-	k := g.createKey(t, owner, keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{
-		{Budget: 1, Period: "1h"},
-		{Budget: 10, Period: "30d"},
-	}})
-	g.mustComplete(t, k.Secret, "mock-small")
-	g.mustComplete(t, k.Secret, "mock-small")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := newE2EGateway(t)
+			ctx := context.Background()
+			owner := e2eOwner(t)
 
-	eventually(t, "windows count both requests", func() error {
-		h, err := g.History(ctx, k.Ref, 1)
-		if err != nil {
-			return err
-		}
-		if len(h.Models) != 1 || h.Models[0].Requests != 2 {
-			return fmt.Errorf("log holds %+v, want both requests", h.Models)
-		}
-		spent, err := g.TotalSpend(ctx, k.Ref)
-		if err != nil {
-			return err
-		}
-		windows, err := g.Windows(ctx, k.Ref, owner)
-		if err != nil {
-			return err
-		}
-		if len(windows) != 2 {
-			return fmt.Errorf("got %d windows, want 2: %+v", len(windows), windows)
-		}
-		limits := map[string]float64{}
-		for _, w := range windows {
-			limits[w.Period] = w.Limit
-			if !w.UsedKnown || spent <= 0 || !near(w.Used, spent) {
-				return fmt.Errorf("%s window: used=%v known=%v, want the key's %v",
-					w.Period, w.Used, w.UsedKnown, spent)
-			}
-			if w.ResetsAt.IsZero() {
-				return fmt.Errorf("%s window has no reset time", w.Period)
-			}
-		}
-		if limits["1h"] != 1 || limits["30d"] != 10 {
-			return fmt.Errorf("limits = %v, want 1h:1 30d:10", limits)
-		}
-		return nil
-	})
+			k := g.createKey(t, owner, keyprovider.Limits{Quotas: tc.quotas})
+			g.mustComplete(t, k.Secret, "mock-small")
+			g.mustComplete(t, k.Secret, "mock-small")
+
+			eventually(t, "windows report both requests", func() error {
+				windows, err := g.Windows(ctx, k.Ref, owner)
+				if err != nil {
+					return err
+				}
+				periods := make([]string, 0, len(windows))
+				for _, w := range windows {
+					periods = append(periods, w.Period)
+				}
+				if !slices.Equal(periods, tc.periods) {
+					return fmt.Errorf("windows = %v, want %v", periods, tc.periods)
+				}
+				if len(windows) == 0 {
+					return nil
+				}
+
+				// A key this fresh has spent the same inside every window it
+				// holds, and so has its owner.
+				keySpend, err := g.TotalSpend(ctx, k.Ref)
+				if err != nil {
+					return err
+				}
+				ownerQuota, err := g.client.UserQuota(ctx, owner)
+				if err != nil {
+					return err
+				}
+				widest := tc.periods[len(tc.periods)-1]
+				for _, w := range windows {
+					want := keySpend
+					if w.Period == widest {
+						want = ownerQuota.Used
+					}
+					if !w.UsedKnown || want <= 0 || !near(w.Used, want) {
+						return fmt.Errorf("%s window: used=%v known=%v, want %v",
+							w.Period, w.Used, w.UsedKnown, want)
+					}
+					if w.ResetsAt.IsZero() {
+						return fmt.Errorf("%s window has no reset time", w.Period)
+					}
+				}
+				return nil
+			})
+		})
+	}
 }
 
 // The per-model table labels requests by the public model name and counts

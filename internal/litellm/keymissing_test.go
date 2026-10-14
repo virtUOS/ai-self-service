@@ -84,7 +84,7 @@ func TestKeyInfoReportsAMissingKey(t *testing.T) {
 		if _, err := gw.KeyQuota(ctx, "abc"); !errors.Is(err, keyprovider.ErrKeyNotFound) {
 			t.Errorf("%s: KeyQuota err = %v, want ErrKeyNotFound", name, err)
 		}
-		if _, _, err := gw.keyWindows(ctx, "abc"); !errors.Is(err, keyprovider.ErrKeyNotFound) {
+		if _, err := gw.keyWindows(ctx, "abc"); !errors.Is(err, keyprovider.ErrKeyNotFound) {
 			t.Errorf("%s: keyWindows err = %v, want ErrKeyNotFound", name, err)
 		}
 	}
