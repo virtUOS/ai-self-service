@@ -18,24 +18,26 @@ func usageUI(t *testing.T, fake *keyprovider.Fake) *UI {
 	return &UI{usage: newUsageCache(fake)}
 }
 
-// Usage is reported for the key the user holds now. Regenerating starts the
-// history over, because a new key is a different key upstream. See issue #9.
-func TestUserUsageReportsCurrentKey(t *testing.T) {
+// The history is the person's, across every key they have held, so a
+// regenerated key shows the same chart as the one it replaced (#116).
+func TestUserUsageReportsTheOwnersHistory(t *testing.T) {
 	fake := keyprovider.NewFake()
-	fake.UsageByRef = map[string][]keyprovider.DailyUsage{
-		"sk-live": {{Day: "2026-08-01", Tokens: 150}, {Day: "2026-08-03", Tokens: 7}},
+	fake.UsageByOwner = map[string][]keyprovider.DailyUsage{
+		"sub-1": {{Day: "2026-08-01", Tokens: 150}, {Day: "2026-08-03", Tokens: 7}},
 	}
 	u := usageUI(t, fake)
 
-	got := u.userUsage(context.Background(), &database.APIKey{KeyRef: "sk-live"}, "", i18n.EN)
-	if got.Total != 157 {
-		t.Errorf("Total = %d, want 157", got.Total)
-	}
-	if len(got.Days) != 2 {
-		t.Fatalf("got %d days, want 2", len(got.Days))
-	}
-	if got.Days[0].Day != "2026-08-01" || got.Days[0].Tokens != 150 {
-		t.Errorf("first day = %+v", got.Days[0])
+	for _, ref := range []string{"sk-old", "sk-new"} {
+		got := u.userUsage(context.Background(), &database.APIKey{KeyRef: ref}, "sub-1", i18n.EN)
+		if got.Total != 157 {
+			t.Errorf("%s: Total = %d, want 157", ref, got.Total)
+		}
+		if len(got.Days) != 2 {
+			t.Fatalf("%s: got %d days, want 2", ref, len(got.Days))
+		}
+		if got.Days[0].Day != "2026-08-01" || got.Days[0].Tokens != 150 {
+			t.Errorf("%s: first day = %+v", ref, got.Days[0])
+		}
 	}
 }
 
@@ -44,15 +46,15 @@ func TestUserUsageReportsCurrentKey(t *testing.T) {
 // but flags the report as incomplete so the card says why it is empty.
 func TestUserUsageWithoutFigures(t *testing.T) {
 	fake := keyprovider.NewFake()
-	fake.UsageByRef = map[string][]keyprovider.DailyUsage{"sk-live": {{Day: "2026-08-01", Tokens: 5}}}
+	fake.UsageByOwner = map[string][]keyprovider.DailyUsage{"sub-1": {{Day: "2026-08-01", Tokens: 5}}}
 
-	if got := usageUI(t, fake).userUsage(context.Background(), nil, "", i18n.EN); got.Total != 0 || len(got.Days) != 0 || got.Incomplete {
+	if got := usageUI(t, fake).userUsage(context.Background(), nil, "sub-1", i18n.EN); got.Total != 0 || len(got.Days) != 0 || got.Incomplete {
 		t.Errorf("no key = %+v, want empty and complete", got)
 	}
 
 	failing := keyprovider.NewFake()
 	failing.UsageErr = errors.New("gateway down")
-	got := usageUI(t, failing).userUsage(context.Background(), &database.APIKey{KeyRef: "sk-live"}, "", i18n.EN)
+	got := usageUI(t, failing).userUsage(context.Background(), &database.APIKey{KeyRef: "sk-live"}, "sub-1", i18n.EN)
 	if got.Total != 0 {
 		t.Errorf("gateway down = %+v, want no figures", got)
 	}
@@ -61,7 +63,7 @@ func TestUserUsageWithoutFigures(t *testing.T) {
 	}
 
 	u := &UI{usage: newUsageCache(nil)}
-	if got := u.userUsage(context.Background(), &database.APIKey{KeyRef: "sk-live"}, "", i18n.EN); got.Total != 0 || got.Incomplete {
+	if got := u.userUsage(context.Background(), &database.APIKey{KeyRef: "sk-live"}, "sub-1", i18n.EN); got.Total != 0 || got.Incomplete {
 		t.Errorf("no reporter = %+v, want empty and complete", got)
 	}
 }
@@ -71,13 +73,13 @@ func TestUserUsageWithoutFigures(t *testing.T) {
 func TestUserUsageReportsPeak(t *testing.T) {
 	today := time.Now().UTC()
 	fake := keyprovider.NewFake()
-	fake.UsageByRef = map[string][]keyprovider.DailyUsage{
-		"k": {
+	fake.UsageByOwner = map[string][]keyprovider.DailyUsage{
+		"sub-1": {
 			{Day: today.AddDate(0, 0, -1).Format("2006-01-02"), Tokens: 10},
 			{Day: today.Format("2006-01-02"), Tokens: 40},
 		},
 	}
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{KeyRef: "k"}, "", i18n.EN)
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{KeyRef: "k"}, "sub-1", i18n.EN)
 	if got.Peak != 40 {
 		t.Errorf("Peak = %d, want 40", got.Peak)
 	}
@@ -145,52 +147,14 @@ func TestDashboardRendersUsage(t *testing.T) {
 	}
 }
 
-// Per-request spend logging can be off upstream — it is on this deployment,
-// to bound a LiteLLM memory leak. The key's own cumulative spend still works,
-// so the card must report a real total rather than claiming no usage.
-func TestUserUsageFallsBackToTotal(t *testing.T) {
-	fake := keyprovider.NewFake()
-	fake.UsageByRef = nil // logging disabled: no per-day rows
-	fake.TotalByRef = map[string]float64{"sk-live": 0.0123}
-
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{KeyRef: "sk-live"}, "", i18n.EN)
-	if !got.TotalOnly {
-		t.Error("TotalOnly should mark that no per-day breakdown is available")
-	}
-	if got.TotalSpend != 0.0123 {
-		t.Errorf("TotalSpend = %v, want 0.0123 from the key's own spend", got.TotalSpend)
-	}
-	if len(got.Days) != 0 {
-		t.Errorf("no per-day rows expected, got %d", len(got.Days))
-	}
-}
-
-// When per-day rows exist they are authoritative; the coarse total is not
-// fetched or shown as a separate figure.
-func TestUserUsagePrefersPerDayRows(t *testing.T) {
-	fake := keyprovider.NewFake()
-	fake.UsageByRef = map[string][]keyprovider.DailyUsage{
-		"sk-live": {{Day: "2026-08-01", Tokens: 100}},
-	}
-	fake.TotalByRef = map[string]float64{"sk-live": 9.99}
-
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{KeyRef: "sk-live"}, "", i18n.EN)
-	if got.Total != 100 {
-		t.Errorf("Total = %d, want 100 from the per-day rows", got.Total)
-	}
-	if got.TotalOnly {
-		t.Error("TotalOnly should be false when a breakdown exists")
-	}
-}
-
 // Users need to know how much of their allowance is gone, not only what they
 // have spent. The figures come from the key's enforced budget so they match
 // the limit users actually hit, rather than a 30-day sum that need not align
 // with the quota period.
 func TestUserUsageReportsPercentOfBudget(t *testing.T) {
 	fake := keyprovider.NewFake()
-	fake.UsageByRef = map[string][]keyprovider.DailyUsage{
-		"k": {{Day: "2026-08-25", Tokens: 420_000}},
+	fake.UsageByOwner = map[string][]keyprovider.DailyUsage{
+		"sub-1": {{Day: "2026-08-25", Tokens: 420_000}},
 	}
 	fake.QuotaByRef = map[string]keyprovider.Quota{
 		"k": {Used: 0.042, Limit: 0.15,
@@ -225,15 +189,15 @@ func TestUserUsageUnlimitedReportsNoQuota(t *testing.T) {
 	}
 }
 
-// The usage card lists what each model consumed, from the same log as the
-// chart, so a researcher can see where their tokens went.
+// The usage card lists what each model consumed, from the same daily totals as
+// the chart, so a researcher can see where their tokens went.
 func TestUserUsageReportsModels(t *testing.T) {
 	fake := keyprovider.NewFake()
-	fake.UsageByRef = map[string][]keyprovider.DailyUsage{"k": {{Day: "2026-08-25", Tokens: 10}}}
-	fake.ModelUsageByRef = map[string][]keyprovider.ModelUsage{
-		"k": {{Model: "qwen", Requests: 2, PromptTokens: 7, CompletionTokens: 3, TotalTokens: 10}},
+	fake.UsageByOwner = map[string][]keyprovider.DailyUsage{"sub-1": {{Day: "2026-08-25", Tokens: 10}}}
+	fake.ModelUsageByOwner = map[string][]keyprovider.ModelUsage{
+		"sub-1": {{Model: "qwen", Requests: 2, PromptTokens: 7, CompletionTokens: 3, TotalTokens: 10}},
 	}
-	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{KeyRef: "k"}, "", i18n.EN)
+	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{KeyRef: "k"}, "sub-1", i18n.EN)
 	if len(got.Models) != 1 || got.Models[0].Model != "qwen" || got.Models[0].TotalTokens != 10 {
 		t.Errorf("Models = %+v, want the qwen row", got.Models)
 	}

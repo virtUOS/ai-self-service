@@ -6,30 +6,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
-
-// spendRow is one request in LiteLLM's spend log.
-//
-// Only the fields the portal aggregates are declared; the row carries plenty
-// more (latency, cache hits, the request body) that nothing here needs.
-type spendRow struct {
-	APIKey string `json:"api_key"`
-	Model  string `json:"model"`
-	// ModelGroup is the public model name a request was made with; Model is
-	// the deployment it was routed to, with its provider prefix.
-	ModelGroup       string  `json:"model_group"`
-	PromptTokens     int64   `json:"prompt_tokens"`
-	CompletionTokens int64   `json:"completion_tokens"`
-	TotalTokens      int64   `json:"total_tokens"`
-	Spend            float64 `json:"spend"`
-	StartTime        string  `json:"startTime"`
-}
 
 // keyHash is how LiteLLM identifies a key: the SHA-256 of the key itself. It
 // is the ref the portal stores, normally taken from /key/generate's token.
@@ -38,95 +23,135 @@ func keyHash(key string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// History returns what a key consumed over the last days days: per-day token
-// totals and a per-model breakdown, both from a single read of the log.
+// activityMetrics is the part of a /user/daily/activity total the portal
+// reads.
+type activityMetrics struct {
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
+	TotalTokens      int64 `json:"total_tokens"`
+	APIRequests      int64 `json:"api_requests"`
+}
+
+// dailyActivityPage is one page of /user/daily/activity.
 //
-// The log is fetched once because it cannot be narrowed server-side: LiteLLM
-// ignores page_size, limit and size on this route, and passing
-// start_date/end_date switches the response to an aggregated shape that
-// reports spend only and drops token counts entirely — and local models are
-// priced so that spend is always zero, so it carries no usable signal. The
-// window is therefore bounded here, over rows already in hand.
-func (c *Client) History(ctx context.Context, ref string, days int) (keyprovider.History, error) {
-	rows, err := c.spendLog(ctx, ref)
-	if err != nil {
-		return keyprovider.History{}, err
-	}
-	cutoff := dayCutoff(days)
-	return keyprovider.History{
-		Days:   dailyFromRows(rows, cutoff),
-		Models: modelsFromRows(rows, cutoff),
-	}, nil
+// The breakdown holds the same totals several times over (by model, model
+// group, provider, endpoint, key); only the model groups are read. They carry
+// the public name a request was made with — users know "Qwen/…", not the
+// deployment "openai/Qwen/…" it was routed to.
+type dailyActivityPage struct {
+	Results []struct {
+		Date      string          `json:"date"`
+		Metrics   activityMetrics `json:"metrics"`
+		Breakdown struct {
+			ModelGroups map[string]struct {
+				Metrics activityMetrics `json:"metrics"`
+			} `json:"model_groups"`
+		} `json:"breakdown"`
+	} `json:"results"`
+	Metadata struct {
+		HasMore bool `json:"has_more"`
+	} `json:"metadata"`
 }
 
-// dayCutoff is the earliest UTC date to count, as a YYYY-MM-DD prefix.
+// activityPageSize is the most rows /user/daily/activity returns per page.
+const activityPageSize = 1000
+
+// activityMaxPages bounds how many pages one History call follows. A page holds
+// up to activityPageSize rows of one day, key, model and endpoint each, so a
+// month of ordinary use fits on one. The bound only stops a gateway that keeps
+// answering has_more from holding the dashboard forever.
+const activityMaxPages = 20
+
+// History returns what ownerID consumed over the last days days, across every
+// key they have held: per-day token totals and a per-model breakdown.
 //
-// A date-string compare is the right granularity here: the chart and the
-// per-model table are both bucketed by UTC day, so a row either belongs to a
-// counted day or it does not.
-func dayCutoff(days int) string {
-	return time.Now().UTC().AddDate(0, 0, -days).Format("2006-01-02")
-}
-
-// dailyFromRows sums tokens per UTC day for rows at or after cutoff, oldest
-// day first.
-func dailyFromRows(rows []spendRow, cutoff string) []keyprovider.DailyUsage {
-	totals := make(map[string]int64)
-	for _, r := range rows {
-		if r.TotalTokens <= 0 || len(r.StartTime) < 10 {
-			continue
-		}
-		day := r.StartTime[:10]
-		if day < cutoff {
-			continue
-		}
-		totals[day] += r.TotalTokens
+// Both come from the daily totals LiteLLM keeps per user, key and model. They
+// are written whether or not per-request logging is on, and are not removed
+// with the spend log when it expires. The days are UTC days, as LiteLLM
+// buckets them.
+func (c *Client) History(ctx context.Context, ownerID string, days int) (keyprovider.History, error) {
+	// Without a user the route reports every user's usage.
+	if ownerID == "" {
+		return keyprovider.History{}, nil
 	}
 
-	out := make([]keyprovider.DailyUsage, 0, len(totals))
-	for day, tokens := range totals {
-		out = append(out, keyprovider.DailyUsage{Day: day, Tokens: tokens})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Day < out[j].Day })
-	return out
-}
+	now := time.Now().UTC()
+	q := url.Values{}
+	q.Set("user_id", ownerID)
+	q.Set("start_date", now.AddDate(0, 0, -days).Format("2006-01-02"))
+	q.Set("end_date", now.Format("2006-01-02"))
+	q.Set("page_size", strconv.Itoa(activityPageSize))
 
-// modelsFromRows sums per-model totals for rows at or after cutoff, largest
-// total first.
-func modelsFromRows(rows []spendRow, cutoff string) []keyprovider.ModelUsage {
-	totals := make(map[string]*keyprovider.ModelUsage)
-	for _, r := range rows {
-		if r.TotalTokens <= 0 || len(r.StartTime) < 10 || r.StartTime[:10] < cutoff {
-			continue
+	// A page ends after a fixed number of rows, not at a day's end, so one day
+	// can arrive split over two pages. Totals are summed, never replaced.
+	tokensByDay := make(map[string]int64)
+	byModel := make(map[string]*keyprovider.ModelUsage)
+	for page := 1; ; page++ {
+		if page > activityMaxPages {
+			return keyprovider.History{}, fmt.Errorf("LiteLLM /user/daily/activity has more than %d pages", activityMaxPages)
 		}
-		// Label by the public name the request was made with, not the
-		// deployment it was routed to: users know "Qwen/…", not "openai/Qwen/…".
-		name := r.ModelGroup
-		if name == "" {
-			name = r.Model
+		q.Set("page", strconv.Itoa(page))
+		body, err := c.dailyActivity(ctx, q)
+		if err != nil {
+			return keyprovider.History{}, err
 		}
-		m, ok := totals[name]
-		if !ok {
-			m = &keyprovider.ModelUsage{Model: name}
-			totals[name] = m
+		for _, r := range body.Results {
+			tokensByDay[r.Date] += r.Metrics.TotalTokens
+			for name, g := range r.Breakdown.ModelGroups {
+				m, ok := byModel[name]
+				if !ok {
+					m = &keyprovider.ModelUsage{Model: name}
+					byModel[name] = m
+				}
+				m.Requests += g.Metrics.APIRequests
+				m.PromptTokens += g.Metrics.PromptTokens
+				m.CompletionTokens += g.Metrics.CompletionTokens
+				m.TotalTokens += g.Metrics.TotalTokens
+			}
 		}
-		m.Requests++
-		m.PromptTokens += r.PromptTokens
-		m.CompletionTokens += r.CompletionTokens
-		m.TotalTokens += r.TotalTokens
+		if !body.Metadata.HasMore {
+			break
+		}
 	}
 
-	out := make([]keyprovider.ModelUsage, 0, len(totals))
-	for _, m := range totals {
-		out = append(out, *m)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].TotalTokens != out[j].TotalTokens {
-			return out[i].TotalTokens > out[j].TotalTokens
+	var h keyprovider.History
+	for day, tokens := range tokensByDay {
+		if tokens > 0 {
+			h.Days = append(h.Days, keyprovider.DailyUsage{Day: day, Tokens: tokens})
 		}
-		return out[i].Model < out[j].Model
+	}
+	sort.Slice(h.Days, func(i, j int) bool { return h.Days[i].Day < h.Days[j].Day })
+
+	for _, m := range byModel {
+		h.Models = append(h.Models, *m)
+	}
+	sort.Slice(h.Models, func(i, j int) bool {
+		if h.Models[i].TotalTokens != h.Models[j].TotalTokens {
+			return h.Models[i].TotalTokens > h.Models[j].TotalTokens
+		}
+		return h.Models[i].Model < h.Models[j].Model
 	})
-	return out
+	return h, nil
+}
+
+// dailyActivity fetches one page of /user/daily/activity.
+func (c *Client) dailyActivity(ctx context.Context, q url.Values) (dailyActivityPage, error) {
+	var body dailyActivityPage
+
+	resp, err := c.do(ctx, http.MethodGet, "/user/daily/activity?"+q.Encode(), nil)
+	if err != nil {
+		return body, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return body, fmt.Errorf("LiteLLM /user/daily/activity returned %d: %s", resp.StatusCode, b)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return body, fmt.Errorf("decode daily activity: %w", err)
+	}
+	return body, nil
 }
 
 // keyStatusDeleted is the status /key/info reports for a deleted key. Since
@@ -193,17 +218,6 @@ func (c *Client) KeyQuota(ctx context.Context, ref string) (keyprovider.Quota, e
 		}
 	}
 	return q, nil
-}
-
-// KeySpend is the cumulative spend recorded on the key itself. It is the
-// fallback for when per-request spend logging is switched off: the key's
-// counter keeps working either way, at the cost of any per-day breakdown.
-func (c *Client) KeySpend(ctx context.Context, ref string) (float64, error) {
-	info, err := c.keyInfo(ctx, ref)
-	if err != nil {
-		return 0, err
-	}
-	return info.Info.Spend, nil
 }
 
 // UpdateKeyLimits pushes a profile's limits onto a key that already exists.

@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
@@ -29,129 +28,6 @@ func TestKeyHashIsSHA256(t *testing.T) {
 	}
 	if keyHash(key+"x") == got {
 		t.Error("hash does not depend on the whole key")
-	}
-}
-
-// Raw spend rows must aggregate into per-day totals. LiteLLM's own daily
-// aggregation reports spend only and drops token counts, so it cannot be used.
-func TestUsageAggregatesRowsPerDay(t *testing.T) {
-	// Dates are relative to today, not fixed: History drops anything older than
-	// the window it is asked for, so hardcoded days eventually fall outside it
-	// and the test starts failing on a date that has nothing to do with the
-	// code. Two days back and four days back sit inside any window worth
-	// testing.
-	dayOne := time.Now().UTC().AddDate(0, 0, -4).Format("2006-01-02")
-	dayTwo := time.Now().UTC().AddDate(0, 0, -2).Format("2006-01-02")
-	rows := []spendRow{
-		{APIKey: "h", TotalTokens: 100, StartTime: dayOne + "T10:00:00Z"},
-		{APIKey: "h", TotalTokens: 50, StartTime: dayOne + "T18:30:00Z"},
-		{APIKey: "h", TotalTokens: 7, StartTime: dayTwo + "T09:00:00Z"},
-	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.URL.Query().Get("api_key"); got == "" {
-			t.Errorf("request did not filter by api_key")
-		}
-		json.NewEncoder(w).Encode(rows)
-	}))
-	defer srv.Close()
-
-	h, err := NewClient(srv.URL, "mk").History(context.Background(), "sk-whatever", 30)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := h.Days
-	if len(got) != 2 {
-		t.Fatalf("got %d days, want 2 (two rows share a day)", len(got))
-	}
-	if got[0].Day != dayOne || got[0].Tokens != 150 {
-		t.Errorf("day 1 = %+v, want %s/150", got[0], dayOne)
-	}
-	if got[1].Day != dayTwo || got[1].Tokens != 7 {
-		t.Errorf("day 2 = %+v, want %s/7", got[1], dayTwo)
-	}
-}
-
-// A key with no traffic is normal, not an error.
-func TestUsageEmptyIsNotAnError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("[]"))
-	}))
-	defer srv.Close()
-
-	h, err := NewClient(srv.URL, "mk").History(context.Background(), "sk-x", 30)
-	if err != nil {
-		t.Fatalf("empty log returned error: %v", err)
-	}
-	if len(h.Days) != 0 {
-		t.Errorf("got %d days, want none", len(h.Days))
-	}
-}
-
-// Rows without usable token counts must not become phantom zero-token days.
-func TestUsageSkipsRowsWithoutTokens(t *testing.T) {
-	// Relative to today, not fixed: History drops anything older than the window
-	// it is asked for, so hardcoded dates eventually fall outside it and the
-	// test fails on a date that has nothing to do with the code.
-	now := time.Now().UTC()
-	empty := now.AddDate(0, 0, -2)
-	used := now.AddDate(0, 0, -1)
-	rows := []spendRow{
-		{APIKey: "h", TotalTokens: 0, StartTime: empty.Format(time.RFC3339)},
-		{APIKey: "h", TotalTokens: 12, StartTime: used.Format(time.RFC3339)},
-	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(rows)
-	}))
-	defer srv.Close()
-
-	h, err := NewClient(srv.URL, "mk").History(context.Background(), "sk-x", 30)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := h.Days
-	if len(got) != 1 || got[0].Day != used.Format("2006-01-02") {
-		t.Errorf("got %+v, want only the day with tokens", got)
-	}
-}
-
-// Spend logs can be switched off upstream — they were here, to bound a
-// LiteLLM memory leak. The key itself still records cumulative spend, so fall
-// back to that rather than reporting no usage at all.
-func TestUsageFallsBackToKeySpend(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasPrefix(r.URL.Path, "/spend/logs"):
-			w.Write([]byte("[]")) // logging disabled: no rows, no error
-		case strings.HasPrefix(r.URL.Path, "/key/info"):
-			json.NewEncoder(w).Encode(map[string]any{
-				"info": map[string]any{"spend": 5.45e-05},
-			})
-		default:
-			t.Errorf("unexpected path %s", r.URL.Path)
-		}
-	}))
-	defer srv.Close()
-
-	total, err := NewClient(srv.URL, "mk").KeySpend(context.Background(), "sk-x")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// The gateway's own figure, in its own unit: nothing converts it.
-	if total != 5.45e-05 {
-		t.Errorf("KeySpend = %v, want 5.45e-05", total)
-	}
-}
-
-// A key that has never been used reports zero, not an error.
-func TestKeySpendZeroForUnusedKey(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"info": map[string]any{"spend": 0.0}})
-	}))
-	defer srv.Close()
-
-	total, err := NewClient(srv.URL, "mk").KeySpend(context.Background(), "sk-x")
-	if err != nil || total != 0 {
-		t.Errorf("got %v, %v; want 0, nil", total, err)
 	}
 }
 

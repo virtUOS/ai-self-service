@@ -13,9 +13,8 @@ import (
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
 )
 
-// /key/info and /spend/logs run on every dashboard load. A key in their query
-// string ends up in the access log of the gateway and of any proxy in front of
-// it. The ref the portal holds is already the key's hash, so it goes upstream
+// /key/info runs on every dashboard load. A key in its query string ends up in
+// the access log of the gateway and of any proxy in front of it. The ref the portal holds is already the key's hash, so it goes upstream
 // as it is: hashing it again would address no key at all.
 func TestUsageRoutesSendTheRefVerbatim(t *testing.T) {
 	const key = "sk-secret-key-info"
@@ -33,11 +32,6 @@ func TestUsageRoutesSendTheRefVerbatim(t *testing.T) {
 				t.Errorf("/key/info key = %q, want the ref %q", got, ref)
 			}
 			w.Write([]byte(`{"info":{}}`))
-		case "/spend/logs":
-			if got := r.URL.Query().Get("api_key"); got != ref {
-				t.Errorf("/spend/logs api_key = %q, want the ref %q", got, ref)
-			}
-			w.Write([]byte(`[]`))
 		default:
 			w.Write([]byte(`{}`))
 		}
@@ -49,18 +43,12 @@ func TestUsageRoutesSendTheRefVerbatim(t *testing.T) {
 	if _, err := c.KeyQuota(ctx, ref); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.KeySpend(ctx, ref); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c.History(ctx, ref, 30); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := NewProvider(c).Windows(ctx, ref, ""); err != nil {
 		t.Fatal(err)
 	}
 
-	if len(queries) < 4 {
-		t.Fatalf("saw %d requests, want at least 4", len(queries))
+	if len(queries) < 2 {
+		t.Fatalf("saw %d requests, want at least 2", len(queries))
 	}
 	for _, q := range queries {
 		if strings.Contains(q, key) {

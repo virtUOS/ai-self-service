@@ -36,8 +36,9 @@ Phases 1–6 of the original assessment all shipped:
   notices are bilingual too, since nothing records a per-user language.
 - **Expiry email** — delivered through `relay.rz.uni-osnabrueck.de:25`, which
   accepts mail from known hosts without credentials. Verified end to end.
-- **Dashboard usage** — the models a key may use (click to copy), what it has
-  consumed per day over 30 days, and what is left of the enforced quota.
+- **Dashboard usage** — the models a key may use (click to copy), what its
+  owner has consumed per day over 30 days across all their keys (#116), and
+  what is left of the enforced quota.
 - **Limit sync** — a change to a profile or an assignment reaches every
   affected key from a background sync, with its progress in the admin panel.
   The dashboard no longer pushes limits.

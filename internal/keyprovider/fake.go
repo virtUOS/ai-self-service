@@ -41,20 +41,11 @@ type Fake struct {
 	// EmbeddingByModel is what EmbeddingModels returns.
 	EmbeddingByModel map[string]bool
 
-	// UsageByRef is the per-day half of what History returns per key ref;
-	// UsageErr forces it to fail.
-	UsageByRef map[string][]DailyUsage
-	UsageErr   error
-
-	// ModelUsageByRef is the per-model half of what History returns per key
-	// ref; ModelUsageErr forces it to fail.
-	ModelUsageByRef map[string][]ModelUsage
-	ModelUsageErr   error
-
-	// TotalByRef is what TotalSpend returns per key ref, standing in for a
-	// gateway that records spend but keeps no per-request log.
-	TotalByRef map[string]float64
-	TotalErr   error
+	// UsageByOwner and ModelUsageByOwner are the per-day and per-model halves
+	// of what History returns per owner; UsageErr forces it to fail.
+	UsageByOwner      map[string][]DailyUsage
+	ModelUsageByOwner map[string][]ModelUsage
+	UsageErr          error
 
 	// QuotaByRef is what Quota returns per key ref; QuotaErr forces failure.
 	QuotaByRef map[string]Quota
@@ -88,19 +79,14 @@ var (
 	_ UsageReporter   = (*Fake)(nil)
 )
 
-// History returns the canned per-day and per-model totals for a key. Either
-// canned error fails the whole call, as on a real gateway where both halves
-// come from one read of the same log.
-func (f *Fake) History(_ context.Context, ref string, _ int) (History, error) {
+// History returns the canned per-day and per-model totals for an owner.
+func (f *Fake) History(_ context.Context, ownerID string, _ int) (History, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.UsageErr != nil {
 		return History{}, f.UsageErr
 	}
-	if f.ModelUsageErr != nil {
-		return History{}, f.ModelUsageErr
-	}
-	return History{Days: f.UsageByRef[ref], Models: f.ModelUsageByRef[ref]}, nil
+	return History{Days: f.UsageByOwner[ownerID], Models: f.ModelUsageByOwner[ownerID]}, nil
 }
 
 // UpdateLimits records a re-application of limits to an existing key.
@@ -147,16 +133,6 @@ func (f *Fake) Quota(_ context.Context, ref, ownerID string) (Quota, error) {
 		return q, nil
 	}
 	return f.QuotaByRef[ref], nil
-}
-
-// TotalSpend returns the canned cumulative spend for a key.
-func (f *Fake) TotalSpend(_ context.Context, ref string) (float64, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.TotalErr != nil {
-		return 0, f.TotalErr
-	}
-	return f.TotalByRef[ref], nil
 }
 
 // Models is what ListModels returns.

@@ -131,7 +131,7 @@ type WindowUsage struct {
 	UsedKnown bool
 }
 
-// DailyUsage is one day's token consumption for a key.
+// DailyUsage is one day's token consumption for a person.
 type DailyUsage struct {
 	// Day is the UTC date the tokens were spent on, as YYYY-MM-DD.
 	Day string
@@ -139,7 +139,7 @@ type DailyUsage struct {
 	Tokens int64
 }
 
-// ModelUsage is one model's share of a key's consumption.
+// ModelUsage is one model's share of a person's consumption.
 type ModelUsage struct {
 	Model            string
 	Requests         int64
@@ -148,9 +148,9 @@ type ModelUsage struct {
 	TotalTokens      int64
 }
 
-// History is what a key consumed over a window, in the two shapes the
+// History is what a person consumed over a window, in the two shapes the
 // dashboard draws: a per-day series and a per-model breakdown. They are one
-// value because they come from one read of the same log.
+// value because they come from one read of the same daily totals.
 type History struct {
 	// Days holds per-day token totals, oldest first. Days with no traffic are
 	// omitted rather than reported as zero.
@@ -159,22 +159,15 @@ type History struct {
 	Models []ModelUsage
 }
 
-// UsageReporter is implemented by providers that can report what a key has
+// UsageReporter is implemented by providers that can report what has been
 // consumed. Separate from Provider because not every gateway records usage,
 // and reporting is not needed to issue or revoke keys.
 type UsageReporter interface {
-	// History returns what the key consumed over the last days days: per-day
-	// totals oldest first and per-model totals largest first, both from one
-	// read of the per-request log.
-	//
-	// An empty result does not mean no usage: a gateway may record spend
-	// without keeping a per-request log. Callers should fall back to
-	// TotalSpend before concluding a key is unused.
-	History(ctx context.Context, ref string, days int) (History, error)
-
-	// TotalSpend is the key's cumulative spend counter, which the gateway
-	// keeps whether or not per-request logging is on.
-	TotalSpend(ctx context.Context, ref string) (float64, error)
+	// History returns what ownerID consumed over the last days days, across
+	// every key they have held: per-day totals oldest first and per-model
+	// totals largest first. It follows the person rather than the key, so a
+	// rotation does not start the chart over.
+	History(ctx context.Context, ownerID string, days int) (History, error)
 
 	// Windows reports consumption against every quota window that applies to
 	// the key and its owner, tightest period first.

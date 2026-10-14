@@ -30,7 +30,7 @@ instructions or scripts that assume only one of them.
 
 Usage from a request reaches the dashboard late, which is not a bug:
 
-- LiteLLM writes its spend log in batches, a few seconds after the request.
+- LiteLLM records spend in batches, a few seconds after the request.
 - The dashboard caches usage for 60 seconds, so a page loaded right after a
   key was generated keeps showing "no usage" for up to a minute.
 - Send test requests with `max_tokens`. LiteLLM reserves a request's
