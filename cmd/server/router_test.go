@@ -261,3 +261,41 @@ func TestEveryStateChangingRouteRequiresCSRF(t *testing.T) {
 		}
 	}
 }
+
+// storableRoutes may be stored by a browser or proxy: they carry no user data
+// and are not reached with a session cookie.
+var storableRoutes = map[string]bool{
+	"GET /healthz":             true,
+	"GET /readyz":              true,
+	"POST /backchannel-logout": true,
+}
+
+// Every route a browser reaches with the session cookie forbids storing its
+// response, so a page that showed a new key once cannot come back from a
+// cache. Static files stay cacheable.
+func TestEveryUserRouteIsNotStored(t *testing.T) {
+	rt := newRouteTest(t)
+	seen := map[string]bool{}
+	for _, r := range rt.routes(t) {
+		seen[r.String()] = true
+		if storableRoutes[r.String()] || readOnlyPaths[r.pattern] {
+			continue
+		}
+		rec := rt.do(t, r, requestOpts{user: rt.admin, csrfToken: true})
+		if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+			t.Errorf("%s: Cache-Control %q, want no-store", r, got)
+		}
+	}
+	for r := range storableRoutes {
+		if !seen[r] {
+			t.Errorf("storable route %s is not served; remove it from the list", r)
+		}
+	}
+	rec := rt.do(t, route{http.MethodGet, "/static/*"}, requestOpts{user: rt.admin})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /static/style.css: %d, want 200", rec.Code)
+	}
+	if got := rec.Header().Get("Cache-Control"); strings.Contains(got, "no-store") {
+		t.Errorf("static file: Cache-Control %q, want it cacheable", got)
+	}
+}

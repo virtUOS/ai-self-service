@@ -52,6 +52,7 @@ func newRouter(cfg *config.Config, ui *handlers.UI, admin *handlers.Admin, csrf 
 	r.Post("/backchannel-logout", ui.BackchannelLogout)
 
 	r.Group(func(r chi.Router) {
+		r.Use(handlers.NoStore)
 		r.Use(csrf.Protect)
 
 		r.Get("/login", ui.Login)
@@ -68,6 +69,7 @@ func newRouter(cfg *config.Config, ui *handlers.UI, admin *handlers.Admin, csrf 
 	})
 
 	r.Route("/admin", func(r chi.Router) {
+		r.Use(handlers.NoStore)
 		r.Use(csrf.Protect)
 		r.Use(admin.Middleware)
 		r.Get("/", admin.Panel)

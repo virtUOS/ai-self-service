@@ -71,3 +71,15 @@ func TestHSTSOnlyWhenSecure(t *testing.T) {
 		t.Errorf("HSTS set on insecure deployment: %q", got)
 	}
 }
+
+func TestNoStore(t *testing.T) {
+	r := chi.NewRouter()
+	r.Use(handlers.NoStore)
+	r.Get("/", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store", got)
+	}
+}
