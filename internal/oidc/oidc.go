@@ -45,7 +45,7 @@ func NewProvider(ctx context.Context, cfg *config.Config, store *database.Store)
 		ClientSecret: cfg.OIDCClientSecret,
 		Endpoint:     provider.Endpoint(),
 		RedirectURL:  cfg.OIDCRedirectURL,
-		Scopes:       []string{gooidc.ScopeOpenID, "profile", "email"},
+		Scopes:       append([]string{gooidc.ScopeOpenID, "profile", "email"}, cfg.OIDCExtraScopes...),
 	}
 
 	verifier := provider.Verifier(&gooidc.Config{ClientID: cfg.OIDCClientID})
