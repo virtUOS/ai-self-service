@@ -21,6 +21,9 @@
 # working directory when it is driven from here; they are throwaway captures.
 .playwright-mcp/
 *.png
+# The brand images are part of the project.
+!/web/static/apple-touch-icon.png
+!/docs/brand/*.png
 
 # Local Claude Code settings. Per-developer, not shared.
 .claude/
