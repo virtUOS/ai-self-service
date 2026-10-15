@@ -7,7 +7,7 @@ package i18n
 // itself — a visibly wrong label is better than a blank page.
 var messages = map[string]map[Lang]string{
 	// ── Shared ──────────────────────────────────────────────────────────
-	"app.title":     {DE: "KI-API-Schlüssel-Portal", EN: "AI API Key Portal"},
+	"app.title":     {DE: "Keyosk", EN: "Keyosk"},
 	"nav.admin":     {DE: "Administration", EN: "Admin"},
 	"nav.dashboard": {DE: "Übersicht", EN: "Dashboard"},
 	"nav.signout":   {DE: "Abmelden", EN: "Sign out"},
@@ -18,7 +18,7 @@ var messages = map[string]map[Lang]string{
 
 	// ── Dashboard ───────────────────────────────────────────────────────
 	"dash.intro.title":     {DE: "Worum geht es?", EN: "What is this?"},
-	"dash.intro.body":      {DE: "Über dieses Portal erhalten Sie Ihren persönlichen API-Schlüssel für das KI-Gateway. Damit können Sie große Sprachmodelle (LLMs) direkt aus eigenen Skripten, Programmen und Werkzeugen nutzen, etwa aus einem Python-Skript, einer Chat-Anwendung wie Open WebUI oder einem Coding-Assistenten im Editor, statt nur über eine Chat-Webseite.", EN: "This portal issues your personal API key for the AI gateway. With it you can use large language models (LLMs) directly from your own scripts, programs and tools (for example a Python script, a chat app such as Open WebUI, or a coding assistant in your editor) rather than only through a chat website."},
+	"dash.intro.body":      {DE: "Über Keyosk erhalten Sie Ihren persönlichen API-Schlüssel für das KI-Gateway. Damit können Sie große Sprachmodelle (LLMs) direkt aus eigenen Skripten, Programmen und Werkzeugen nutzen, etwa aus einem Python-Skript, einer Chat-Anwendung wie Open WebUI oder einem Coding-Assistenten im Editor, statt nur über eine Chat-Webseite.", EN: "Keyosk issues your personal API key for the AI gateway. With it you can use large language models (LLMs) directly from your own scripts, programs and tools (for example a Python script, a chat app such as Open WebUI, or a coding assistant in your editor) rather than only through a chat website."},
 	"dash.intro.usage":     {DE: "Das Gateway ist OpenAI-kompatibel, die meisten KI-Werkzeuge funktionieren also damit: Tragen Sie die Basis-URL und Ihren Schlüssel ein. Welche Modelle Sie nutzen können und in welchem Umfang, hängt von Ihrem Profil ab. Ihr Schlüssel ist persönlich; bitte geben Sie ihn nicht weiter.", EN: "The gateway speaks the OpenAI API, so most AI tools work with it: enter the base URL and your key. Which models you can use, and how much, depends on your profile. Your key is personal; please do not share it."},
 	"dash.successor.title": {DE: "Dieses Portal ist nur zum Testen.", EN: "This portal is only for testing."},
 	"dash.successor.body":  {DE: "Bitte erzeugen Sie Ihren Schlüssel im neuen Portal:", EN: "Please create your key on the new portal:"},
@@ -122,7 +122,7 @@ var messages = map[string]map[Lang]string{
 	"badge.left":        {DE: "T übrig", EN: "d left"},
 
 	// ── Admin ───────────────────────────────────────────────────────────
-	"admin.title":    {DE: "KI-API-Schlüssel-Portal — Administration", EN: "AI API Key Portal — Admin"},
+	"admin.title":    {DE: "Keyosk — Administration", EN: "Keyosk — Admin"},
 	"admin.profiles": {DE: "Profile", EN: "Profiles"},
 	"admin.users":    {DE: "Benutzende", EN: "Users"},
 	"admin.audit":    {DE: "Audit-Log", EN: "Audit log"},
@@ -193,7 +193,7 @@ var messages = map[string]map[Lang]string{
 	"admin.admins.group":        {DE: "Administratoren sind die Mitglieder der Gruppe %s im Login-System. Die Mitgliedschaft wird bei jeder Anmeldung gelesen; diese Liste zeigt, wer bei der letzten Anmeldung Mitglied war.", EN: "Admins are the members of the group %s in the login system. Membership is read at each login, so this list shows who was a member when they last logged in."},
 	"admin.admins.group.none":   {DE: "Aus dieser Gruppe hat sich noch niemand angemeldet.", EN: "Nobody from this group has logged in yet."},
 	"admin.admins.promote":      {DE: "Jemanden zum Administrator machen", EN: "Make someone an admin"},
-	"admin.admins.promote.note": {DE: "Nur Personen, die sich schon einmal an diesem Portal angemeldet haben, können ausgewählt werden. Das Recht wird am Konto hinterlegt, nicht an der E-Mail-Adresse.", EN: "Only people who have logged in to this portal before can be chosen. The right is recorded on the account, not on the email address."},
+	"admin.admins.promote.note": {DE: "Nur Personen, die sich schon einmal bei Keyosk angemeldet haben, können ausgewählt werden. Das Recht wird am Konto hinterlegt, nicht an der E-Mail-Adresse.", EN: "Only people who have logged in to Keyosk before can be chosen. The right is recorded on the account, not on the email address."},
 	"admin.admins.filter":       {DE: "Nach Name oder E-Mail filtern", EN: "Filter by name or email"},
 	"admin.admins.choose":       {DE: "Konto auswählen", EN: "Choose an account"},
 	"admin.admins.grant":        {DE: "Zum Administrator machen", EN: "Make admin"},
