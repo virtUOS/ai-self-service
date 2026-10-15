@@ -56,10 +56,10 @@
 
   <div class="card">
     <div class="tabs">
-      <button class="tab-btn active" onclick="showTab('profiles', this)">{{T .Lang "admin.profiles"}}</button>
-      <button class="tab-btn" onclick="showTab('users', this)">{{T .Lang "admin.users"}}</button>
-      <button class="tab-btn" onclick="showTab('admins', this)">{{T .Lang "admin.admins"}}</button>
-      <button class="tab-btn" onclick="showTab('audit', this)">{{T .Lang "admin.audit"}}</button>
+      <button type="button" class="tab-btn active" data-tab="profiles">{{T .Lang "admin.profiles"}}</button>
+      <button type="button" class="tab-btn" data-tab="users">{{T .Lang "admin.users"}}</button>
+      <button type="button" class="tab-btn" data-tab="admins">{{T .Lang "admin.admins"}}</button>
+      <button type="button" class="tab-btn" data-tab="audit">{{T .Lang "admin.audit"}}</button>
     </div>
 
     <!-- ── Profiles tab ─────────────────────────────────── -->
@@ -428,12 +428,25 @@ function filterCandidates(q) {
     o => q === '' || o.textContent.toLowerCase().includes(q)));
 }
 
-function showTab(name, btn) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  btn.classList.add('active');
+// The selected tab lives in the URL hash, so a reload or a shared link comes
+// back to it. "admin" is accepted as an alias for "admins".
+function showTab(name) {
+  if (name === 'admin') name = 'admins';
+  if (!document.getElementById('tab-' + name)) name = 'profiles';
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
 }
+
+document.querySelector('.tabs').addEventListener('click', e => {
+  const btn = e.target.closest('.tab-btn');
+  if (!btn) return;
+  showTab(btn.dataset.tab);
+  // replaceState: no scroll jump, no history entry per click. The query is
+  // dropped so a reload does not show a stale flash message again.
+  history.replaceState(null, '', location.pathname + '#' + btn.dataset.tab);
+});
+
+window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
 
 function openEditProfile(id, name, desc, models, tpm, rpm, expiry, quotas, isDefault) {
   document.getElementById('pf-id').value = id;
@@ -543,9 +556,7 @@ function resetProfileForm() {
 }
 
 // Restore tab from hash
-if (location.hash === '#users') showTab('users', document.querySelectorAll('.tab-btn')[1]);
-if (location.hash === '#admins') showTab('admins', document.querySelectorAll('.tab-btn')[2]);
-if (location.hash === '#audit') showTab('audit', document.querySelectorAll('.tab-btn')[3]);
+showTab(location.hash.slice(1));
 </script>
 
 <script src="/static/help.js"></script>
