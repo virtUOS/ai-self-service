@@ -26,7 +26,7 @@ func postToUser(t *testing.T, h http.HandlerFunc, rec *httptest.ResponseRecorder
 
 // The form round-trips all three fields.
 func TestSetUserProfileStoresTheDeadline(t *testing.T) {
-	a, store, token := newGrantTestAdmin(t, "pexpf1")
+	a, store, token, _ := newTestAdmin(t, "pexpf1")
 	ctx := context.Background()
 	u, err := store.GetOrCreateUser(ctx, "sub-x", "x@uni-osnabrueck.de", "X")
 	if err != nil {
@@ -63,7 +63,7 @@ func TestSetUserProfileStoresTheDeadline(t *testing.T) {
 // An empty date means a permanent assignment, and must clear a deadline that
 // was previously set — that is how an admin takes one off.
 func TestSetUserProfileClearsTheDeadline(t *testing.T) {
-	a, store, token := newGrantTestAdmin(t, "pexpf2")
+	a, store, token, _ := newTestAdmin(t, "pexpf2")
 	ctx := context.Background()
 	u, err := store.GetOrCreateUser(ctx, "sub-y", "y@uni-osnabrueck.de", "Y")
 	if err != nil {
@@ -95,7 +95,7 @@ func TestSetUserProfileClearsTheDeadline(t *testing.T) {
 // A date that is not a date must be refused rather than silently ignored,
 // or an admin would believe a deadline was set when none was.
 func TestSetUserProfileRejectsAMalformedDate(t *testing.T) {
-	a, store, token := newGrantTestAdmin(t, "pexpf3")
+	a, store, token, _ := newTestAdmin(t, "pexpf3")
 	ctx := context.Background()
 	u, err := store.GetOrCreateUser(ctx, "sub-z", "z@uni-osnabrueck.de", "Z")
 	if err != nil {
@@ -129,7 +129,7 @@ func TestSetUserProfileRejectsAMalformedDate(t *testing.T) {
 // as an empty field would quietly make a temporary assignment permanent —
 // the opposite of what the admin was trying to do.
 func TestSetUserProfileRefusalKeepsAnExistingDeadline(t *testing.T) {
-	a, store, token := newGrantTestAdmin(t, "pexpf4")
+	a, store, token, _ := newTestAdmin(t, "pexpf4")
 	ctx := context.Background()
 	u, err := store.GetOrCreateUser(ctx, "sub-w", "w@uni-osnabrueck.de", "W")
 	if err != nil {

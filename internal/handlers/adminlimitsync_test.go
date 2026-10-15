@@ -50,7 +50,7 @@ func (s *syncStub) kickCount() int {
 // profile and a stub sync.
 func newSyncTestAdmin(t *testing.T, name string) (*Admin, *database.Store, string, *syncStub) {
 	t.Helper()
-	a, store, token := newGrantTestAdmin(t, name)
+	a, store, token, _ := newTestAdmin(t, name)
 	if err := store.SeedDefaultProfile(context.Background()); err != nil {
 		t.Fatal(err)
 	}

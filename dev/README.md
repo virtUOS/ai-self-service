@@ -64,10 +64,18 @@ At the login prompt, enter the subject of the user you want to be, matching
 | Subject   | Email                        | Role in the app |
 | --------- | ---------------------------- | --------------- |
 | `student` | student@uni-osnabrueck.de    | regular user    |
-| `admin`   | admin@example.com            | admin (matches `ADMIN_IDS`) |
+| `admin`   | admin@example.com            | the admin, once marked (see below) |
 
-The mock's subjects are fixed rather than generated, so `ADMIN_IDS=admin` also
-works here.
+Nobody is an admin until their account is marked. Log in as `admin` once, then
+run this against the dev database (`DB_PATH=./data.db` in `.env.example`):
+
+```bash
+sqlite3 data.db "UPDATE users SET is_admin = 1 WHERE oidc_sub = 'admin'"
+```
+
+The mock's subjects are fixed rather than generated, which is why the subject
+can be written into the command. Further admins are promoted on the panel's
+Admins tab.
 
 ### Keycloak
 
@@ -83,7 +91,7 @@ the same two users as the mock, with passwords:
 | User      | Password  | Email                        | Role in the app |
 | --------- | --------- | ---------------------------- | --------------- |
 | `student` | `student` | student@uni-osnabrueck.de    | regular user    |
-| `admin`   | `admin`   | admin@example.com            | admin (matches `ADMIN_IDS`) |
+| `admin`   | `admin`   | admin@example.com            | the admin, once marked (see below) |
 
 The client id and secret in `.env.example` (`ai-self-service` /
 `local-dev-secret`) are the realm's, so only the issuer changes in `.env`:
@@ -92,17 +100,18 @@ The client id and secret in `.env.example` (`ai-self-service` /
 OIDC_ISSUER_URL=http://localhost:8082/realms/virtuos
 ```
 
-The realm also defines an `ai-self-service-admin` role, assigned to the `admin`
-user, with a mapper that puts realm roles in the ID token — the configuration
-the IdP team would create in production. Set `ADMIN_ROLE=ai-self-service-admin`
-and admin comes from the role rather than the list; the app logs no
-email-grant warning when that path is used, which is how to tell them apart.
+Keycloak mints new user ids on each import, so the `admin` user's subject is
+not fixed here. Log in once, then look the account up and mark it:
 
-`ADMIN_IDS` takes an OIDC subject or an email address, and production should
-prefer subjects. An address is used here because `realm-export.json` does not
-pin user ids: Keycloak mints new ones on each import, so a subject written into
-`.env` goes stale as soon as the volume is dropped. The app logs a warning on
-every email-based grant, which is expected locally.
+```bash
+sqlite3 data.db "SELECT id, oidc_sub, email FROM users"
+sqlite3 data.db "UPDATE users SET is_admin = 1 WHERE email = 'admin@example.com'"
+```
+
+The realm also defines an `ai-self-service-admin` role, assigned to the `admin`
+user, with a mapper that puts realm roles in the ID token. The portal does not
+read it yet: it is the shape the planned IdP-managed option will use (issue
+#107), kept here so that option can be developed against a working example.
 
 Set the issuer back to `http://localhost:8081` to return to the mock. Stop
 Keycloak with `docker compose -f dev/docker-compose.yml --profile keycloak down`.

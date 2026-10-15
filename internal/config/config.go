@@ -38,24 +38,12 @@ type Config struct {
 
 	FrontendURL string
 
-	// AdminIDs are the entries that grant admin rights. Each is either an OIDC
-	// subject or an email address; both forms live in one list because an
-	// operator setting up a deployment has the address to hand and has to look
-	// the subject up.
-	//
-	// A subject is the durable form: it never changes, so admin rights cannot
-	// be silently granted or revoked by the IdP reassigning an address. Email
-	// entries are kept working so no deployment breaks on upgrade, but they
-	// carry that risk — see IsAdmin.
-	AdminIDs []string
-
-	// AdminRole is a role from the IdP that grants the admin panel. Set it and
-	// admin membership is managed where staff changes are already handled,
-	// rather than in a list this repo has to keep in step.
-	//
-	// Empty disables role checking entirely: a realm that emits roles must not
-	// hand out the panel until an operator has named the one that counts.
-	AdminRole string
+	// ObsoleteSettings names the settings that are set in the environment but
+	// no longer read, so startup can say so. Admin rights used to come from
+	// ADMIN_IDS, ADMIN_EMAILS and ADMIN_ROLE; they are recorded on the account
+	// now (issue #107), and an operator who still sets these would otherwise
+	// find nobody is an admin and not know why.
+	ObsoleteSettings []string
 
 	DBPath string
 
@@ -144,8 +132,6 @@ func Load() (*Config, error) {
 		SuccessorURL: strings.TrimSpace(os.Getenv("SUCCESSOR_URL")),
 	}
 
-	cfg.AdminRole = strings.TrimSpace(os.Getenv("ADMIN_ROLE"))
-
 	prefix := strings.TrimSpace(os.Getenv("LITELLM_USER_ID_PREFIX"))
 	if !validUserIDPrefix(prefix) {
 		return nil, fmt.Errorf("LITELLM_USER_ID_PREFIX may only contain letters, digits, '-', '_' and '.': %q", prefix)
@@ -158,14 +144,9 @@ func Load() (*Config, error) {
 	}
 	cfg.LiteLLMUserEmail = userEmail
 
-	// ADMIN_IDS supersedes ADMIN_EMAILS but does not replace it: an existing
-	// deployment keeps working untouched, and both are read so an operator can
-	// migrate one admin at a time.
-	for _, raw := range []string{os.Getenv("ADMIN_EMAILS"), os.Getenv("ADMIN_IDS")} {
-		for _, e := range strings.Split(raw, ",") {
-			if e = strings.TrimSpace(e); e != "" {
-				cfg.AdminIDs = append(cfg.AdminIDs, e)
-			}
+	for _, name := range []string{"ADMIN_IDS", "ADMIN_EMAILS", "ADMIN_ROLE"} {
+		if strings.TrimSpace(os.Getenv(name)) != "" {
+			cfg.ObsoleteSettings = append(cfg.ObsoleteSettings, name)
 		}
 	}
 
@@ -319,47 +300,6 @@ func readNotice(path string) (string, error) {
 		return "", fmt.Errorf("%s is empty", path)
 	}
 	return string(b), nil
-}
-
-// HasAdminRole reports whether any of the roles a user's token carries is the
-// one configured to grant the admin panel.
-//
-// Matching is exact: a role name is an opaque identifier from the IdP, and
-// folding case could collide two roles the realm considers distinct.
-func (c *Config) HasAdminRole(roles []string) bool {
-	if c.AdminRole == "" {
-		return false
-	}
-	for _, r := range roles {
-		if r == c.AdminRole {
-			return true
-		}
-	}
-	return false
-}
-
-// IsAdmin reports whether a user holds admin rights, and whether that was
-// decided by their subject or by their email address.
-//
-// The subject is checked first and is the form to prefer: an email address is
-// assigned by the IdP and can be reassigned, so an allowlist keyed on it grants
-// rights to whoever holds the address today rather than to a person. Matching
-// on it is kept for compatibility, and reported so the caller can say so.
-//
-// An empty subject never matches, so a user whose IdP omits the claim cannot
-// take an admin entry by accident.
-func (c *Config) IsAdmin(sub, email string) (admin bool, bySubject bool) {
-	for _, a := range c.AdminIDs {
-		if sub != "" && a == sub {
-			return true, true
-		}
-	}
-	for _, a := range c.AdminIDs {
-		if email != "" && strings.EqualFold(a, email) {
-			return true, false
-		}
-	}
-	return false, false
 }
 
 func requireEnv(key string) string {

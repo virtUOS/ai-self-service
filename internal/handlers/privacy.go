@@ -69,12 +69,11 @@ func (u *UI) Privacy(w http.ResponseWriter, r *http.Request) {
 		TitleKey:      "app.title",
 		PrivacyNotice: true,
 	}
-	// A signed-in reader keeps the account menu. The Admin entry is decided
-	// by the same resolver as the /admin gate, as on the dashboard.
+	// A signed-in reader keeps the account menu. The Admin entry follows the
+	// same flag as the /admin gate, as on the dashboard.
 	if su, err := u.requireSession(r); err == nil && su != nil {
 		data.User = su.User
-		src, _ := resolveAdmin(r.Context(), u.cfg, u.store, su.IDToken, su.User.OIDCSub, su.User.Email)
-		data.IsAdmin = src.isAdmin()
+		data.IsAdmin = su.User.IsAdmin
 	}
 	if err := u.privacyTmpl.Execute(w, data); err != nil {
 		slog.Error("privacy template", "err", err)

@@ -79,6 +79,11 @@ type User struct {
 	// explicitly by the admin; it is never implied by an unset destination.
 	RevokeKeyAtExpiry bool `bun:"revoke_key_at_expiry,notnull"`
 
+	// IsAdmin opens the admin panel, and is the only thing that does: set by
+	// another admin there or by the operator with one command on the server,
+	// never derived from an address or a claim (issue #107).
+	IsAdmin bool `bun:"is_admin,notnull"`
+
 	CreatedAt time.Time `bun:"created_at,notnull"`
 	UpdatedAt time.Time `bun:"updated_at,notnull"`
 }
@@ -174,24 +179,6 @@ type ExpiringKey struct {
 	APIKey
 	Email string
 	Name  string
-}
-
-// AdminGrant is admin rights given through the admin panel, as opposed to the
-// deploy-time ADMIN_ROLE and ADMIN_IDS settings.
-//
-// OIDCSub is null until the person first logs in: an admin can be named by
-// email before they have ever signed in, and the subject is recorded then.
-// The subject is what authorises them once known — an email address is
-// assigned by the IdP and can be reassigned to someone else, so a grant
-// resolving by email alone grants rights to whoever holds the address today.
-type AdminGrant struct {
-	bun.BaseModel `bun:"table:admin_grants"`
-
-	ID             int64     `bun:"id,pk,autoincrement"`
-	OIDCSub        *string   `bun:"oidc_sub"`
-	Email          string    `bun:"email,unique,notnull"`
-	GrantedByEmail string    `bun:"granted_by_email,notnull"`
-	CreatedAt      time.Time `bun:"created_at,notnull"`
 }
 
 // Limits maps a profile onto the provider-neutral limits applied to a key.
