@@ -31,3 +31,9 @@
 # Specs and plans written by AI planning tools during development. Local
 # working files, not documentation.
 /docs/superpowers/
+
+# The website: build output, the virtualenv, and the brand files that the
+# Makefile copies in from web/static and docs/brand.
+/website/site/
+/website/.venv/
+/website/docs/assets/

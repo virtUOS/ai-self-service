@@ -1,0 +1,375 @@
+/* Keyosk theme for Zensical (modern variant).
+   Colours and fonts come from docs/brand.md; keep them in step with
+   web/static/style.css. */
+
+/* ── Fonts ───────────────────────────────────────────────── */
+/* Self-hosted, copied in from web/static/fonts by `make website-assets`. The
+   site loads nothing from Google. */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url(../assets/fonts/space-grotesk-var-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url(../assets/fonts/space-grotesk-var-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(../assets/fonts/ibm-plex-mono-400-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(../assets/fonts/ibm-plex-mono-400-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(../assets/fonts/ibm-plex-mono-500-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(../assets/fonts/ibm-plex-mono-500-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  --md-text-font: "Space Grotesk";
+  --md-code-font: "IBM Plex Mono";
+}
+
+/* ── Colours: light ──────────────────────────────────────── */
+[data-md-color-scheme="keyosk"] {
+  color-scheme: light;
+
+  --md-default-fg-color:             #1f2a2a;
+  --md-default-fg-color--light:      #4a5654;
+  --md-default-fg-color--lighter:    #1f2a2a59;
+  --md-default-fg-color--lightest:   #1f2a2a14;
+  --md-default-bg-color:             #f6f3ec;
+  --md-default-bg-color--light:       #f6f3ecb3;
+  --md-default-bg-color--lighter:     #f6f3ec4d;
+  --md-default-bg-color--lightest:    #f6f3ec1f;
+
+  /* The header is paper with ink text, like the app's. */
+  --md-primary-fg-color:             #f6f3ec;
+  --md-primary-fg-color--light:      #ece6d9;
+  --md-primary-fg-color--dark:       #e4dfd4;
+  --md-primary-bg-color:             #1f2a2a;
+  --md-primary-bg-color--light:      #4a5654;
+  --md-accent-fg-color:              #1e7a6e;
+  --md-accent-fg-color--transparent: #1e7a6e1a;
+  --md-accent-bg-color:              #ffffff;
+  --md-accent-bg-color--light:       #ffffffb3;
+
+  --md-typeset-color:                var(--md-default-fg-color);
+  --md-typeset-a-color:              #1e7a6e;
+  --md-typeset-mark-color:           #1e7a6e33;
+  --md-typeset-table-color:          #1f2a2a1f;
+  --md-typeset-table-color--light:   #1f2a2a0a;
+  --md-typeset-kbd-color:            #ffffff;
+  --md-typeset-kbd-accent-color:     #ffffff;
+  --md-typeset-kbd-border-color:     #cfc9ba;
+  --md-admonition-fg-color:          var(--md-default-fg-color);
+  --md-admonition-bg-color:          var(--md-default-bg-color);
+
+  --md-code-fg-color:                #1f2a2a;
+  --md-code-bg-color:                #efebe1;
+  --md-code-bg-color--light:         #efebe1b3;
+  --md-code-bg-color--lighter:       #efebe14d;
+  --md-code-hl-color:                #1e7a6e;
+  --md-code-hl-color--light:         #1e7a6e1a;
+  --md-code-hl-keyword-color:        #1e7a6e;
+  --md-code-hl-string-color:         #2e7d4f;
+  --md-code-hl-number-color:         #a8520a;
+  --md-code-hl-function-color:       #6b4e9b;
+  --md-code-hl-constant-color:       #8a5a00;
+  --md-code-hl-special-color:        #b02a2a;
+
+  --md-footer-fg-color:              #1f2a2a;
+  --md-footer-fg-color--light:       #4a5654;
+  --md-footer-fg-color--lighter:     #4a565499;
+  --md-footer-bg-color:              #ece6d9;
+  --md-footer-bg-color--dark:        #e4dfd4;
+
+  --kx-panel:   #ece6d9;
+  --kx-card:    #ffffff;
+  --kx-line:    #e4dfd4;
+  --kx-ok:      #2e7d4f;
+  --kx-stripe:  .45;
+  --kx-on-accent: #ffffff;
+
+  --color-foreground:                31 42 42;
+  --color-background:                246 243 236;
+  --color-background-subtle:         239 235 225;
+  --color-backdrop:                  246 243 236;
+}
+
+/* ── Colours: dark ───────────────────────────────────────── */
+[data-md-color-scheme="keyosk-dark"] {
+  color-scheme: dark;
+
+  --md-default-fg-color:             #f2eee6;
+  --md-default-fg-color--light:      #a9b3b0;
+  --md-default-fg-color--lighter:    #f2eee652;
+  --md-default-fg-color--lightest:   #f2eee61f;
+  --md-default-bg-color:             #121817;
+  --md-default-bg-color--light:       #121817b3;
+  --md-default-bg-color--lighter:     #1218174d;
+  --md-default-bg-color--lightest:    #1218171f;
+
+  --md-primary-fg-color:             #121817;
+  --md-primary-fg-color--light:      #1a2120;
+  --md-primary-fg-color--dark:       #0e1413;
+  --md-primary-bg-color:             #f2eee6;
+  --md-primary-bg-color--light:      #a9b3b0;
+  --md-accent-fg-color:              #52b5a6;
+  --md-accent-fg-color--transparent: #52b5a61f;
+  --md-accent-bg-color:              #0e1413;
+  --md-accent-bg-color--light:       #0e1413b3;
+
+  --md-typeset-color:                var(--md-default-fg-color);
+  --md-typeset-a-color:              #52b5a6;
+  --md-typeset-mark-color:           #52b5a64d;
+  --md-typeset-table-color:          #f2eee61f;
+  --md-typeset-table-color--light:   #f2eee60d;
+  --md-typeset-kbd-color:            #f2eee61f;
+  --md-typeset-kbd-accent-color:     #f2eee633;
+  --md-typeset-kbd-border-color:     #0e1413;
+  --md-admonition-fg-color:          var(--md-default-fg-color);
+  --md-admonition-bg-color:          var(--md-default-bg-color);
+  --md-shadow-z1: 0 .2rem .5rem #0000000d, 0 0 .05rem #ffffff1a;
+  --md-shadow-z2: 0 .2rem .5rem #00000040, 0 0 .05rem #ffffff59;
+  --md-shadow-z3: 0 .5rem 2rem #0006, 0 0 .05rem #00000059;
+
+  --md-code-fg-color:                #e4dfd4;
+  --md-code-bg-color:                #1a2120;
+  --md-code-bg-color--light:         #1a2120e6;
+  --md-code-bg-color--lighter:       #1a21208a;
+  --md-code-hl-color:                #52b5a6;
+  --md-code-hl-color--light:         #52b5a61a;
+  --md-code-hl-keyword-color:        #52b5a6;
+  --md-code-hl-string-color:         #6bcb8f;
+  --md-code-hl-number-color:         #f0a35e;
+  --md-code-hl-function-color:       #c9a7f0;
+  --md-code-hl-constant-color:       #e3b866;
+  --md-code-hl-special-color:        #ef9a9a;
+
+  --md-footer-fg-color:              #f2eee6;
+  --md-footer-fg-color--light:       #a9b3b0;
+  --md-footer-fg-color--lighter:     #a9b3b099;
+  --md-footer-bg-color:              #1a2120;
+  --md-footer-bg-color--dark:        #0e1413;
+
+  --kx-panel:   #1a2120;
+  --kx-card:    #1f2827;
+  --kx-line:    #2c3836;
+  --kx-ok:      #6bcb8f;
+  --kx-stripe:  .3;
+  --kx-on-accent: #0e1413;
+
+  --color-foreground:                242 238 230;
+  --color-background:                18 24 23;
+  --color-background-subtle:         26 33 32;
+  --color-backdrop:                  14 20 19;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+/* Paper header with a hairline, the logo as mark plus lowercase wordmark. */
+.md-header {
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  box-shadow: none;
+}
+.md-header__button.md-logo svg,
+.md-nav__title .md-logo svg {
+  width: 2.2rem;
+  height: 2.2rem;
+}
+.brand-awning { fill: var(--md-accent-fg-color); }
+.brand-body { fill: var(--md-default-fg-color); }
+.md-header__title .md-header__topic:first-child {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -.04em;
+  text-transform: lowercase;
+}
+
+/* ── Admonitions ─────────────────────────────────────────── */
+/* The default "note" is blue; make it the accent. Other types keep their
+   own colours, which carry meaning (warning, danger). */
+.md-typeset .admonition.note,
+.md-typeset details.note {
+  background-color: var(--md-accent-fg-color--transparent);
+}
+.md-typeset .note > .admonition-title::before,
+.md-typeset .note > summary::before {
+  background-color: var(--md-accent-fg-color);
+}
+.md-typeset .note > .admonition-title::after,
+.md-typeset .note > summary::after {
+  color: var(--md-accent-fg-color);
+}
+
+/* ── Front page ──────────────────────────────────────────── */
+/* The hero from the design drafts. Ported from its inline styles; the colours
+   are the scheme's (--kx-* above), so the palette toggle drives it. */
+.kx-home { max-width: 61rem; margin: 0 auto; padding: 0 .8rem; flex: 1 1 100%; }
+.kx-awn-fill { fill: var(--md-accent-fg-color); }
+.kx-awn-stripe { fill-opacity: var(--kx-stripe); }
+.kx-ink { fill: var(--md-default-fg-color); }
+.kx-awning { overflow: hidden; }
+.kx-awning svg { display: block; }
+
+.kx-hero {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 3rem 4rem;
+  align-items: center;
+  padding: 3rem 0 4rem;
+}
+.kx-eyebrow {
+  margin: 0 0 1.1rem;
+  font-family: var(--md-code-font-family);
+  font-size: .7rem;
+  font-weight: 500;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--md-accent-fg-color);
+}
+.kx-hero h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 7vw, 3.8rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -.034em;
+  color: var(--md-default-fg-color);
+}
+.kx-hero h1 span { color: var(--md-accent-fg-color); }
+.kx-lead {
+  max-width: 38ch;
+  margin: 1.3rem 0 1.9rem;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: var(--md-default-fg-color--light);
+}
+.kx-lead strong { font-weight: 500; color: var(--md-default-fg-color); }
+.kx-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.kx-button {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  min-height: 2.4rem;
+  padding: 0 1.1rem;
+  border: 1.5px solid var(--kx-line);
+  border-radius: .6rem;
+  font-size: .85rem;
+  font-weight: 500;
+  color: var(--md-default-fg-color);
+  transition: filter .15s;
+}
+.kx-button:hover, .kx-button:focus-visible { filter: brightness(.95); color: var(--md-default-fg-color); }
+.kx-button--primary {
+  border-color: var(--md-accent-fg-color);
+  background: var(--md-accent-fg-color);
+  color: var(--kx-on-accent);
+}
+.kx-button--primary:hover, .kx-button--primary:focus-visible { color: var(--kx-on-accent); }
+
+.kx-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.6rem;
+  padding: 2.4rem 1.6rem 1.8rem;
+  border-radius: 1.4rem;
+  background: var(--kx-panel);
+}
+.kx-panel__mark { width: 11rem; max-width: 60%; height: auto; }
+.kx-card {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 20rem;
+  padding: .9rem 1rem;
+  border: 1px solid var(--kx-line);
+  border-radius: .8rem;
+  background: var(--kx-card);
+}
+.kx-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--md-code-font-family);
+  font-size: .6rem;
+  font-weight: 500;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--md-default-fg-color--light);
+}
+.kx-card__status { display: inline-flex; align-items: center; gap: .3rem; color: var(--kx-ok); }
+.kx-card__status i { width: .4rem; height: .4rem; border-radius: 50%; background: var(--kx-ok); }
+.kx-card__row { display: flex; align-items: center; gap: .6rem; }
+.kx-card__row code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 0;
+  background: none;
+  font-size: .85rem;
+  font-weight: 500;
+  color: var(--md-default-fg-color);
+}
+.kx-card__copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 1px solid var(--kx-line);
+  border-radius: .5rem;
+  color: var(--md-default-fg-color);
+}
+
+.kx-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1rem;
+  padding: 0 0 4rem;
+}
+.kx-feature {
+  display: block;
+  padding: 1.2rem 1.3rem;
+  border: 1px solid var(--kx-line);
+  border-radius: .8rem;
+  background: var(--kx-card);
+  color: var(--md-default-fg-color);
+  transition: border-color .15s;
+}
+.kx-feature:hover, .kx-feature:focus-visible { border-color: var(--md-accent-fg-color); color: var(--md-default-fg-color); }
+.kx-feature h2 { margin: 0 0 .4rem; font-size: .95rem; font-weight: 700; letter-spacing: -.01em; }
+.kx-feature p { margin: 0; font-size: .75rem; line-height: 1.55; color: var(--md-default-fg-color--light); }
