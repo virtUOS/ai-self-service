@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -46,7 +47,11 @@ func newRouter(cfg *config.Config, ui *handlers.UI, admin *handlers.Admin, csrf 
 		return ""
 	}))
 
-	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(web.StaticFS))))
+	r.Handle("/static/*", http.StripPrefix("/static/", staticFiles(http.FileServer(http.FS(web.StaticFS)))))
+	// Browsers ask for /favicon.ico at the root whatever the page links to.
+	r.Get("/favicon.ico", func(w http.ResponseWriter, req *http.Request) {
+		http.ServeFileFS(w, req, web.StaticFS, "favicon.ico")
+	})
 
 	// Called server-to-server by the OIDC provider, authenticated by the signed
 	// logout_token in the body — no browser cookie, so CSRF does not apply.
@@ -101,4 +106,16 @@ func newRouter(cfg *config.Config, ui *handlers.UI, admin *handlers.Admin, csrf 
 	})
 
 	return r
+}
+
+// staticFiles lets browsers keep the web fonts for good. They are never edited
+// in place, so a new version would get a new file name. The stylesheet and
+// scripts are not fingerprinted and keep the default caching.
+func staticFiles(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "fonts/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		}
+		next.ServeHTTP(w, r)
+	})
 }

@@ -4,7 +4,7 @@
   "clients": [
     {
       "clientId": "ai-self-service",
-      "name": "AI API Key Portal (local dev)",
+      "name": "Keyosk (local dev)",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,

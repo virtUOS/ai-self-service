@@ -38,8 +38,9 @@ var publicRoutes = map[string]bool{
 // readOnlyPaths answer any method and change nothing, so they need neither a
 // session nor a CSRF token.
 var readOnlyPaths = map[string]bool{
-	"/metrics":  true,
-	"/static/*": true,
+	"/metrics":     true,
+	"/static/*":    true,
+	"/favicon.ico": true,
 }
 
 // csrfExempt are the routes that change state without a CSRF token.
@@ -336,6 +337,35 @@ func TestEveryStateChangingRouteLimitsTheBody(t *testing.T) {
 			if rec.Code != want {
 				t.Errorf("%s (chunked=%v) with an oversized body: %d, want %d", r, chunked, rec.Code, want)
 			}
+		}
+	}
+}
+
+func TestStaticAssets(t *testing.T) {
+	rt := newRouteTest(t)
+	for _, tc := range []struct {
+		path, wantType, wantCache string
+	}{
+		{"/favicon.ico", "image/", ""},
+		{"/static/favicon.svg", "image/svg+xml", ""},
+		{"/static/fonts/space-grotesk-var-latin.woff2", "font/woff2", "immutable"},
+	} {
+		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+		rec := httptest.NewRecorder()
+		rt.router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET %s: %d, want 200", tc.path, rec.Code)
+			continue
+		}
+		if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, tc.wantType) {
+			t.Errorf("GET %s: Content-Type %q, want %s", tc.path, got, tc.wantType)
+		}
+		got := rec.Header().Get("Cache-Control")
+		if tc.wantCache == "" && got != "" {
+			t.Errorf("GET %s: Cache-Control %q, want none", tc.path, got)
+		}
+		if !strings.Contains(got, tc.wantCache) {
+			t.Errorf("GET %s: Cache-Control %q, want %q", tc.path, got, tc.wantCache)
 		}
 	}
 }

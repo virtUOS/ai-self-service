@@ -336,7 +336,7 @@ func (u *UI) refuseIfRetired(w http.ResponseWriter) bool {
 	if u.cfg.SuccessorURL == "" {
 		return false
 	}
-	http.Error(w, "This portal no longer issues or extends keys; use "+u.cfg.SuccessorURL, http.StatusForbidden)
+	http.Error(w, "This Keyosk instance no longer issues or extends keys; use "+u.cfg.SuccessorURL, http.StatusForbidden)
 	return true
 }
 
