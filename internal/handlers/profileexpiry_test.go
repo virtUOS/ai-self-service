@@ -162,7 +162,7 @@ func TestDashboardShowsTheDeadline(t *testing.T) {
 	ctx := context.Background()
 
 	p := &database.Profile{Name: "thesis project"}
-	if err := store.CreateProfile(ctx, p); err != nil {
+	if _, err := store.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Relative to now, not a fixed date: a hardcoded one eventually falls into
@@ -203,10 +203,10 @@ func TestDashboardNamesTheDestinationProfile(t *testing.T) {
 
 	from := &database.Profile{Name: "raised"}
 	to := &database.Profile{Name: "restricted"}
-	if err := store.CreateProfile(ctx, from); err != nil {
+	if _, err := store.CreateProfile(ctx, from, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateProfile(ctx, to); err != nil {
+	if _, err := store.CreateProfile(ctx, to, nil); err != nil {
 		t.Fatal(err)
 	}
 	future := time.Now().AddDate(0, 0, 10)
@@ -231,7 +231,7 @@ func TestDashboardSaysTheKeyWillBeDeleted(t *testing.T) {
 	ctx := context.Background()
 
 	p := &database.Profile{Name: "raised"}
-	if err := store.CreateProfile(ctx, p); err != nil {
+	if _, err := store.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	future := time.Now().AddDate(0, 0, 10)
@@ -258,10 +258,10 @@ func TestDashboardFallsBackWhenTheDestinationIsGone(t *testing.T) {
 
 	from := &database.Profile{Name: "raised"}
 	to := &database.Profile{Name: "doomed"}
-	if err := store.CreateProfile(ctx, from); err != nil {
+	if _, err := store.CreateProfile(ctx, from, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateProfile(ctx, to); err != nil {
+	if _, err := store.CreateProfile(ctx, to, nil); err != nil {
 		t.Fatal(err)
 	}
 	future := time.Now().AddDate(0, 0, 10)
@@ -290,7 +290,7 @@ func TestDashboardMarksAPassedDeadlineOverdue(t *testing.T) {
 	ctx := context.Background()
 
 	p := &database.Profile{Name: "raised"}
-	if err := store.CreateProfile(ctx, p); err != nil {
+	if _, err := store.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	// UTC, matching what the page formats after the value round-trips through
@@ -326,7 +326,7 @@ func TestDashboardSaysNothingWithoutADeadline(t *testing.T) {
 	ctx := context.Background()
 
 	p := &database.Profile{Name: "standard"}
-	if err := store.CreateProfile(ctx, p); err != nil {
+	if _, err := store.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SetUserProfile(ctx, user.ID, &p.ID); err != nil {

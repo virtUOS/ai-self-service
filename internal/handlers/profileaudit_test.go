@@ -87,8 +87,8 @@ func TestProfileChangesAreAudited(t *testing.T) {
 }
 
 // The panel only posts updates for profiles it lists, so id 0 comes from a
-// hand-made request. SaveProfile reads id 0 as "create", so passing it on
-// created a profile that no audit row recorded.
+// hand-made request. It once created a profile that no audit row recorded;
+// the handler now refuses it as malformed before it reaches the store.
 func TestUpdatingProfileZeroIsRefused(t *testing.T) {
 	a, store, token, _ := newSyncTestAdmin(t, "paudit-zero")
 	ctx := context.Background()
@@ -174,7 +174,7 @@ func TestRefusedProfileDeletesAreNotAudited(t *testing.T) {
 		t.Fatal(err)
 	}
 	assigned := &database.Profile{Name: "lecturers"}
-	if err := store.CreateProfile(ctx, assigned); err != nil {
+	if _, err := store.CreateProfile(ctx, assigned, nil); err != nil {
 		t.Fatal(err)
 	}
 	u, err := store.GetOrCreateUser(ctx, "sub-l", "l@uni-osnabrueck.de", "L")

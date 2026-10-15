@@ -117,7 +117,7 @@ func TestApplyProfileExpiryClearsTheDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	dest := &Profile{Name: "after"}
-	if err := s.CreateProfile(ctx, dest); err != nil {
+	if _, err := s.CreateProfile(ctx, dest, nil); err != nil {
 		t.Fatal(err)
 	}
 	yesterday := time.Now().Add(-time.Hour)
@@ -162,7 +162,7 @@ func TestApplyProfileExpiryToDefaultClearsTheProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := &Profile{Name: "temporary"}
-	if err := s.CreateProfile(ctx, p); err != nil {
+	if _, err := s.CreateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	yesterday := time.Now().Add(-time.Hour)
@@ -194,7 +194,7 @@ func TestDeleteProfileClearsPendingDestinations(t *testing.T) {
 		t.Fatal(err)
 	}
 	dest := &Profile{Name: "doomed"}
-	if err := s.CreateProfile(ctx, dest); err != nil {
+	if _, err := s.CreateProfile(ctx, dest, nil); err != nil {
 		t.Fatal(err)
 	}
 	tomorrow := time.Now().Add(24 * time.Hour)

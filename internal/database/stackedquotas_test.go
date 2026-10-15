@@ -16,10 +16,7 @@ func TestMigrationCarriesExistingQuota(t *testing.T) {
 
 	// A profile written the old way, as the previous release would have.
 	p := &Profile{Name: "students"}
-	if err := s.CreateProfile(ctx, p); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Budget: 0.15, Period: "24h"}}); err != nil {
+	if _, err := s.CreateProfile(ctx, p, []ProfileQuota{{Budget: 0.15, Period: "24h"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -44,10 +41,7 @@ func TestProfileHoldsSeveralWindows(t *testing.T) {
 	}
 
 	p := &Profile{Name: "staff"}
-	if err := s.CreateProfile(ctx, p); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{
+	if _, err := s.CreateProfile(ctx, p, []ProfileQuota{
 		{Budget: 0.01, Period: "24h"},
 		{Budget: 0.1, Period: "30d"},
 	}); err != nil {
@@ -62,7 +56,7 @@ func TestProfileHoldsSeveralWindows(t *testing.T) {
 
 // Replacing the set must remove windows that are gone, not merge them. A
 // profile that drops a window would otherwise keep enforcing it.
-func TestSetProfileQuotasReplaces(t *testing.T) {
+func TestUpdateProfileReplacesQuotas(t *testing.T) {
 	s := testStore(t, "qw3")
 	ctx := context.Background()
 	if err := s.RunMigrations(ctx); err != nil {
@@ -70,17 +64,14 @@ func TestSetProfileQuotasReplaces(t *testing.T) {
 	}
 
 	p := &Profile{Name: "staff"}
-	if err := s.CreateProfile(ctx, p); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{
+	if _, err := s.CreateProfile(ctx, p, []ProfileQuota{
 		{Budget: 0.01, Period: "24h"},
 		{Budget: 0.1, Period: "30d"},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// Drop back to one window.
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Budget: 0.005, Period: "1h"}}); err != nil {
+	if _, _, err := s.UpdateProfile(ctx, p, []ProfileQuota{{Budget: 0.005, Period: "1h"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -94,20 +85,17 @@ func TestSetProfileQuotasReplaces(t *testing.T) {
 }
 
 // Clearing all windows means unlimited.
-func TestSetProfileQuotasClears(t *testing.T) {
+func TestUpdateProfileClearsQuotas(t *testing.T) {
 	s := testStore(t, "qw4")
 	ctx := context.Background()
 	if err := s.RunMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
 	p := &Profile{Name: "staff"}
-	if err := s.CreateProfile(ctx, p); err != nil {
+	if _, err := s.CreateProfile(ctx, p, []ProfileQuota{{Budget: 0.0000001, Period: "1h"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Budget: 0.0000001, Period: "1h"}}); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetProfileQuotas(ctx, p.ID, nil); err != nil {
+	if _, _, err := s.UpdateProfile(ctx, p, nil); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := s.GetProfile(ctx, p.ID)

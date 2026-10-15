@@ -38,10 +38,7 @@ func TestDashboardNeverPushesLimits(t *testing.T) {
 
 	// Move the user to a profile with different limits, as an admin would.
 	p := &database.Profile{Name: "test quota"}
-	if err := store.CreateProfile(ctx, p); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.SetProfileQuotas(ctx, p.ID, []database.ProfileQuota{
+	if _, err := store.CreateProfile(ctx, p, []database.ProfileQuota{
 		{Budget: 0.01, Period: "1h"},
 	}); err != nil {
 		t.Fatal(err)

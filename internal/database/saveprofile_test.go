@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 )
@@ -22,26 +23,22 @@ func newSaveProfileStore(t *testing.T, name string) *Store {
 	return s
 }
 
-// SaveProfile creates a profile together with its windows, and a later save
+// CreateProfile saves a profile together with its windows, and UpdateProfile
 // replaces both.
-func TestSaveProfileCreatesAndUpdates(t *testing.T) {
+func TestProfileSaveCreatesAndUpdates(t *testing.T) {
 	s := newSaveProfileStore(t, "save1")
 	ctx := context.Background()
 
 	p := &Profile{Name: "students", Description: "d", Models: []string{"a"}}
-	prev, _, err := s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 5, Period: "24h"}})
-	if err != nil {
+	if _, err := s.CreateProfile(ctx, p, []ProfileQuota{{Budget: 5, Period: "24h"}}); err != nil {
 		t.Fatal(err)
 	}
 	if p.ID == 0 {
 		t.Fatal("created profile has no id")
 	}
-	if prev != nil {
-		t.Errorf("create returned a previous profile: %+v", prev)
-	}
 
 	p.Description = "changed"
-	prev, _, err = s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 2, Period: "1h"}, {Budget: 10, Period: "7d"}})
+	prev, _, err := s.UpdateProfile(ctx, p, []ProfileQuota{{Budget: 2, Period: "1h"}, {Budget: 10, Period: "7d"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,12 +63,12 @@ func TestSaveProfileCreatesAndUpdates(t *testing.T) {
 
 // A create whose windows cannot be stored leaves no profile behind. One saved
 // without its windows would read as unlimited.
-func TestSaveProfileCreateRollsBackWhenQuotasFail(t *testing.T) {
+func TestCreateProfileRollsBackWhenQuotasFail(t *testing.T) {
 	s := newSaveProfileStore(t, "save2")
 	ctx := context.Background()
 
 	p := &Profile{Name: "half", Description: "d"}
-	if _, _, err := s.SaveProfile(ctx, p, twoWindowsForOnePeriod); err == nil {
+	if _, err := s.CreateProfile(ctx, p, twoWindowsForOnePeriod); err == nil {
 		t.Fatal("save with two windows for one period succeeded")
 	}
 
@@ -88,12 +85,12 @@ func TestSaveProfileCreateRollsBackWhenQuotasFail(t *testing.T) {
 
 // An update whose windows cannot be stored leaves the profile as it was,
 // fields and windows alike.
-func TestSaveProfileUpdateRollsBackWhenQuotasFail(t *testing.T) {
+func TestUpdateProfileRollsBackWhenQuotasFail(t *testing.T) {
 	s := newSaveProfileStore(t, "save3")
 	ctx := context.Background()
 
 	p := &Profile{Name: "staff", Description: "before", Models: []string{"a"}}
-	if _, _, err := s.SaveProfile(ctx, p, []ProfileQuota{{Budget: 5, Period: "24h"}}); err != nil {
+	if _, err := s.CreateProfile(ctx, p, []ProfileQuota{{Budget: 5, Period: "24h"}}); err != nil {
 		t.Fatal(err)
 	}
 	before, err := s.GetProfile(ctx, p.ID)
@@ -102,7 +99,7 @@ func TestSaveProfileUpdateRollsBackWhenQuotasFail(t *testing.T) {
 	}
 
 	edit := &Profile{ID: p.ID, Name: "staff", Description: "after", Models: []string{"a", "b"}}
-	if _, _, err := s.SaveProfile(ctx, edit, twoWindowsForOnePeriod); err == nil {
+	if _, _, err := s.UpdateProfile(ctx, edit, twoWindowsForOnePeriod); err == nil {
 		t.Fatal("save with two windows for one period succeeded")
 	}
 
@@ -120,17 +117,17 @@ func TestSaveProfileUpdateRollsBackWhenQuotasFail(t *testing.T) {
 
 // Saving the default as not the default is refused, and the refusal saves
 // nothing, not even the windows.
-func TestSaveProfileRefusesToUndefaultAndSavesNothing(t *testing.T) {
+func TestUpdateProfileRefusesToUndefaultAndSavesNothing(t *testing.T) {
 	s := newSaveProfileStore(t, "save4")
 	ctx := context.Background()
 
 	def := &Profile{Name: "default", Description: "before", IsDefault: true,
 		Quotas: []ProfileQuota{{Budget: 5, Period: "24h"}}}
-	if _, _, err := s.SaveProfile(ctx, def, def.Quotas); err != nil {
+	if _, err := s.CreateProfile(ctx, def, def.Quotas); err != nil {
 		t.Fatal(err)
 	}
 	edit := &Profile{ID: def.ID, Name: def.Name, Description: "changed"}
-	_, _, err := s.SaveProfile(ctx, edit, []ProfileQuota{{Budget: 1, Period: "1h"}})
+	_, _, err := s.UpdateProfile(ctx, edit, []ProfileQuota{{Budget: 1, Period: "1h"}})
 	if !errors.Is(err, ErrDefaultProfile) {
 		t.Fatalf("err = %v, want ErrDefaultProfile", err)
 	}
@@ -144,5 +141,46 @@ func TestSaveProfileRefusesToUndefaultAndSavesNothing(t *testing.T) {
 	}
 	if !sameQuotaWindows(got.Quotas, def.Quotas) {
 		t.Errorf("quotas = %+v, want %+v", got.Quotas, def.Quotas)
+	}
+}
+
+// An update never creates a profile: for an id that does not exist, 0
+// included, it fails with sql.ErrNoRows and saves nothing, windows included.
+func TestUpdateProfileRefusesMissingProfile(t *testing.T) {
+	s := newSaveProfileStore(t, "save5")
+	ctx := context.Background()
+	before, err := s.ListProfiles(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, id := range []int64{0, 9999} {
+		p := &Profile{ID: id, Name: "ghost", IsDefault: true}
+		_, _, err := s.UpdateProfile(ctx, p, []ProfileQuota{{Budget: 1, Period: "1h"}})
+		if !errors.Is(err, sql.ErrNoRows) {
+			t.Errorf("id %d: err = %v, want sql.ErrNoRows", id, err)
+		}
+	}
+
+	after, err := s.ListProfiles(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("%d profiles after the updates, want %d", len(after), len(before))
+	}
+	for i := range after {
+		if after[i].Name != before[i].Name || after[i].IsDefault != before[i].IsDefault ||
+			!sameQuotaWindows(after[i].Quotas, before[i].Quotas) {
+			t.Errorf("profile %d = %+v, want it unchanged from %+v", i, after[i], before[i])
+		}
+	}
+	var orphans int
+	if err := s.QueryRowRaw(ctx, `SELECT COUNT(*) FROM profile_quotas
+		WHERE profile_id NOT IN (SELECT id FROM profiles)`).Scan(&orphans); err != nil {
+		t.Fatal(err)
+	}
+	if orphans != 0 {
+		t.Errorf("%d quota windows without a profile, want none", orphans)
 	}
 }

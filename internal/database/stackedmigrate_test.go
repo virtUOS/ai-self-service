@@ -34,10 +34,7 @@ func TestDeletingProfileRemovesItsQuotas(t *testing.T) {
 	ctx := context.Background()
 
 	p := &Profile{Name: "temp"}
-	if err := s.CreateProfile(ctx, p); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetProfileQuotas(ctx, p.ID, []ProfileQuota{{Budget: 0.0001, Period: "1h"}}); err != nil {
+	if _, err := s.CreateProfile(ctx, p, []ProfileQuota{{Budget: 0.0001, Period: "1h"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteProfile(ctx, p.ID); err != nil {
