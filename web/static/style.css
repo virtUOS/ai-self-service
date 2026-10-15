@@ -1,90 +1,147 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ── Design tokens ───────────────────────────────────────── */
-:root {
-  --bg:               #f4f6fb;
-  --surface:          #ffffff;
-  --text:             #1a1a2e;
-  --text-muted:       #555;
-  --text-subtle:      #666;
-  --text-faint:       #999;
-  --border:           #e5e7eb;
-  --border-light:     #f0f0f0;
-  --primary:          #2d6ae0;
-  --card-shadow:      0 1px 4px rgba(0,0,0,.07), 0 4px 16px rgba(0,0,0,.04);
+/* ── Fonts ───────────────────────────────────────────────── */
+/* Self-hosted: the CSP allows no external font sources. latin-ext covers the
+   rest of Western and Central European names. Licences are in static/fonts/. */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url(/static/fonts/space-grotesk-var-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url(/static/fonts/space-grotesk-var-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/static/fonts/ibm-plex-mono-400-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/static/fonts/ibm-plex-mono-400-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/static/fonts/ibm-plex-mono-500-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/static/fonts/ibm-plex-mono-500-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
-  --key-bg:           #f0f4ff;
-  --key-border:       #c9d8ff;
-  --key-new-bg:       #e8f5e9;
-  --key-new-border:   #81c784;
+/* ── Design tokens ───────────────────────────────────────── */
+/* The Keyosk palette: warm paper, dark teal-black ink, one teal accent. */
+:root {
+  --bg:               #f6f3ec;
+  --surface:          #ffffff;
+  --text:             #1f2a2a;
+  --text-muted:       #4a5654;
+  --text-subtle:      #566260;
+  --text-faint:       #8a9390;
+  --border:           #e4dfd4;
+  --border-light:     #efebe1;
+  --primary:          #1e7a6e;
+  --on-primary:       #ffffff;
+  --card-shadow:      0 1px 4px rgba(31,42,42,.07), 0 4px 16px rgba(31,42,42,.04);
+  --header-hover:     rgba(31,42,42,.08);
+
+  --key-bg:           #eaf3f0;
+  --key-border:       #b9d9d2;
+  --key-new-bg:       #e9f4ec;
+  --key-new-border:   #8cc49e;
   --code-bg:          #ffffff;
 
   /* One monospace for everything copied verbatim: key, URL, model names,
      example code. A thin typewriter face is too faint to tell apart from prose. */
-  --font-mono:        ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+  --font-mono:        'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;
 
-  --alert-info-bg:    #e3f2fd; --alert-info-border:   #90caf9; --alert-info-text:   #0d47a1;
-  --alert-warn-bg:    #fff8e1; --alert-warn-border:   #ffe082; --alert-warn-text:   #7a5c00;
-  --alert-ok-bg:      #e8f5e9; --alert-ok-border:     #a5d6a7; --alert-ok-text:     #1b5e20;
-  --alert-danger-bg:  #ffebee; --alert-danger-border: #ef9a9a; --alert-danger-text: #b71c1c;
+  --alert-info-bg:    #e6f1ef; --alert-info-border:   #a9d1ca; --alert-info-text:   #14574e;
+  --alert-warn-bg:    #fff6dd; --alert-warn-border:   #ebd38a; --alert-warn-text:   #6f5300;
+  --alert-ok-bg:      #e9f4ec; --alert-ok-border:     #a9d2b5; --alert-ok-text:     #1f5c36;
+  --alert-danger-bg:  #fbeaea; --alert-danger-border: #e8aaaa; --alert-danger-text: #a32424;
 
-  --btn-sec-bg:       #e2e8f0; --btn-sec-text:  #374151;
-  --input-bg:         #ffffff; --input-border:  #d1d5db;
-  --hint:             #888;
-  --label:            #444;
+  --btn-sec-bg:       #e9e4d8; --btn-sec-text:  #2b3837;
+  --input-bg:         #ffffff; --input-border:  #cfc9ba;
+  --hint:             #6f7977;
+  --label:            #3a4644;
 
-  --th-bg:            #f8fafc; --th-text: #555;
-  --tr-hover:         #fafbff;
+  --th-bg:            #f1ede3; --th-text: #4a5654;
+  --tr-hover:         #faf7f0;
 
-  --copy-btn-border:  #aaa; --copy-btn-hover: #eee;
+  --copy-btn-border:  #a9b3b0; --copy-btn-hover: #ece6d9;
 
-  --badge-ok-bg:      #e8f5e9; --badge-ok-text:      #2e7d32;
-  --badge-warn-bg:    #fff8e1; --badge-warn-text:    #f57f17;
-  --badge-exp-bg:     #ffebee; --badge-exp-text:     #c62828;
+  --badge-ok-bg:      #e4f1e8; --badge-ok-text:      #2e7d4f;
+  --badge-warn-bg:    #fff3d6; --badge-warn-text:    #8a5a00;
+  --badge-exp-bg:     #fbe9e9; --badge-exp-text:     #b02a2a;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg:               #0f1117;
-    --surface:          #1c2030;
-    --text:             #e2e8f0;
-    --text-muted:       #9ca3af;
-    --text-subtle:      #9ca3af;
-    --text-faint:       #64748b;
-    --border:           #2e3a4e;
-    --border-light:     #252d3d;
-    --primary:          #5b8dee;
+    --bg:               #121817;
+    --surface:          #1a2120;
+    --text:             #f2eee6;
+    --text-muted:       #a9b3b0;
+    --text-subtle:      #a9b3b0;
+    --text-faint:       #7c8886;
+    --border:           #2c3836;
+    --border-light:     #232c2a;
+    --primary:          #52b5a6;
+    --on-primary:       #0e1413;
     --card-shadow:      0 1px 4px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.25);
+    --header-hover:     rgba(242,238,230,.1);
 
-    --key-bg:           #1a2342;
-    --key-border:       #2d4080;
-    --key-new-bg:       #172817;
-    --key-new-border:   #2e5c2e;
-    --code-bg:          #131829;
+    --key-bg:           #172725;
+    --key-border:       #2a524c;
+    --key-new-bg:       #15261a;
+    --key-new-border:   #2e5c3a;
+    --code-bg:          #0e1413;
 
-    --alert-info-bg:    #0d2037; --alert-info-border:   #1e4a7a; --alert-info-text:   #90caf9;
+    --alert-info-bg:    #112a28; --alert-info-border:   #25574f; --alert-info-text:   #8fd3c7;
     --alert-warn-bg:    #251e00; --alert-warn-border:   #5c4a00; --alert-warn-text:   #ffd54f;
-    --alert-ok-bg:      #0d2710; --alert-ok-border:     #1e5c24; --alert-ok-text:     #a5d6a7;
+    --alert-ok-bg:      #0f2616; --alert-ok-border:     #1e5c32; --alert-ok-text:     #9ad8ae;
     --alert-danger-bg:  #2a0d0d; --alert-danger-border: #6b1a1a; --alert-danger-text: #ef9a9a;
 
-    --btn-sec-bg:       #2d3748; --btn-sec-text:  #cbd5e0;
-    --input-bg:         #232b3c; --input-border:  #3d4f6b;
-    --hint:             #64748b;
-    --label:            #b0bec5;
+    --btn-sec-bg:       #2c3836; --btn-sec-text:  #d9d4c8;
+    --input-bg:         #1f2827; --input-border:  #3a4846;
+    --hint:             #7c8886;
+    --label:            #b7c0bc;
 
-    --th-bg:            #181f2e; --th-text: #94a3b8;
-    --tr-hover:         #232b3c;
+    --th-bg:            #161d1c; --th-text: #a9b3b0;
+    --tr-hover:         #1f2827;
 
-    --copy-btn-border:  #4a5568; --copy-btn-hover: #2d3748;
+    --copy-btn-border:  #46544f; --copy-btn-hover: #2c3836;
 
-    --badge-ok-bg:      #0d2710; --badge-ok-text:      #a5d6a7;
+    --badge-ok-bg:      #0f2616; --badge-ok-text:      #9ad8ae;
     --badge-warn-bg:    #251e00; --badge-warn-text:    #ffd54f;
     --badge-exp-bg:     #2a0d0d; --badge-exp-text:     #ef9a9a;
   }
 }
 
 body {
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
   font-size: 15px;
   line-height: 1.5;
   color: var(--text);
@@ -98,19 +155,32 @@ body {
 
 /* ── Header ─────────────────────────────────────────────── */
 header {
-  background: linear-gradient(135deg, #1a1a6e 0%, #2d6ae0 100%);
-  color: #fff;
-  padding: 0 2rem;
+  /* The awning along the top edge is the logo's stripe pattern, drawn in the
+     accent colour. A data: URI cannot read custom properties, so the dark
+     scheme has its own copy below. */
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 42'%3E%3Cg fill='%231e7a6e'%3E%3Crect width='80' height='26'/%3E%3Cpath d='M0 26a20 16 0 0 0 40 0ZM40 26a20 16 0 0 0 40 0Z'/%3E%3C/g%3E%3Cpath d='M40 0H80V26a20 16 0 0 1-40 0Z' fill='%23fff' fill-opacity='.45'/%3E%3C/svg%3E") repeat-x left top / 15.24px 8px,
+    var(--bg);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 2rem 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 56px;
+  height: 64px;
   /* Follows the page down: the dashboard is long enough that the language
      switch, admin link and logout would otherwise need a scroll back to the
      top to reach. z-index keeps it over the cards it slides across. */
   position: sticky;
   top: 0;
   z-index: 20;
+}
+@media (prefers-color-scheme: dark) {
+  header {
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 42'%3E%3Cg fill='%2352b5a6'%3E%3Crect width='80' height='26'/%3E%3Cpath d='M0 26a20 16 0 0 0 40 0ZM40 26a20 16 0 0 0 40 0Z'/%3E%3C/g%3E%3Cpath d='M40 0H80V26a20 16 0 0 1-40 0Z' fill='%23fff' fill-opacity='.3'/%3E%3C/svg%3E") repeat-x left top / 15.24px 8px,
+      var(--bg);
+  }
 }
 /* The title gives way first when space runs out; the language switch and
    account menu must stay reachable. */
@@ -123,10 +193,26 @@ header h1 {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-header h1 a { color: inherit; text-decoration: none; }
+header h1 a { color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: .5em; }
+.brand-mark { height: 2em; width: 2em; flex: none; }
+.brand-awning { fill: var(--primary); }
+.brand-body { fill: var(--text); }
+.brand-name { font-size: 1.35em; font-weight: 700; letter-spacing: -.04em; line-height: 1; }
+/* On the admin pages: which part of Keyosk this is. */
+.brand-page {
+  font-family: var(--font-mono);
+  font-size: .65em;
+  font-weight: 500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-left: 1px solid var(--border);
+  padding-left: .7em;
+  margin-left: .2em;
+}
 header nav { display: flex; gap: 1rem; align-items: center; flex-shrink: 0; }
 header nav a, header nav button {
-  color: rgba(255,255,255,.85);
+  color: var(--text-muted);
   text-decoration: none;
   font-size: .875rem;
   background: none;
@@ -136,7 +222,7 @@ header nav a, header nav button {
   border-radius: 4px;
   transition: background .15s;
 }
-header nav a:hover, header nav button:hover { background: rgba(255,255,255,.15); color: #fff; }
+header nav a:hover, header nav button:hover { background: var(--header-hover); color: var(--text); }
 
 /* The username opens the account menu. Long names are cut rather than
    allowed to push the header onto a second line. */
@@ -293,7 +379,7 @@ button, .btn {
 }
 button:hover, .btn:hover { filter: brightness(.93); }
 
-.btn-primary   { background: var(--primary); color: #fff; }
+.btn-primary   { background: var(--primary); color: var(--on-primary); }
 .btn-secondary { background: var(--btn-sec-bg); color: var(--btn-sec-text); }
 .btn-danger    { background: #e53935; color: #fff; }
 .btn-sm        { padding: .3rem .75rem; font-size: .8rem; }
@@ -530,14 +616,14 @@ tr:hover td { background: var(--tr-hover); }
   text-transform: uppercase;
   letter-spacing: .03em;
   color: inherit;
-  background: rgba(255, 255, 255, .12);
-  border: 1px solid rgba(255, 255, 255, .25);
+  background: var(--header-hover);
+  border: 1px solid var(--border);
   border-radius: .25rem;
   cursor: pointer;
 }
 
 .lang-switch button:hover {
-  background: rgba(255, 255, 255, .22);
+  background: var(--copy-btn-hover);
 }
 
 /* Model list on the dashboard: names must be copyable verbatim, so they are
@@ -707,7 +793,7 @@ tr:hover td { background: var(--tr-hover); }
 .example-tabs button[aria-pressed="true"] {
   background: var(--primary);
   border-color: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
 }
 
 .curl-code {
