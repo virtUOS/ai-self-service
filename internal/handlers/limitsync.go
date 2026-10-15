@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/i18n"
+	"github.com/virtuos/keyosk/internal/i18n"
 )
 
 // limitSyncView is the admin panel's card on the limit sync: whether every key

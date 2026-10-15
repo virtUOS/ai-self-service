@@ -30,7 +30,7 @@ func TestLoadAdminGroupDefaults(t *testing.T) {
 
 func TestLoadAdminGroup(t *testing.T) {
 	setRequiredEnv(t)
-	t.Setenv("ADMIN_GROUP", " ai-self-service-admin ")
+	t.Setenv("ADMIN_GROUP", " keyosk-admin ")
 	t.Setenv("ADMIN_GROUP_CLAIM", "realm_access.roles")
 	t.Setenv("OIDC_EXTRA_SCOPES", " groups  offline_access ")
 
@@ -38,8 +38,8 @@ func TestLoadAdminGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.AdminFromGroups() || cfg.AdminGroup != "ai-self-service-admin" {
-		t.Errorf("AdminGroup = %q, want ai-self-service-admin", cfg.AdminGroup)
+	if !cfg.AdminFromGroups() || cfg.AdminGroup != "keyosk-admin" {
+		t.Errorf("AdminGroup = %q, want keyosk-admin", cfg.AdminGroup)
 	}
 	if cfg.AdminGroupClaim != "realm_access.roles" {
 		t.Errorf("AdminGroupClaim = %q, want realm_access.roles", cfg.AdminGroupClaim)

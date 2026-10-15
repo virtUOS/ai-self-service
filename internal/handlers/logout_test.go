@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/virtuos/ai-self-service/internal/oidc/oidctest"
+	"github.com/virtuos/keyosk/internal/oidc/oidctest"
 )
 
 // sessionCookie returns the session cookie a login response set.
@@ -110,7 +110,7 @@ func TestBackchannelLogoutEndsTheSubjectsSessions(t *testing.T) {
 	phone := sessionCookie(t, lt.login(t, oidctest.Claims{Sub: "sub-1", Email: "a@uni-osnabrueck.de"}))
 	other := sessionCookie(t, lt.login(t, oidctest.Claims{Sub: "sub-2", Email: "b@uni-osnabrueck.de"}))
 
-	rec := lt.backchannelLogout(lt.idp.SignLogoutToken(t, "sub-1", "ai-self-service", false))
+	rec := lt.backchannelLogout(lt.idp.SignLogoutToken(t, "sub-1", "keyosk", false))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("back-channel logout answered %d, want 200", rec.Code)
@@ -130,7 +130,7 @@ func TestBackchannelLogoutRejectsABadToken(t *testing.T) {
 	cookie := sessionCookie(t, lt.login(t, oidctest.Claims{Sub: "sub-1", Email: "a@uni-osnabrueck.de"}))
 
 	for name, token := range map[string]string{
-		"with a nonce":       lt.idp.SignLogoutToken(t, "sub-1", "ai-self-service", true),
+		"with a nonce":       lt.idp.SignLogoutToken(t, "sub-1", "keyosk", true),
 		"for another client": lt.idp.SignLogoutToken(t, "sub-1", "another-client", false),
 		"not a token":        "junk",
 	} {
@@ -155,7 +155,7 @@ func TestSessionStatus(t *testing.T) {
 	if rec := request(lt.ui.SessionStatus, http.MethodGet, "/session/status", nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("without a cookie: %d, want 401", rec.Code)
 	}
-	lt.backchannelLogout(lt.idp.SignLogoutToken(t, "sub-1", "ai-self-service", false))
+	lt.backchannelLogout(lt.idp.SignLogoutToken(t, "sub-1", "keyosk", false))
 	if rec := request(lt.ui.SessionStatus, http.MethodGet, "/session/status", cookie); rec.Code != http.StatusUnauthorized {
 		t.Errorf("after a back-channel logout: %d, want 401", rec.Code)
 	}

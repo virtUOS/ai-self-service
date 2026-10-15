@@ -11,8 +11,8 @@ import (
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
 
-	"github.com/virtuos/ai-self-service/internal/database"
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/database"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 func testStore(t *testing.T, name string) *database.Store {

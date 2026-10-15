@@ -9,11 +9,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/virtuos/ai-self-service/internal/config"
-	"github.com/virtuos/ai-self-service/internal/handlers"
-	"github.com/virtuos/ai-self-service/internal/metrics"
-	"github.com/virtuos/ai-self-service/internal/session"
-	"github.com/virtuos/ai-self-service/web"
+	"github.com/virtuos/keyosk/internal/config"
+	"github.com/virtuos/keyosk/internal/handlers"
+	"github.com/virtuos/keyosk/internal/metrics"
+	"github.com/virtuos/keyosk/internal/session"
+	"github.com/virtuos/keyosk/web"
 )
 
 // pinger is what /readyz needs from the database.

@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/virtuos/ai-self-service/internal/metrics"
+	"github.com/virtuos/keyosk/internal/metrics"
 )
 
 // Counter returns the current value of one series, such as
-// `aiselfservice_keys_missing_total{source="sync"}`, or 0 when it is absent.
+// `keyosk_keys_missing_total{source="sync"}`, or 0 when it is absent.
 // Labels are given as they appear in the exposition, in label-name order.
 func Counter(t testing.TB, name, labels string) float64 {
 	t.Helper()

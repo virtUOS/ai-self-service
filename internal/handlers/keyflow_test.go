@@ -18,10 +18,10 @@ import (
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
 
-	"github.com/virtuos/ai-self-service/internal/config"
-	"github.com/virtuos/ai-self-service/internal/database"
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
-	"github.com/virtuos/ai-self-service/internal/session"
+	"github.com/virtuos/keyosk/internal/config"
+	"github.com/virtuos/keyosk/internal/database"
+	"github.com/virtuos/keyosk/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/session"
 )
 
 // newTestUI builds a UI backed by an in-memory database and a fake provider,

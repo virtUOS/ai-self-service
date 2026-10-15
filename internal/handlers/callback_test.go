@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/config"
-	"github.com/virtuos/ai-self-service/internal/database"
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
-	oidcpkg "github.com/virtuos/ai-self-service/internal/oidc"
-	"github.com/virtuos/ai-self-service/internal/oidc/oidctest"
-	"github.com/virtuos/ai-self-service/internal/session"
+	"github.com/virtuos/keyosk/internal/config"
+	"github.com/virtuos/keyosk/internal/database"
+	"github.com/virtuos/keyosk/internal/keyprovider"
+	oidcpkg "github.com/virtuos/keyosk/internal/oidc"
+	"github.com/virtuos/keyosk/internal/oidc/oidctest"
+	"github.com/virtuos/keyosk/internal/session"
 )
 
 // loginTest is a UI whose logins go through an in-process OIDC issuer.
@@ -29,7 +29,7 @@ func newLoginTest(t *testing.T, name string) *loginTest {
 	lt := &loginTest{store: newAuthTestStore(t, name), idp: oidctest.NewServer(t)}
 	cfg := &config.Config{
 		OIDCIssuerURL:    lt.idp.Issuer(),
-		OIDCClientID:     "ai-self-service",
+		OIDCClientID:     "keyosk",
 		OIDCClientSecret: "secret",
 		OIDCRedirectURL:  "http://localhost:8080/callback",
 		FrontendURL:      "http://localhost:8080",

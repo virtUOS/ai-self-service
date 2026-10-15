@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/keyosk/internal/database"
 )
 
 // auditEvents returns the recorded events, oldest first.

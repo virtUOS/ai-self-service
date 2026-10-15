@@ -10,7 +10,7 @@ import (
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
 
-	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/keyosk/internal/database"
 )
 
 // newSessionStore opens a migrated in-memory store with one user in it.

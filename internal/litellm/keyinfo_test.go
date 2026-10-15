@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // /key/info runs on every dashboard load. A key in its query string ends up in

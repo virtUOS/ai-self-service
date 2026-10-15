@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // testProvider is a provider pointed at nothing: toKeyParams never calls out.

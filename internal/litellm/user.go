@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // UserBudget is the allowance carried by a LiteLLM internal user.

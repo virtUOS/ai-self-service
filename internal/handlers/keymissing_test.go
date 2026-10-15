@@ -8,16 +8,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/virtuos/ai-self-service/internal/database"
-	"github.com/virtuos/ai-self-service/internal/i18n"
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
-	"github.com/virtuos/ai-self-service/internal/metrics/metricstest"
+	"github.com/virtuos/keyosk/internal/database"
+	"github.com/virtuos/keyosk/internal/i18n"
+	"github.com/virtuos/keyosk/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/metrics/metricstest"
 )
 
 // missingKeyCount reads the counter of keys removed as missing for one source.
 func missingKeyCount(t *testing.T, source string) float64 {
 	t.Helper()
-	return metricstest.Counter(t, "aiselfservice_keys_missing_total", `source="`+source+`"`)
+	return metricstest.Counter(t, "keyosk_keys_missing_total", `source="`+source+`"`)
 }
 
 var errGone = fmt.Errorf("LiteLLM /key/info returned 404: %w", keyprovider.ErrKeyNotFound)

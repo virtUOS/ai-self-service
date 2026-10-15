@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/virtuos/ai-self-service/internal/i18n"
+	"github.com/virtuos/keyosk/internal/i18n"
 )
 
 // getPrivacy requests the privacy page as an anonymous visitor, in lang when

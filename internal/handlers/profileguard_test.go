@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/keyosk/internal/database"
 )
 
 // flashOf returns the flash message a redirect carries.

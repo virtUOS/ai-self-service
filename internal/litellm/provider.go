@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // Provider adapts the LiteLLM client to keyprovider.Provider.

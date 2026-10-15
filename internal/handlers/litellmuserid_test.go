@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // A portal with LITELLM_USER_ID_PREFIX binds keys to its own gateway users, so

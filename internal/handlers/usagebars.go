@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // usageBar is one column of the usage chart.

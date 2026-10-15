@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/keyosk/internal/database"
 )
 
 const cookieName = "session_token"

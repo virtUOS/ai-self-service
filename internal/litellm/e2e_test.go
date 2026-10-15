@@ -31,7 +31,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // What a request costs is read back from the gateway rather than fixed here:

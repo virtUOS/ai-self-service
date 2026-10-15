@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // budgetWindow is one entry of LiteLLM's budget_limits array, or the owner's

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // usageWindowDays is how far back the dashboard reports unless configured

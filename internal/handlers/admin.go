@@ -13,14 +13,14 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/virtuos/ai-self-service/internal/config"
-	"github.com/virtuos/ai-self-service/internal/database"
-	"github.com/virtuos/ai-self-service/internal/i18n"
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
-	"github.com/virtuos/ai-self-service/internal/litellm"
-	"github.com/virtuos/ai-self-service/internal/metrics"
-	"github.com/virtuos/ai-self-service/internal/session"
-	"github.com/virtuos/ai-self-service/web"
+	"github.com/virtuos/keyosk/internal/config"
+	"github.com/virtuos/keyosk/internal/database"
+	"github.com/virtuos/keyosk/internal/i18n"
+	"github.com/virtuos/keyosk/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/litellm"
+	"github.com/virtuos/keyosk/internal/metrics"
+	"github.com/virtuos/keyosk/internal/session"
+	"github.com/virtuos/keyosk/web"
 )
 
 type Admin struct {

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // gatewayAnswering answers every request with the given status and body.

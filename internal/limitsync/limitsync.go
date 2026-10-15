@@ -20,9 +20,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/database"
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
-	"github.com/virtuos/ai-self-service/internal/metrics"
+	"github.com/virtuos/keyosk/internal/database"
+	"github.com/virtuos/keyosk/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/metrics"
 )
 
 // gateway is the slice of the key provider the sync needs.

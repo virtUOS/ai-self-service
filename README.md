@@ -9,8 +9,6 @@
 
 Keyosk is your self-service counter for local AI. Users log in with an OIDC provider and generate, manage and renew their own [LiteLLM](https://www.litellm.ai/) API keys. Administrators define usage profiles (model access, rate limits, budgets) and assign them to individual users.
 
-> **Naming:** the project was formerly called *AI API Key Self-Service Portal*. The Go module, the binary and image (`ai-self-service`), the OIDC client ID and the metric names (`aiselfservice_*`) keep the old name for now.
-
 ## How it works
 
 1. Users log in via OIDC (e.g. Keycloak, Dex, Authentik).
@@ -344,7 +342,7 @@ ordinary failure: the record is kept and the call retried.
 This trusts the gateway's answer. A Keyosk instance pointed at the wrong LiteLLM, or at
 one whose database was reset, sees every key as missing and removes every
 record; check `LITELLM_BASE_URL` before starting a Keyosk instance against a new
-gateway. Each removal also counts on `aiselfservice_keys_missing_total`, by
+gateway. Each removal also counts on `keyosk_keys_missing_total`, by
 where Keyosk noticed it, so such a run shows on the monitoring dashboard.
 
 **After upgrading** to the version that introduced the sync, every existing
@@ -355,13 +353,13 @@ users this takes a while; the admin panel shows the progress.
 them, mark every key as out of date:
 
 ```bash
-ai-self-service -resync-limits
+keyosk -resync-limits
 ```
 
 The command needs only `DB_PATH`, changes nothing in the gateway itself, and
 exits at once; the running server then updates every key on its next run,
 within `LIMIT_SYNC_INTERVAL`. It must run where the database is, so against a
-container use `docker exec <container> ai-self-service -resync-limits`, or
+container use `docker exec <container> keyosk -resync-limits`, or
 `kubectl exec` into the pod. Run it from cron to do this nightly.
 
 The dashboard never pushes limits. It only reads, and when it cannot load the
@@ -391,7 +389,7 @@ address is unique across everything connected to the gateway, other Keyosk insta
 included. LiteLLM's own SSO login, for its admin UI, looks users up by
 address, and with two users sharing one it attaches the login to either of
 them. Turning the option on or off changes nothing until each key is pushed
-again; run `ai-self-service -resync-limits` to do that for all of them.
+again; run `keyosk -resync-limits` to do that for all of them.
 Turning it off does not remove addresses already recorded.
 
 After upgrading to the version that added the labels, the first sync updates
@@ -413,7 +411,7 @@ prefix, and existing deployments keep their users and budgets unchanged.
 Set the prefix before Keyosk issues its first key. Changing it later is
 not supported: keys stay bound to the old users, and keep counting against
 their budgets, until each key is updated again. If it has to be done, run
-`ai-self-service -resync-limits` afterwards. The sync then moves every
+`keyosk -resync-limits` afterwards. The sync then moves every
 unexpired key to the new users, which start with nothing spent. The old users
 are left in the gateway; don't delete them while another instance's keys still
 belong to them, as deleting a LiteLLM user also deletes its keys.
@@ -489,12 +487,12 @@ restricts the endpoint to the monitoring host.
 
 | Metric | Meaning |
 | ------ | ------- |
-| `aiselfservice_http_requests_total` | requests by route, method, status |
-| `aiselfservice_http_request_duration_seconds` | latency by route |
-| `aiselfservice_key_operations_total` | key issue/extend/delete/revoke by outcome |
-| `aiselfservice_keys_missing_total` | keys removed because the gateway no longer had them, by where Keyosk noticed (`dashboard`, `extend`, `sync`) |
-| `aiselfservice_active_keys` | keys currently issued |
-| `aiselfservice_keys_expiring_7d` | keys expiring within a week |
+| `keyosk_http_requests_total` | requests by route, method, status |
+| `keyosk_http_request_duration_seconds` | latency by route |
+| `keyosk_key_operations_total` | key issue/extend/delete/revoke by outcome |
+| `keyosk_keys_missing_total` | keys removed because the gateway no longer had them, by where Keyosk noticed (`dashboard`, `extend`, `sync`) |
+| `keyosk_active_keys` | keys currently issued |
+| `keyosk_keys_expiring_7d` | keys expiring within a week |
 
 ## Routes
 
@@ -537,6 +535,26 @@ Register the application with your OIDC provider:
 - **bun** ORM over SQLite
 - **coreos/go-oidc** for OIDC/OAuth2
 - Server-rendered HTML templates (no JavaScript framework)
+
+## Upgrading from ai-self-service
+
+Keyosk is the new name of *AI API Key Self-Service Portal*. The rename changes
+a few things you have to follow in your deployment; data and behaviour are
+unchanged.
+
+| Before | Now |
+| --- | --- |
+| Repository `virtUOS/ai-self-service` | `virtUOS/keyosk` (GitHub redirects the old URL) |
+| Image `ghcr.io/virtuos/ai-self-service` | `ghcr.io/virtuos/keyosk` |
+| Binary `ai-self-service`, release files `ai-self-service-<tag>.linux-x86_64` | `keyosk`, `keyosk-<tag>.linux-x86_64` |
+| `OIDC_CLIENT_ID=ai-self-service` in the example configuration | `keyosk`. The value is read from your configuration, so an existing registration keeps working until you rename it at the identity provider |
+| `ADMIN_GROUP=ai-self-service-admin` in the example configuration and the dev stack | `keyosk-admin`. Only the dev stack's group and role are renamed; production keeps whatever group `ADMIN_GROUP` names |
+| Metrics `aiselfservice_*` | `keyosk_*`. Update dashboards and alert rules; the old series stop |
+| Go module `github.com/virtuos/ai-self-service` | `github.com/virtuos/keyosk` |
+
+Everyone signed in sees one failed form submission after the upgrade, because
+the CSRF tokens are derived from a seed that carries the name. Reloading the
+page fixes it. Sessions, keys and the database are untouched.
 
 ## License
 

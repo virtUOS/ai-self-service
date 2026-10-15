@@ -13,9 +13,9 @@ import (
 	"strings"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
-	"github.com/virtuos/ai-self-service/internal/config"
-	"github.com/virtuos/ai-self-service/internal/database"
-	"github.com/virtuos/ai-self-service/internal/session"
+	"github.com/virtuos/keyosk/internal/config"
+	"github.com/virtuos/keyosk/internal/database"
+	"github.com/virtuos/keyosk/internal/session"
 	"golang.org/x/oauth2"
 )
 

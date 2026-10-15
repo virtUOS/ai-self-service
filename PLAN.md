@@ -1,5 +1,9 @@
 # Status and next steps
 
+> The project is now called Keyosk (repository `virtUOS/keyosk`, binary `keyosk`,
+> metrics `keyosk_*`). This handover predates the rename and uses the old name
+> throughout.
+
 Last updated 2026-09-01. Written as a handover: what is done, what is not, and
 the things that are surprising enough to waste an afternoon rediscovering.
 

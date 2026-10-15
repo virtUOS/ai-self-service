@@ -1,6 +1,6 @@
 package handlers
 
-import "github.com/virtuos/ai-self-service/internal/database"
+import "github.com/virtuos/keyosk/internal/database"
 
 // adminRow is one line of the Admins tab.
 type adminRow struct {

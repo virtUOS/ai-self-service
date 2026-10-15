@@ -13,16 +13,16 @@ import (
 
 	"github.com/joho/godotenv"
 
-	"github.com/virtuos/ai-self-service/internal/config"
-	"github.com/virtuos/ai-self-service/internal/database"
-	"github.com/virtuos/ai-self-service/internal/handlers"
-	"github.com/virtuos/ai-self-service/internal/limitsync"
-	"github.com/virtuos/ai-self-service/internal/litellm"
-	"github.com/virtuos/ai-self-service/internal/metrics"
-	"github.com/virtuos/ai-self-service/internal/notify"
-	oidcpkg "github.com/virtuos/ai-self-service/internal/oidc"
-	"github.com/virtuos/ai-self-service/internal/profileexpiry"
-	"github.com/virtuos/ai-self-service/internal/session"
+	"github.com/virtuos/keyosk/internal/config"
+	"github.com/virtuos/keyosk/internal/database"
+	"github.com/virtuos/keyosk/internal/handlers"
+	"github.com/virtuos/keyosk/internal/limitsync"
+	"github.com/virtuos/keyosk/internal/litellm"
+	"github.com/virtuos/keyosk/internal/metrics"
+	"github.com/virtuos/keyosk/internal/notify"
+	oidcpkg "github.com/virtuos/keyosk/internal/oidc"
+	"github.com/virtuos/keyosk/internal/profileexpiry"
+	"github.com/virtuos/keyosk/internal/session"
 )
 
 func main() {

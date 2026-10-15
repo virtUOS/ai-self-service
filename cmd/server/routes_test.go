@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/virtuos/ai-self-service/internal/handlers"
+	"github.com/virtuos/keyosk/internal/handlers"
 )
 
 // The security headers on their own; router_test.go checks the real route

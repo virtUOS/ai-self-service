@@ -31,8 +31,8 @@ func TestHasGroup(t *testing.T) {
 		{"nested path", `{"realm_access":{"roles":["ai-admin"]}}`, "realm_access.roles", true},
 		{"nested path missing", `{"realm_access":{}}`, "realm_access.roles", false},
 		{"path through a non-object", `{"realm_access":["roles"]}`, "realm_access.roles", false},
-		{"client roles", `{"resource_access":{"ai-self-service":{"roles":["ai-admin"]}}}`,
-			"resource_access.ai-self-service.roles", true},
+		{"client roles", `{"resource_access":{"keyosk":{"roles":["ai-admin"]}}}`,
+			"resource_access.keyosk.roles", true},
 		// Group names are opaque identifiers: no case folding, and Keycloak's
 		// full group path is a different name, not the same group.
 		{"case differs", `{"groups":["AI-Admin"]}`, "groups", false},

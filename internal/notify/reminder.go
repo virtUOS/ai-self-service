@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/keyosk/internal/database"
 )
 
 // DefaultThresholds are how many days before expiry a user is warned.

@@ -11,13 +11,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/virtuos/ai-self-service/internal/config"
-	"github.com/virtuos/ai-self-service/internal/database"
-	"github.com/virtuos/ai-self-service/internal/handlers"
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
-	oidcpkg "github.com/virtuos/ai-self-service/internal/oidc"
-	"github.com/virtuos/ai-self-service/internal/oidc/oidctest"
-	"github.com/virtuos/ai-self-service/internal/session"
+	"github.com/virtuos/keyosk/internal/config"
+	"github.com/virtuos/keyosk/internal/database"
+	"github.com/virtuos/keyosk/internal/handlers"
+	"github.com/virtuos/keyosk/internal/keyprovider"
+	oidcpkg "github.com/virtuos/keyosk/internal/oidc"
+	"github.com/virtuos/keyosk/internal/oidc/oidctest"
+	"github.com/virtuos/keyosk/internal/session"
 )
 
 // These tests walk the real route table, so a route added later is checked
@@ -98,7 +98,7 @@ func newRouteTest(t *testing.T) *routeTest {
 	idp := oidctest.NewServer(t)
 	cfg := &config.Config{
 		OIDCIssuerURL:    idp.Issuer(),
-		OIDCClientID:     "ai-self-service",
+		OIDCClientID:     "keyosk",
 		OIDCClientSecret: "secret",
 		OIDCRedirectURL:  "http://localhost:8080/callback",
 		FrontendURL:      "http://localhost:8080",
