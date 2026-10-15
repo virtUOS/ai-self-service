@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // LiteLLM identifies a key by the SHA-256 of the key itself. The portal stores

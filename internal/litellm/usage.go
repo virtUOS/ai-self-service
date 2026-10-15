@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // keyHash is how LiteLLM identifies a key: the SHA-256 of the key itself. It

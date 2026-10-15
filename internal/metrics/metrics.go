@@ -16,12 +16,12 @@ import (
 
 var (
 	requestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "aiselfservice_http_requests_total",
+		Name: "keyosk_http_requests_total",
 		Help: "HTTP requests by route template, method and status.",
 	}, []string{"route", "method", "status"})
 
 	requestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "aiselfservice_http_request_duration_seconds",
+		Name:    "keyosk_http_request_duration_seconds",
 		Help:    "HTTP request latency by route template.",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"route"})
@@ -29,7 +29,7 @@ var (
 	// KeyOperations counts issuance and revocation separately from HTTP status,
 	// because a failed upstream call can still return a redirect to the user.
 	KeyOperations = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "aiselfservice_key_operations_total",
+		Name: "keyosk_key_operations_total",
 		Help: "API key operations by action and outcome.",
 	}, []string{"action", "outcome"})
 
@@ -40,19 +40,19 @@ var (
 	// the wrong gateway or a restored gateway database, which this is the
 	// alarm for (issue #108).
 	KeysMissing = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "aiselfservice_keys_missing_total",
+		Name: "keyosk_keys_missing_total",
 		Help: "Keys removed because the gateway no longer had them, by where the portal noticed.",
 	}, []string{"source"})
 
 	// Gauges are refreshed from the database rather than incremented, so a
 	// restart cannot leave them drifting from reality.
 	activeKeys = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "aiselfservice_active_keys",
+		Name: "keyosk_active_keys",
 		Help: "API keys currently issued.",
 	})
 
 	expiringKeys = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "aiselfservice_keys_expiring_7d",
+		Name: "keyosk_keys_expiring_7d",
 		Help: "Issued keys expiring within seven days.",
 	})
 )

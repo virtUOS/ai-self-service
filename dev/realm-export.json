@@ -3,7 +3,7 @@
   "enabled": true,
   "clients": [
     {
-      "clientId": "ai-self-service",
+      "clientId": "keyosk",
       "name": "Keyosk (local dev)",
       "enabled": true,
       "protocol": "openid-connect",
@@ -84,22 +84,22 @@
         }
       ],
       "realmRoles": [
-        "ai-self-service-admin"
+        "keyosk-admin"
       ],
       "groups": [
-        "/ai-self-service-admin"
+        "/keyosk-admin"
       ]
     }
   ],
   "groups": [
     {
-      "name": "ai-self-service-admin"
+      "name": "keyosk-admin"
     }
   ],
   "roles": {
     "realm": [
       {
-        "name": "ai-self-service-admin",
+        "name": "keyosk-admin",
         "description": "Grants the portal admin panel"
       }
     ]

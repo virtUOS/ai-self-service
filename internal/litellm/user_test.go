@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // The gateway has no upsert route: /user/new answers 409 once the user exists.

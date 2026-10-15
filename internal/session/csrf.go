@@ -65,7 +65,7 @@ func NewCSRF(secure bool, seed string) (*CSRF, error) {
 	}
 
 	// Domain-separated so the seed cannot be replayed against another use.
-	sum := sha256.Sum256([]byte("ai-self-service/csrf\x00" + seed))
+	sum := sha256.Sum256([]byte("keyosk/csrf\x00" + seed))
 	return newCSRF(sum[:], secure), nil
 }
 

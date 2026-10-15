@@ -8,6 +8,6 @@
     "sub": "admin",
     "email": "admin@example.com",
     "name": "Test Admin",
-    "groups": ["ai-self-service-admin"]
+    "groups": ["keyosk-admin"]
   }
 ]

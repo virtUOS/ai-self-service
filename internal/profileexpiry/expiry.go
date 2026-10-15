@@ -16,7 +16,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/keyosk/internal/database"
 )
 
 // gateway is the slice of the key provider this job needs: deleting a key,

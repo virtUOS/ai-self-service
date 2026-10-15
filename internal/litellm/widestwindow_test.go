@@ -3,7 +3,7 @@ package litellm
 import (
 	"testing"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 func periods(ws []keyprovider.QuotaWindow) []string {

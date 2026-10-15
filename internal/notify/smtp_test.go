@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/keyosk/internal/database"
 )
 
 // expiryNotice is the mail the reminder sends, with the umlauts and the

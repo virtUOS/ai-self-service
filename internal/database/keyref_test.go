@@ -15,7 +15,7 @@ import (
 	"github.com/uptrace/bun/driver/sqliteshim"
 	"github.com/uptrace/bun/migrate"
 
-	"github.com/virtuos/ai-self-service/internal/database/migrations"
+	"github.com/virtuos/keyosk/internal/database/migrations"
 )
 
 func sha256Hex(s string) string {

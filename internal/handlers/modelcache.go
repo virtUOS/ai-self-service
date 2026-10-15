@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // modelCacheTTL bounds how stale the admin form's model list can be. Models

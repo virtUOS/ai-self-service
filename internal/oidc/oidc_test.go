@@ -9,15 +9,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/config"
-	"github.com/virtuos/ai-self-service/internal/oidc/oidctest"
+	"github.com/virtuos/keyosk/internal/config"
+	"github.com/virtuos/keyosk/internal/oidc/oidctest"
 )
 
 func newTestProvider(t *testing.T, m *oidctest.Server) *Provider {
 	t.Helper()
 	cfg := &config.Config{
 		OIDCIssuerURL:    m.Issuer(),
-		OIDCClientID:     "ai-self-service",
+		OIDCClientID:     "keyosk",
 		OIDCClientSecret: "secret",
 		OIDCRedirectURL:  "http://localhost:8080/callback",
 		FrontendURL:      "http://localhost:8080",
@@ -44,7 +44,7 @@ func TestDiscoveryFindsEndSessionEndpoint(t *testing.T) {
 func TestValidateLogoutTokenAcceptsValid(t *testing.T) {
 	m := oidctest.NewServer(t)
 	p := newTestProvider(t, m)
-	tok := m.SignLogoutToken(t, "user-sub-123", "ai-self-service", false)
+	tok := m.SignLogoutToken(t, "user-sub-123", "keyosk", false)
 
 	sub, err := p.ValidateLogoutToken(context.Background(), tok)
 	if err != nil {
@@ -60,7 +60,7 @@ func TestValidateLogoutTokenAcceptsValid(t *testing.T) {
 func TestValidateLogoutTokenRejectsNonce(t *testing.T) {
 	m := oidctest.NewServer(t)
 	p := newTestProvider(t, m)
-	tok := m.SignLogoutToken(t, "user-sub-123", "ai-self-service", true)
+	tok := m.SignLogoutToken(t, "user-sub-123", "keyosk", true)
 
 	if _, err := p.ValidateLogoutToken(context.Background(), tok); err == nil {
 		t.Fatal("logout token with nonce was accepted")
@@ -73,7 +73,7 @@ func TestValidateLogoutTokenRejectsPlainIDToken(t *testing.T) {
 	p := newTestProvider(t, m)
 	idToken, err := m.SignIDToken(
 		oidctest.Claims{Sub: "user-sub-123", Email: "a@uni-osnabrueck.de"},
-		"ai-self-service", time.Now().Add(time.Hour))
+		"keyosk", time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}

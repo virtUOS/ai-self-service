@@ -64,10 +64,10 @@ At the login prompt, enter the subject of the user you want to be, matching
 | Subject   | Email                        | Role in the app |
 | --------- | ---------------------------- | --------------- |
 | `student` | student@uni-osnabrueck.de    | regular user    |
-| `admin`   | admin@example.com            | admin (in the `ai-self-service-admin` group) |
+| `admin`   | admin@example.com            | admin (in the `keyosk-admin` group) |
 
 `admin` is an admin because `mock-users.json` puts it in the
-`ai-self-service-admin` group and `.env.example` sets `ADMIN_GROUP` to that
+`keyosk-admin` group and `.env.example` sets `ADMIN_GROUP` to that
 group. The Admins tab is then read-only.
 
 To work on the panel's own admin management instead, comment out
@@ -96,22 +96,22 @@ the same two users as the mock, with passwords:
 | User      | Password  | Email                        | Role in the app |
 | --------- | --------- | ---------------------------- | --------------- |
 | `student` | `student` | student@uni-osnabrueck.de    | regular user    |
-| `admin`   | `admin`   | admin@example.com            | admin (in the `ai-self-service-admin` group) |
+| `admin`   | `admin`   | admin@example.com            | admin (in the `keyosk-admin` group) |
 
-The client id and secret in `.env.example` (`ai-self-service` /
+The client id and secret in `.env.example` (`keyosk` /
 `local-dev-secret`) are the realm's, so only the issuer changes in `.env`:
 
 ```
 OIDC_ISSUER_URL=http://localhost:8082/realms/virtuos
 ```
 
-The realm has an `ai-self-service-admin` group with `admin` as its member, and
+The realm has a `keyosk-admin` group with `admin` as its member, and
 a group-membership mapper that puts the `groups` claim in the ID token with
-"Full group path" off, so the claim lists the bare name `ai-self-service-admin`
-rather than `/ai-self-service-admin`. That is what `ADMIN_GROUP` in
+"Full group path" off, so the claim lists the bare name `keyosk-admin`
+rather than `/keyosk-admin`. That is what `ADMIN_GROUP` in
 `.env.example` expects, so admin works without further changes.
 
-The realm also has an `ai-self-service-admin` realm role, assigned to `admin`,
+The realm also has a `keyosk-admin` realm role, assigned to `admin`,
 with a mapper that puts realm roles in the ID token. To try roles instead of
 groups, set `ADMIN_GROUP_CLAIM=realm_access.roles`.
 

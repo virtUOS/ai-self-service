@@ -9,7 +9,7 @@ import (
 
 	"github.com/uptrace/bun/migrate"
 
-	"github.com/virtuos/ai-self-service/internal/database/migrations"
+	"github.com/virtuos/keyosk/internal/database/migrations"
 )
 
 // migrateBeforeAdminFlag runs every migration up to, but not including, the

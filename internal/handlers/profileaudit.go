@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/keyosk/internal/database"
 )
 
 // describeProfile summarises a profile for the audit log when it is created

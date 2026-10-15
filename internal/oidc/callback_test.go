@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/virtuos/ai-self-service/internal/oidc/oidctest"
+	"github.com/virtuos/keyosk/internal/oidc/oidctest"
 )
 
 // startLogin runs /login and returns the state it sent to the provider and the

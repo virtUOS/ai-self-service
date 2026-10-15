@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/virtuos/ai-self-service/web"
+	"github.com/virtuos/keyosk/web"
 )
 
 func stylesheet(t *testing.T) string {

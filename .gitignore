@@ -11,7 +11,7 @@
 *.sqlite3
 
 # Build output
-/ai-self-service
+/keyosk
 /server
 
 # OS / editor cruft

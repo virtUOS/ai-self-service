@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/config"
-	"github.com/virtuos/ai-self-service/internal/database"
-	"github.com/virtuos/ai-self-service/internal/i18n"
+	"github.com/virtuos/keyosk/internal/config"
+	"github.com/virtuos/keyosk/internal/database"
+	"github.com/virtuos/keyosk/internal/i18n"
 )
 
 // The number on the button and the number applied by Extend must come from the

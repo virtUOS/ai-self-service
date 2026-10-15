@@ -13,8 +13,8 @@ func TestKeyOperationSeriesPreRegistered(t *testing.T) {
 	Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
 	body := rec.Body.String()
 	for _, want := range []string{
-		`aiselfservice_key_operations_total{action="generate",outcome="success"} 0`,
-		`aiselfservice_key_operations_total{action="revoke",outcome="provider_error"} 0`,
+		`keyosk_key_operations_total{action="generate",outcome="success"} 0`,
+		`keyosk_key_operations_total{action="revoke",outcome="provider_error"} 0`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing pre-registered series: %s", want)
@@ -31,7 +31,7 @@ func TestMissingKeySeriesPreRegistered(t *testing.T) {
 	Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
 	body := rec.Body.String()
 	for _, source := range []string{"dashboard", "extend", "sync"} {
-		want := `aiselfservice_keys_missing_total{source="` + source + `"} 0`
+		want := `keyosk_keys_missing_total{source="` + source + `"} 0`
 		if !strings.Contains(body, want) {
 			t.Errorf("missing pre-registered series: %s", want)
 		}

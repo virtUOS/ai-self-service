@@ -17,7 +17,7 @@ COPY . .
 # -trimpath drops local filesystem paths; -s -w strips the symbol and DWARF
 # tables. Templates and static assets are embedded via web/embed.go, so the
 # resulting binary is self-contained.
-RUN go build -trimpath -ldflags='-s -w' -o /out/ai-self-service ./cmd/server
+RUN go build -trimpath -ldflags='-s -w' -o /out/keyosk ./cmd/server
 
 # The runtime image has no shell, so the data directory is created here.
 RUN mkdir /out/data
@@ -29,7 +29,7 @@ RUN mkdir /out/data
 # the multi-arch index; Dependabot keeps it current.
 FROM gcr.io/distroless/static-debian13:latest@sha256:58133991db06659feaabe0f4e97a35cebf15ef4ea08f8a4c6d2ee5f75e4aa6a0
 
-COPY --from=build /out/ai-self-service /usr/local/bin/ai-self-service
+COPY --from=build /out/keyosk /usr/local/bin/keyosk
 
 # The SQLite database lives on /data; mount a volume there to keep it. An
 # explicitly set DB_PATH still wins over this default.
@@ -46,6 +46,6 @@ EXPOSE 8080
 # LISTEN_ADDR and needs no shell. Kubernetes ignores this and uses its own
 # probes on /healthz and /readyz.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD ["/usr/local/bin/ai-self-service", "-healthcheck"]
+    CMD ["/usr/local/bin/keyosk", "-healthcheck"]
 
-ENTRYPOINT ["/usr/local/bin/ai-self-service"]
+ENTRYPOINT ["/usr/local/bin/keyosk"]

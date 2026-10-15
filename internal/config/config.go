@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 type Config struct {

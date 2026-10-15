@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/database"
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/database"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // newRevokeTestAdmin is an Admin backed by a fake gateway, and a user other

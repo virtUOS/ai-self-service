@@ -9,8 +9,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/virtuos/ai-self-service/internal/database"
-	"github.com/virtuos/ai-self-service/internal/i18n"
+	"github.com/virtuos/keyosk/internal/database"
+	"github.com/virtuos/keyosk/internal/i18n"
 )
 
 // langFuncs are the template helpers every page needs for translation.

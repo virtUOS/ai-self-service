@@ -1,7 +1,7 @@
 package litellm
 
 import (
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 // Quota windows are budgets: the spend a key may accrue per period, in

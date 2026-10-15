@@ -1,4 +1,4 @@
-module github.com/virtuos/ai-self-service
+module github.com/virtuos/keyosk
 
 go 1.26.4
 

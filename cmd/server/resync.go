@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/virtuos/ai-self-service/internal/database"
+	"github.com/virtuos/keyosk/internal/database"
 )
 
 // resyncLimits marks every key as out of date, so the running server's limit

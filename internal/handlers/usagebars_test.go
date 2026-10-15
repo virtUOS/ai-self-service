@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
 var barsNow = time.Date(2026, 9, 7, 15, 0, 0, 0, time.UTC) // a Monday
