@@ -218,8 +218,40 @@ func HasGroup(claims map[string]any, path, group string) bool {
 	return false
 }
 
+// GetOrCreateUser records the account behind a login. When admin rights come
+// from the login system, it also sets the account's admin flag to what the
+// token says, so granting and removing the group takes effect at the person's
+// next login.
+//
+// Failing to write the flag fails the login: starting a session on a flag
+// the IdP has since withdrawn would keep someone in the panel.
 func (p *Provider) GetOrCreateUser(ctx context.Context, info *UserInfo) (*database.User, error) {
-	return p.store.GetOrCreateUser(ctx, info.Subject, info.Email, info.Name)
+	user, err := p.store.GetOrCreateUser(ctx, info.Subject, info.Email, info.Name)
+	if err != nil || info.IsAdmin == nil || user.IsAdmin == *info.IsAdmin {
+		return user, err
+	}
+	if err := p.store.SetUserAdmin(ctx, user.ID, *info.IsAdmin); err != nil {
+		return nil, fmt.Errorf("set admin flag: %w", err)
+	}
+	user.IsAdmin = *info.IsAdmin
+
+	// Audit the change as the panel does, so the log shows when someone
+	// gained or lost the panel even though no admin pressed a button. The
+	// actor is the group, which is what decided.
+	action, detail := database.AuditAdminRevoked, "left group "+p.cfg.AdminGroup
+	if user.IsAdmin {
+		action, detail = database.AuditAdminGranted, "member of group "+p.cfg.AdminGroup
+	}
+	if err := p.store.RecordAudit(ctx, &database.AuditEvent{
+		Action:       action,
+		ActorEmail:   "login system",
+		SubjectEmail: user.Email,
+		SubjectID:    &user.ID,
+		Detail:       detail,
+	}); err != nil {
+		slog.Error("record audit event", "action", action, "err", err)
+	}
+	return user, nil
 }
 
 func (p *Provider) ValidateLogoutToken(ctx context.Context, rawToken string) (string, error) {
