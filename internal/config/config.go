@@ -107,6 +107,11 @@ type Config struct {
 	// failed. Admin changes start a run straight away and do not wait for it.
 	LimitSyncInterval time.Duration
 
+	// KeyMissingGracePeriod is how long a key the gateway no longer has stays
+	// marked before the limit sync removes its record. A gateway that was
+	// wrong or restored heals within it.
+	KeyMissingGracePeriod time.Duration
+
 	// TrustedProxies are the peers whose X-Forwarded-For is believed when
 	// logging the client address. A request from anywhere else is logged with
 	// the address that opened the connection, whatever headers it carries.
@@ -215,6 +220,12 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("LIMIT_SYNC_INTERVAL must be a positive duration such as 5m")
 	}
 	cfg.LimitSyncInterval = interval
+
+	grace, err := time.ParseDuration(envOr("KEY_MISSING_GRACE_PERIOD", "24h"))
+	if err != nil || grace <= 0 {
+		return nil, fmt.Errorf("KEY_MISSING_GRACE_PERIOD must be a positive duration such as 24h")
+	}
+	cfg.KeyMissingGracePeriod = grace
 
 	proxies, err := parseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
 	if err != nil {

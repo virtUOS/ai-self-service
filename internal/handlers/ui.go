@@ -122,10 +122,10 @@ type dashboardData struct {
 	ProfileError bool
 	KeyError     bool
 
-	// KeyGone reports that the user's key was deleted in the gateway, outside
-	// the portal, and the portal dropped its record of it. The page says so
-	// next to the button for a new one, rather than just showing no key.
-	KeyGone bool
+	// KeyMissing reports that the gateway does not have the user's key, which
+	// the portal keeps for now: it may return, and is removed after the grace
+	// period. The page says so beside the key, which it cannot extend.
+	KeyMissing bool
 }
 
 // audit records a self-service action, attributing it to the user themselves.
@@ -142,20 +142,21 @@ func (u *UI) audit(r *http.Request, action string, user *database.User, detail s
 	}
 }
 
-// removeMissingKey drops the record of a key the gateway no longer has. A
-// failure only means the record stays until the next attempt; the key does not
-// work either way, and replacing it handles a stale record too.
-func (u *UI) removeMissingKey(ctx context.Context, user *database.User, k *database.APIKey, where string) {
-	slog.Warn("key no longer exists in the gateway; removing it", "key_prefix", k.KeyPrefix, "user", user.Email, "noticed_by", where)
-	removed, err := u.store.RemoveMissingKey(ctx, k.ID, user.ID, user.Email,
+// markMissingKey records that the gateway no longer has a key. The record
+// stays: the limit sync unmarks the key if it returns and removes it once the
+// grace period has passed. A failure only means the key is marked on the next
+// sighting instead.
+func (u *UI) markMissingKey(ctx context.Context, user *database.User, k *database.APIKey, where string) {
+	slog.Warn("key no longer exists in the gateway; marking it missing", "key_prefix", k.KeyPrefix, "user", user.Email, "noticed_by", where)
+	newly, err := u.store.MarkKeyMissing(ctx, k.ID, user.ID, user.Email,
 		"key "+k.KeyPrefix+" no longer exists in the gateway ("+where+")")
 	if err != nil {
-		slog.Error("remove missing key", "key_prefix", k.KeyPrefix, "err", err)
+		slog.Error("mark missing key", "key_prefix", k.KeyPrefix, "err", err)
 	}
-	// Counted only when this request dropped the row, so two views of the same
-	// gone key are one removal on the monitoring dashboard.
-	if removed {
-		metrics.KeysMissing.WithLabelValues(where).Inc()
+	// Counted only when this request marked the key, so two views of the same
+	// gone key are one sighting on the monitoring dashboard.
+	if newly {
+		metrics.KeysMarkedMissing.WithLabelValues(where).Inc()
 	}
 }
 
@@ -208,15 +209,18 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 
 	profileNotice := u.profileNotice(r.Context(), su.User, lang, expiryPending)
 
-	// A key the gateway no longer has was deleted outside the portal and
-	// cannot be restored. Drop the record and offer a new key instead of
-	// showing one that does not work. ExtendKey sends ?gone=1 after doing the
-	// same.
-	usage := u.userUsage(r.Context(), apiKey, u.cfg.LiteLLMUserID(su.User.OIDCSub), lang)
-	keyGone := r.URL.Query().Get("gone") == "1"
-	if usage.KeyMissing {
-		u.removeMissingKey(r.Context(), su.User, apiKey, "dashboard")
-		apiKey, usage, keyGone = nil, usageReport{}, true
+	// A key the gateway does not have is marked, and the page says it does not
+	// work and offers a new one. The limit sync unmarks it if it returns and
+	// removes it after the grace period, so the page leaves the gateway alone
+	// for a marked key: there is nothing to report on it.
+	var usage usageReport
+	keyMissing := apiKey != nil && apiKey.MissingSince != nil
+	if !keyMissing {
+		usage = u.userUsage(r.Context(), apiKey, u.cfg.LiteLLMUserID(su.User.OIDCSub), lang)
+		if usage.KeyMissing {
+			u.markMissingKey(r.Context(), su.User, apiKey, metrics.SourceDashboard)
+			usage, keyMissing = usageReport{}, true
+		}
 	}
 
 	if err := u.tmpl.Execute(w, dashboardData{
@@ -227,7 +231,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		APIBaseURL:      strings.TrimRight(u.cfg.LiteLLMBaseURL, "/") + "/v1",
 		ExtendUntil:     extendUntil,
 		ExpiresInDays:   daysUntilExpiry(apiKey),
-		ExpiryUrgent:    isExpiryUrgent(apiKey),
+		ExpiryUrgent:    isExpiryUrgent(apiKey) && !keyMissing,
 		ProfileName:     profileName(profile),
 		ProfileNotice:   profileNotice,
 		Quotas:          profileQuotaLines(profile, lang, u.cfg.BudgetUnit),
@@ -244,7 +248,7 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		TitleKey:        "app.title",
 		ProfileError:    profileErr,
 		KeyError:        keyErr,
-		KeyGone:         keyGone,
+		KeyMissing:      keyMissing,
 	}); err != nil {
 		slog.Error("dashboard template", "err", err)
 	}
@@ -481,6 +485,12 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "No key found", http.StatusBadRequest)
 		return
 	}
+	// The gateway does not have this key, so there is nothing to extend. The
+	// dashboard says what to do instead; it hides the button for this key too.
+	if k.MissingSince != nil {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
 
 	profile, err := u.resolveProfile(r, su.User)
 	if err != nil {
@@ -490,8 +500,8 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 	newExpiry := time.Now().AddDate(0, 0, u.keyDuration(profile))
 	if err := u.keys.UpdateExpiry(r.Context(), k.KeyRef, newExpiry); err != nil {
 		if errors.Is(err, keyprovider.ErrKeyNotFound) {
-			u.removeMissingKey(r.Context(), su.User, k, "extend")
-			http.Redirect(w, r, "/?gone=1", http.StatusFound)
+			u.markMissingKey(r.Context(), su.User, k, metrics.SourceExtend)
+			http.Redirect(w, r, "/", http.StatusFound)
 			return
 		}
 		httpError(w, r, http.StatusInternalServerError, "Failed to extend key", err)

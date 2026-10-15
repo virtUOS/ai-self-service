@@ -166,3 +166,9 @@ func (p *Provider) toKeyParams(req keyprovider.KeyRequest) KeyParams {
 	}
 	return params
 }
+
+// CheckKey reports whether LiteLLM still has the key, by reading its record.
+func (p *Provider) CheckKey(ctx context.Context, ref string) error {
+	_, err := p.client.keyInfo(ctx, ref)
+	return err
+}

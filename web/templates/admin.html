@@ -245,6 +245,9 @@
                   <span class="badge {{if .KeyExpired}}badge-expired{{else}}badge-ok{{end}}">
                     {{if .KeyExpired}}expired{{else}}{{.KeyExpires}}{{end}}
                   </span>
+                  {{if .KeyMissingSince}}
+                  <span class="badge badge-warn" title="{{T $.Lang "admin.key.missing.help"}}">{{T $.Lang "admin.key.missing"}} {{.KeyMissingSince}}</span>
+                  {{end}}
                   <form method="POST" action="/admin/users/{{.ID}}/key/revoke"
                         style="display:inline"
                         onsubmit="return confirm('Revoke the API key for {{.Email}}? They lose access immediately.')">

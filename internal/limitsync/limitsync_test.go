@@ -12,6 +12,7 @@ import (
 
 	"github.com/virtuos/keyosk/internal/database"
 	"github.com/virtuos/keyosk/internal/keyprovider"
+	"github.com/virtuos/keyosk/internal/metrics"
 	"github.com/virtuos/keyosk/internal/metrics/metricstest"
 )
 
@@ -30,13 +31,18 @@ type gatewayStub struct {
 	limits     map[string]keyprovider.Limits
 	failing    map[string]bool
 	beforePush func(ref string)
+
+	// checks are the refs CheckKey was asked about; checkFailing makes it
+	// fail for a ref without saying the key is gone.
+	checks       []string
+	checkFailing map[string]bool
 }
 
 func newGatewayStub() *gatewayStub {
 	return &gatewayStub{owners: map[string]string{}, users: map[string]keyprovider.User{},
 		aliases: map[string][]string{}, missing: map[string]bool{},
 		limits:  map[string]keyprovider.Limits{},
-		failing: map[string]bool{}}
+		failing: map[string]bool{}, checkFailing: map[string]bool{}}
 }
 
 func (g *gatewayStub) UpdateLimits(_ context.Context, ref string, user keyprovider.User, l keyprovider.Limits) error {
@@ -70,6 +76,27 @@ func (g *gatewayStub) UpdateAlias(_ context.Context, ref, alias string) error {
 	}
 	g.aliases[ref] = append(g.aliases[ref], alias)
 	return nil
+}
+
+// CheckKey answers as the gateway does: a ref in missing is gone, one in
+// checkFailing cannot be answered for.
+func (g *gatewayStub) CheckKey(_ context.Context, ref string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.checks = append(g.checks, ref)
+	if g.checkFailing[ref] {
+		return errors.New("gateway unreachable")
+	}
+	if g.missing[ref] {
+		return fmt.Errorf("LiteLLM /key/info returned 404: %w", keyprovider.ErrKeyNotFound)
+	}
+	return nil
+}
+
+func (g *gatewayStub) setMissing(ref string, missing bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.missing[ref] = missing
 }
 
 func (g *gatewayStub) pushCount(ref string) int {
@@ -115,6 +142,9 @@ func newFixture(t *testing.T) *fixture {
 	if err := store.RunMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
+	// The keys_missing gauge counts this test's keys, as it counts the
+	// server's in production.
+	metrics.CountMissingKeysWith(store.CountMissingKeys)
 	if err := store.SeedDefaultProfile(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -472,55 +502,245 @@ func TestFailedRelabelIsRetried(t *testing.T) {
 	}
 }
 
-// A key the gateway no longer has was deleted outside the portal. The run
-// drops its record with an audit entry instead of failing it on every run
-// (issue #82), and leaves the other keys alone.
-func TestRunRemovesAKeyTheGatewayNoLongerHas(t *testing.T) {
+// ageMissing moves the first sighting of every marked key back in time, so a
+// test can put a key inside or past the grace period without sleeping.
+func (f *fixture) ageMissing(t *testing.T, by time.Duration) {
+	t.Helper()
+	if err := f.store.ExecRaw(f.ctx, `UPDATE api_keys SET missing_since = ? WHERE missing_since IS NOT NULL`,
+		time.Now().Add(-by)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// keyOf returns a user's key, or nil.
+func (f *fixture) keyOf(t *testing.T, sub string) *database.APIKey {
+	t.Helper()
+	u, err := f.store.GetUserByOIDCSub(f.ctx, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	k, err := f.store.GetAPIKeyByUser(f.ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return k
+}
+
+func auditCount(t *testing.T, f *fixture, action string) int {
+	t.Helper()
+	events, err := f.store.ListAuditEvents(f.ctx, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, e := range events {
+		if e.Action == action {
+			n++
+		}
+	}
+	return n
+}
+
+// A key the gateway no longer has is marked, not dropped (issue #108): a
+// gateway that was wrong or restored would otherwise make the portal forget
+// every key in one run. The marker leaves the key out of the sync, the other
+// keys are untouched, and the sighting is counted once.
+func TestRunMarksAKeyTheGatewayNoLongerHas(t *testing.T) {
 	f := newFixture(t)
 	gone, kept := f.addKey(t, "a"), f.addKey(t, "b")
 	f.gw.missing[gone] = true
-	before := metricstest.Counter(t, "keyosk_keys_missing_total", `source="sync"`)
+	before := metricstest.Counter(t, "keyosk_keys_marked_missing_total", `source="sync"`)
 
 	res, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Removed != 1 || res.Synced != 1 || res.Failed != 0 {
-		t.Errorf("result = %+v, want one removed and one synced", res)
+	if res.Marked != 1 || res.Synced != 1 || res.Failed != 0 || res.Removed != 0 {
+		t.Errorf("result = %+v, want one marked and one synced", res)
 	}
-	// The removal is counted, so a spike shows on the monitoring dashboard.
-	if got := metricstest.Counter(t, "keyosk_keys_missing_total", `source="sync"`) - before; got != 1 {
-		t.Errorf("keys_missing{source=sync} rose by %v, want 1", got)
+	if got := metricstest.Counter(t, "keyosk_keys_marked_missing_total", `source="sync"`) - before; got != 1 {
+		t.Errorf("keys_marked_missing{source=sync} rose by %v, want 1", got)
 	}
-	u, err := f.store.GetUserByOIDCSub(f.ctx, "a")
-	if err != nil {
-		t.Fatal(err)
+	if got := metricstest.Gauge(t, "keyosk_keys_missing", ""); got != 1 {
+		t.Errorf("keys_missing gauge = %v, want 1", got)
 	}
-	if k, err := f.store.GetAPIKeyByUser(f.ctx, u.ID); err != nil || k != nil {
-		t.Errorf("a's key = %+v, err = %v; want the record gone", k, err)
+	k := f.keyOf(t, "a")
+	if k == nil || k.MissingSince == nil {
+		t.Fatalf("a's key = %+v, want it kept and marked", k)
 	}
 	if st := f.status(t); st.Pending != 0 || st.Failed != 0 {
 		t.Errorf("status = %+v, want nothing left pending or failed", st)
 	}
+	if n := auditCount(t, f, database.AuditKeyMissing); n != 1 {
+		t.Errorf("key.missing audit entries = %d, want 1", n)
+	}
 
-	events, err := f.store.ListAuditEvents(f.ctx, 10)
+	// The next run does not push to the marked key, and does not mark it again.
+	f.setTPM(t, 500)
+	res, err = New(f.store, f.gw, plainUser, 1).Run(f.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 1 || events[0].Action != database.AuditKeyMissing ||
-		events[0].SubjectEmail != "a@uni-osnabrueck.de" || !strings.Contains(events[0].Detail, gone) {
-		t.Errorf("audit = %+v, want one key.missing entry for a's key", events)
-	}
-
-	// Nothing is retried: the next run has nothing to do.
-	f.setTPM(t, 500)
-	if _, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx); err != nil {
-		t.Fatal(err)
+	if res.Marked != 0 || res.Removed != 0 {
+		t.Errorf("second run = %+v, want the marked key left alone within the grace period", res)
 	}
 	if n := f.gw.pushCount(gone); n != 1 {
-		t.Errorf("pushes to the removed key = %d, want 1", n)
+		t.Errorf("pushes to the marked key = %d, want 1", n)
 	}
 	if n := f.gw.pushCount(kept); n != 2 {
 		t.Errorf("pushes to the kept key = %d, want 2", n)
+	}
+	if got := metricstest.Counter(t, "keyosk_keys_marked_missing_total", `source="sync"`) - before; got != 1 {
+		t.Errorf("keys_marked_missing{source=sync} rose by %v over two runs, want 1", got)
+	}
+}
+
+// A key that stays missing within the grace period is checked and kept.
+func TestRunKeepsAMarkedKeyWithinTheGracePeriod(t *testing.T) {
+	f := newFixture(t)
+	gone := f.addKey(t, "a")
+	f.gw.missing[gone] = true
+	s := New(f.store, f.gw, plainUser, 1).WithMissingGrace(time.Hour)
+	if _, err := s.Run(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	f.ageMissing(t, 30*time.Minute)
+
+	res, err := s.Run(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Removed != 0 || res.Found != 0 {
+		t.Errorf("result = %+v, want the key left alone", res)
+	}
+	if f.keyOf(t, "a") == nil {
+		t.Error("key removed within the grace period")
+	}
+	if len(f.gw.checks) != 1 {
+		t.Errorf("checks = %v, want the marked key asked about once", f.gw.checks)
+	}
+}
+
+// Past the grace period a key that is still gone is removed, with an audit
+// entry, and it is counted as the damage done.
+func TestRunRemovesAKeyMissingPastTheGracePeriod(t *testing.T) {
+	f := newFixture(t)
+	gone := f.addKey(t, "a")
+	f.gw.missing[gone] = true
+	s := New(f.store, f.gw, plainUser, 1).WithMissingGrace(time.Hour)
+	if _, err := s.Run(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	f.ageMissing(t, 2*time.Hour)
+	removedBefore := metricstest.Counter(t, "keyosk_keys_missing_removed_total", "")
+
+	res, err := s.Run(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Removed != 1 {
+		t.Errorf("result = %+v, want one removed", res)
+	}
+	if f.keyOf(t, "a") != nil {
+		t.Error("key still stored past the grace period")
+	}
+	if got := metricstest.Counter(t, "keyosk_keys_missing_removed_total", "") - removedBefore; got != 1 {
+		t.Errorf("keys_missing_removed_total rose by %v, want 1", got)
+	}
+	if got := metricstest.Gauge(t, "keyosk_keys_missing", ""); got != 0 {
+		t.Errorf("keys_missing gauge = %v after the removal, want 0", got)
+	}
+	if n := auditCount(t, f, database.AuditKeyGone); n != 1 {
+		t.Errorf("key.gone audit entries = %d, want 1", n)
+	}
+}
+
+// A key that comes back is unmarked and pushed in the same run, so changes it
+// missed while it was gone reach it.
+func TestRunUnmarksAKeyThatReturns(t *testing.T) {
+	f := newFixture(t)
+	ref := f.addKey(t, "a")
+	f.gw.missing[ref] = true
+	s := New(f.store, f.gw, plainUser, 1)
+	if _, err := s.Run(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	f.setTPM(t, 777) // changes while the key is gone
+	f.gw.setMissing(ref, false)
+
+	res, err := s.Run(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Found != 1 || res.Synced != 1 || res.Removed != 0 {
+		t.Errorf("result = %+v, want the key found and synced", res)
+	}
+	if k := f.keyOf(t, "a"); k == nil || k.MissingSince != nil {
+		t.Errorf("key = %+v, want it kept and unmarked", k)
+	}
+	if l := f.gw.limits[ref]; l.TokensPerMinute == nil || *l.TokensPerMinute != 777 {
+		t.Errorf("limits after the return = %+v, want the profile as changed meanwhile", l)
+	}
+	if n := auditCount(t, f, database.AuditKeyFound); n != 1 {
+		t.Errorf("key.found audit entries = %d, want 1", n)
+	}
+	if got := metricstest.Gauge(t, "keyosk_keys_missing", ""); got != 0 {
+		t.Errorf("keys_missing gauge = %v, want 0", got)
+	}
+}
+
+// When the gateway cannot say whether it has the key, nothing happens: not a
+// removal, even past the grace period, and the clock does not restart.
+func TestRunLeavesAMarkedKeyAloneWhenTheCheckFails(t *testing.T) {
+	f := newFixture(t)
+	ref := f.addKey(t, "a")
+	f.gw.missing[ref] = true
+	s := New(f.store, f.gw, plainUser, 1).WithMissingGrace(time.Hour)
+	if _, err := s.Run(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	f.ageMissing(t, 2*time.Hour)
+	since := f.keyOf(t, "a").MissingSince
+	f.gw.checkFailing[ref] = true
+
+	res, err := s.Run(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Removed != 0 || res.Found != 0 || res.Failed != 0 {
+		t.Errorf("result = %+v, want nothing done", res)
+	}
+	k := f.keyOf(t, "a")
+	if k == nil || k.MissingSince == nil || !k.MissingSince.Equal(*since) {
+		t.Errorf("key = %+v, want it kept with its first sighting %v", k, since)
+	}
+}
+
+// An expired marked key is checked but never pushed to: a push would write the
+// owner's allowance upstream (issue #82).
+func TestRunChecksAnExpiredMarkedKeyWithoutPushing(t *testing.T) {
+	f := newFixture(t)
+	ref := f.addKey(t, "a")
+	f.gw.missing[ref] = true
+	s := New(f.store, f.gw, plainUser, 1)
+	if _, err := s.Run(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	k := f.keyOf(t, "a")
+	if err := f.store.UpdateAPIKeyExpiry(f.ctx, k.ID, time.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	f.gw.setMissing(ref, false)
+	pushes := f.gw.pushCount(ref)
+
+	res, err := s.Run(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Found != 1 {
+		t.Errorf("result = %+v, want the expired key found", res)
+	}
+	if n := f.gw.pushCount(ref); n != pushes {
+		t.Errorf("pushes to the expired key rose from %d to %d, want none", pushes, n)
 	}
 }

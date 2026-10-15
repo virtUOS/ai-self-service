@@ -176,11 +176,11 @@ issuer (`internal/oidc/mockprovider_test.go`) shaped like the university's
 Keycloak: same endpoint layout, same claims, back-channel logout.
 
 The LiteLLM end-to-end tests run against the gateway above, and are built only
-with the `e2e` tag:
+with the `e2e` tag. Most are in `internal/litellm`; the limit sync has one too:
 
 ```bash
 docker compose -f dev/docker-compose.yml up -d --wait litellm
-go test -tags e2e ./internal/litellm/
+go test -tags e2e ./internal/litellm/ ./internal/limitsync/
 ```
 
 `make check` runs everything CI runs, these tests included, and starts the

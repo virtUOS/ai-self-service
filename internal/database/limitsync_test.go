@@ -437,36 +437,3 @@ func TestUnchangedLoginLeavesTheKey(t *testing.T) {
 		t.Errorf("pending = %+v, want nothing", got)
 	}
 }
-
-// A key deleted in the gateway is dropped with an audit entry saying so, and
-// only once, however many requests notice it.
-func TestRemoveMissingKey(t *testing.T) {
-	f := newLimitSyncFixture(t, "ls-missing")
-
-	removed, err := f.s.RemoveMissingKey(f.ctx, f.key.ID, f.user.ID, f.user.Email, "key sk-sub-a")
-	if err != nil || !removed {
-		t.Fatalf("removed = %v, err = %v; want the row removed", removed, err)
-	}
-	if k, err := f.s.GetAPIKeyByUser(f.ctx, f.user.ID); err != nil || k != nil {
-		t.Errorf("key after removal = %+v, err = %v; want none", k, err)
-	}
-	removed, err = f.s.RemoveMissingKey(f.ctx, f.key.ID, f.user.ID, f.user.Email, "key sk-sub-a")
-	if err != nil || removed {
-		t.Errorf("second removal: removed = %v, err = %v; want nothing to do", removed, err)
-	}
-
-	events, err := f.s.ListAuditEvents(f.ctx, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var missing []AuditEvent
-	for _, e := range events {
-		if e.Action == AuditKeyMissing {
-			missing = append(missing, e)
-		}
-	}
-	if len(missing) != 1 || missing[0].ActorEmail != "system" ||
-		missing[0].SubjectEmail != f.user.Email || missing[0].Detail != "key sk-sub-a" {
-		t.Errorf("audit = %+v, want one key.missing entry by system for a's key", missing)
-	}
-}

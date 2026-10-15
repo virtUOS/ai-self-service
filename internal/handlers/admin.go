@@ -193,6 +193,9 @@ type userRow struct {
 	KeyExpires   string
 	KeyExpired   bool
 	HasKey       bool
+	// KeyMissingSince is the date, as YYYY-MM-DD, the gateway was first found
+	// not to have the key, empty for a key it has.
+	KeyMissingSince string
 	// ExpiresAt is the deadline as YYYY-MM-DD for the date input, empty when
 	// the assignment is permanent.
 	ExpiresAt      string
@@ -275,6 +278,9 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 			row.KeyPrefix = k.KeyPrefix
 			row.KeyExpires = k.ExpiresAt.Format("2006-01-02")
 			row.KeyExpired = time.Now().After(k.ExpiresAt)
+			if k.MissingSince != nil {
+				row.KeyMissingSince = k.MissingSince.Format("2006-01-02")
+			}
 		}
 		users[i] = row
 	}

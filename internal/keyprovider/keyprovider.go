@@ -208,4 +208,10 @@ type Provider interface {
 	// UpdateAlias relabels an existing key, so the label follows its owner's
 	// username (see NewAlias). The alias must be unique, as on creation.
 	UpdateAlias(ctx context.Context, ref, alias string) error
+
+	// CheckKey reads whether the gateway still has a key, without changing
+	// anything: nil when it does, an error wrapping ErrKeyNotFound when it
+	// does not, and any other error when the answer is unknown. The sync uses
+	// it on keys it has marked as missing, which it must not push to.
+	CheckKey(ctx context.Context, ref string) error
 }

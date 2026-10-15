@@ -5,13 +5,25 @@
 package metrics
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+// Where the portal can first notice that the gateway no longer has a key. They
+// are the label values of KeysMarkedMissing, and the text the audit log and the log
+// say it was noticed by.
+const (
+	SourceDashboard = "dashboard"
+	SourceExtend    = "extend"
+	SourceSync      = "sync"
 )
 
 var (
@@ -33,16 +45,28 @@ var (
 		Help: "API key operations by action and outcome.",
 	}, []string{"action", "outcome"})
 
-	// KeysMissing counts keys whose record Keyosk dropped because the
-	// gateway answered that the key no longer exists, by where Keyosk
-	// noticed: the dashboard, an extend, or the limit sync. A key deleted in
-	// the gateway on purpose is rare; a run of them means an instance pointed at
-	// the wrong gateway or a restored gateway database, which this is the
-	// alarm for (issue #108).
-	KeysMissing = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "keyosk_keys_missing_total",
-		Help: "Keys removed because the gateway no longer had them, by where Keyosk noticed.",
+	// KeysMarkedMissing counts keys the gateway reported as gone, by where
+	// Keyosk first noticed: the dashboard, an extend, or the limit sync. The
+	// key is marked, not removed, and counted once per marking, however often
+	// it is seen again. A key deleted in the gateway on purpose is rare; a run
+	// of them means an instance pointed at the wrong gateway or a restored
+	// gateway database, which this is the early warning for (issue #108).
+	//
+	// It is not called keys_missing_total: in OpenMetrics that would be the
+	// same metric family as the keys_missing gauge, and the two would be easy
+	// to confuse in a query.
+	KeysMarkedMissing = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "keyosk_keys_marked_missing_total",
+		Help: "Keys marked as missing because the gateway no longer had them, by where Keyosk noticed.",
 	}, []string{"source"})
+
+	// KeysMissingRemoved counts marked keys whose record the sync removed
+	// because they stayed missing past the grace period. That is the damage
+	// done: the owner has lost the key.
+	KeysMissingRemoved = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "keyosk_keys_missing_removed_total",
+		Help: "Keys removed after staying missing from the gateway past the grace period.",
+	})
 
 	// Gauges are refreshed from the database rather than incremented, so a
 	// restart cannot leave them drifting from reality.
@@ -66,9 +90,11 @@ func init() {
 			KeyOperations.WithLabelValues(action, outcome)
 		}
 	}
-	for _, source := range []string{"dashboard", "extend", "sync"} {
-		KeysMissing.WithLabelValues(source)
+	for _, source := range []string{SourceDashboard, SourceExtend, SourceSync} {
+		KeysMarkedMissing.WithLabelValues(source)
 	}
+	prometheus.MustRegister(missingKeys{prometheus.NewDesc("keyosk_keys_missing",
+		"Keys marked as missing from the gateway, waiting out the grace period.", nil, nil)})
 }
 
 // Handler serves the OpenMetrics format to scrapers that ask for it and falls
@@ -84,6 +110,39 @@ func Handler() http.Handler {
 func SetKeyGauges(active, expiringWithin7d int) {
 	activeKeys.Set(float64(active))
 	expiringKeys.Set(float64(expiringWithin7d))
+}
+
+// countMissing is what the keys_missing gauge reads on every scrape.
+var countMissing atomic.Pointer[func(context.Context) (int, error)]
+
+// CountMissingKeysWith sets how the keys_missing gauge counts the keys marked
+// as missing. It is counted on every scrape, so the gauge is exact however and
+// wherever a key was marked, unmarked or removed. Until it is set, the gauge
+// is left out.
+func CountMissingKeysWith(count func(context.Context) (int, error)) {
+	countMissing.Store(&count)
+}
+
+// missingKeys is the keys_missing gauge, counted when it is scraped.
+type missingKeys struct{ desc *prometheus.Desc }
+
+func (m missingKeys) Describe(ch chan<- *prometheus.Desc) { ch <- m.desc }
+
+// Collect leaves the gauge out of a scrape whose count fails, rather than
+// failing the scrape or reporting a count it does not have.
+func (m missingKeys) Collect(ch chan<- prometheus.Metric) {
+	count := countMissing.Load()
+	if count == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	n, err := (*count)(ctx)
+	if err != nil {
+		slog.Error("metrics: count missing keys", "err", err)
+		return
+	}
+	ch <- prometheus.MustNewConstMetric(m.desc, prometheus.GaugeValue, float64(n))
 }
 
 // statusRecorder captures the status code for the middleware.

@@ -79,6 +79,7 @@ in:
 | `LOG_LEVEL`          | no       | `info`      | `debug`, `info`, `warn` or `error`                                 |
 | `LIMIT_SYNC_WORKERS` | no       | `1`         | How many limit updates Keyosk sends to the gateway at once. One is gentle on the gateway but slow for large changes: about 25 minutes for 5,000 keys |
 | `LIMIT_SYNC_INTERVAL` | no      | `5m`        | How often the limit sync retries keys whose update failed. Admin changes start a run straight away and do not wait for it |
+| `KEY_MISSING_GRACE_PERIOD` | no | `24h`       | How long a key the gateway no longer has stays marked as missing before Keyosk removes its record. A key that returns in time is unmarked. See [Keys deleted in the gateway](#how-profile-changes-reach-existing-keys) |
 
 ## Running
 
@@ -120,7 +121,7 @@ the mock, and set `OIDC_ISSUER_URL=http://localhost:8082/realms/virtuos`. See
 The auth-path tests need neither: `internal/oidc/mockprovider_test.go` runs an
 in-process issuer, so `go test ./...` requires nothing external. The LiteLLM
 end-to-end tests run against the local gateway with
-`go test -tags e2e ./internal/litellm/`.
+`go test -tags e2e ./internal/litellm/ ./internal/limitsync/`.
 
 ## Admin panel
 
@@ -226,8 +227,9 @@ The admin panel at `/admin` provides:
 - **Audit log** — the 50 most recent key and profile changes, recording who did
   what to whom. Rows outlive the key and user they describe, so revoking does
   not erase the history. Changes nobody in Keyosk made, such as a profile
-  deadline passing or a key found deleted in the gateway (`key.missing`), are
-  recorded with `system` as the actor.
+  deadline passing or a key found missing from the gateway (`key.missing`,
+  and later `key.found` or `key.gone`), are recorded with `system` as the
+  actor.
 - **Limit sync status** — a card above the tabs says whether all keys
   carry their profile's current limits yet. If not, it shows how many are still
   waiting, whether an update is running, which keys failed and why, and each
@@ -332,21 +334,38 @@ would read as "unlimited"; it is reported as failed instead.
 
 **Keys deleted in the gateway.** A key deleted in LiteLLM directly, outside
 Keyosk, cannot be restored: Keyosk does not have what it would need to
-recreate it. When the sync, the dashboard or an extension finds that the
-gateway no longer has a key, Keyosk removes its record, logs a warning and
-writes a `key.missing` entry to the audit log. The owner's dashboard says the
-key was deleted and offers a new one. Deleting or revoking a key the gateway
-no longer has succeeds, since the key is gone either way.
+recreate it. But "the gateway does not have this key" is also what a Keyosk
+instance pointed at the wrong LiteLLM, or at one restored from an old backup,
+sees for every key. So Keyosk does not forget such a key at once. When the
+sync, the dashboard or an extension finds that the gateway no longer has a
+key, the key is **marked as missing** and a `key.missing` entry goes to the
+audit log. From then on:
+
+- The owner's dashboard says the gateway does not recognise the key and offers
+  a new one. Extending is not offered. The owner can still delete the key or
+  generate a new one, which replaces it.
+- The admin panel shows the key as missing since its first sighting.
+- The sync stops updating its limits and no expiry reminder is sent for it.
+- Every sync run asks the gateway about each marked key. One that is back is
+  unmarked (`key.found`) and updated like any out-of-date key, so changes made
+  while it was gone reach it. One that stays missing past
+  `KEY_MISSING_GRACE_PERIOD` is removed (`key.gone`); the owner can then
+  generate a new key. If the gateway cannot answer, the key is left as it is
+  and the grace period still counts from the first sighting.
+
+Removal therefore takes the grace period plus up to `LIMIT_SYNC_INTERVAL`.
+Deleting or revoking a key the gateway no longer has succeeds, since the key is
+gone either way.
 
 Only LiteLLM's own "not found" answer counts. A 404 from anything in front of
 it, such as a reverse proxy whose route changed or a maintenance page, is an
 ordinary failure: the record is kept and the call retried.
 
-This trusts the gateway's answer. A Keyosk instance pointed at the wrong LiteLLM, or at
-one whose database was reset, sees every key as missing and removes every
-record; check `LITELLM_BASE_URL` before starting a Keyosk instance against a new
-gateway. Each removal also counts on `keyosk_keys_missing_total`, by
-where Keyosk noticed it, so such a run shows on the monitoring dashboard.
+If a Keyosk instance is pointed at the wrong LiteLLM, every key is marked
+within one sync run and the monitoring dashboard shows it (see
+[Metrics](#metrics)): correct `LITELLM_BASE_URL` within the grace period and
+the next run unmarks them all. The same run asks the gateway about every marked key, one request
+each, so this costs as many requests as there are keys.
 
 **After upgrading** to the version that introduced the sync, every existing
 key counts as out of date once, so the first run updates all keys. With many
@@ -493,9 +512,19 @@ restricts the endpoint to the monitoring host.
 | `keyosk_http_requests_total` | requests by route, method, status |
 | `keyosk_http_request_duration_seconds` | latency by route |
 | `keyosk_key_operations_total` | key issue/extend/delete/revoke by outcome |
-| `keyosk_keys_missing_total` | keys removed because the gateway no longer had them, by where Keyosk noticed (`dashboard`, `extend`, `sync`) |
+| `keyosk_keys_marked_missing_total` | keys marked as missing because the gateway no longer had them, by where Keyosk noticed (`dashboard`, `extend`, `sync`) |
+| `keyosk_keys_missing` | keys marked as missing right now, waiting out the grace period; counted from the database on every scrape |
+| `keyosk_keys_missing_removed_total` | marked keys removed after the grace period ran out |
 | `keyosk_active_keys` | keys currently issued |
 | `keyosk_keys_expiring_7d` | keys expiring within a week |
+
+The missing-key metrics are the alarm for a Keyosk instance pointed at the
+wrong gateway, or at one restored from a backup. Suggested alerts: a warning
+when `keyosk_keys_missing` stays above zero for an hour, or when
+`keyosk_keys_marked_missing_total` rises; and a critical alert when
+`keyosk_keys_missing_removed_total` rises, since a record was lost. The first
+fires while the grace period (`KEY_MISSING_GRACE_PERIOD`) still lets you
+correct the cause without losing anything.
 
 ## Routes
 
@@ -552,7 +581,7 @@ unchanged.
 | Binary `ai-self-service`, release files `ai-self-service-<tag>.linux-x86_64` | `keyosk`, `keyosk-<tag>.linux-x86_64` |
 | `OIDC_CLIENT_ID=ai-self-service` in the example configuration | `keyosk`. The value is read from your configuration, so an existing registration keeps working until you rename it at the identity provider |
 | `ADMIN_GROUP=ai-self-service-admin` in the example configuration and the dev stack | `keyosk-admin`. Only the dev stack's group and role are renamed; production keeps whatever group `ADMIN_GROUP` names |
-| Metrics `aiselfservice_*` | `keyosk_*`. Update dashboards and alert rules; the old series stop |
+| Metrics `keyosk_*` | `keyosk_*`. Update dashboards and alert rules; the old series stop |
 | Go module `github.com/virtuos/ai-self-service` | `github.com/virtuos/keyosk` |
 
 Everyone signed in sees one failed form submission after the upgrade, because

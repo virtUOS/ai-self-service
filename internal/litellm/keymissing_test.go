@@ -139,3 +139,33 @@ func TestKeyInfoReportsAMissingKey(t *testing.T) {
 }
 
 func testExpiry() time.Time { return time.Now().AddDate(0, 0, 30) }
+
+// CheckKey reads the key's record: an answer means the gateway has it, LiteLLM's
+// not-found and a "deleted" status mean it does not, and anything else says
+// nothing, so the portal keeps what it has.
+func TestCheckKey(t *testing.T) {
+	for name, tc := range map[string]struct {
+		status  int
+		body    string
+		missing bool
+		fails   bool
+	}{
+		"present":       {status: http.StatusOK, body: `{"key":"abc","info":{"status":"active"}}`},
+		"not found":     {status: http.StatusNotFound, body: infoNotFound, missing: true, fails: true},
+		"deleted":       {status: http.StatusOK, body: infoDeleted, missing: true, fails: true},
+		"foreign 404":   {status: http.StatusNotFound, body: `<html>404</html>`, fails: true},
+		"server error":  {status: http.StatusInternalServerError, body: `{}`, fails: true},
+		"unreadable ok": {status: http.StatusOK, body: `not json`, fails: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := NewProvider(gatewayAnswering(t, tc.status, tc.body))
+			err := p.CheckKey(context.Background(), "abc")
+			if (err != nil) != tc.fails {
+				t.Fatalf("err = %v, want failure = %v", err, tc.fails)
+			}
+			if got := errors.Is(err, keyprovider.ErrKeyNotFound); got != tc.missing {
+				t.Errorf("err = %v; ErrKeyNotFound = %v, want %v", err, got, tc.missing)
+			}
+		})
+	}
+}

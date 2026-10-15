@@ -70,6 +70,11 @@ type Fake struct {
 	CreateErr error
 	DeleteErr error
 	ExpiryErr error
+
+	// MissingRefs are the keys CheckKey reports as gone from the gateway;
+	// CheckErr forces it to fail with some other error.
+	MissingRefs map[string]bool
+	CheckErr    error
 }
 
 func NewFake() *Fake {
@@ -196,6 +201,19 @@ func (f *Fake) DeleteKey(_ context.Context, ref string) error {
 	}
 	delete(f.Keys, ref)
 	f.Deleted = append(f.Deleted, ref)
+	return nil
+}
+
+// CheckKey reports a key listed in MissingRefs as gone, as the gateway does.
+func (f *Fake) CheckKey(_ context.Context, ref string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.CheckErr != nil {
+		return f.CheckErr
+	}
+	if f.MissingRefs[ref] {
+		return fmt.Errorf("fake gateway has no key %s: %w", ref, ErrKeyNotFound)
+	}
 	return nil
 }
 

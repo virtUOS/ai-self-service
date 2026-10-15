@@ -145,7 +145,8 @@ func main() {
 
 	// Pushes profile limits to keys that are out of date, in the background:
 	// one admin change can affect thousands of keys.
-	syncer := limitsync.New(store, keys, cfg.LiteLLMUser, cfg.LimitSyncWorkers)
+	syncer := limitsync.New(store, keys, cfg.LiteLLMUser, cfg.LimitSyncWorkers).
+		WithMissingGrace(cfg.KeyMissingGracePeriod)
 
 	ui := handlers.NewUI(cfg, store, sessions, oidcProvider, keys, csrf, syncer.Kick)
 	admin := handlers.NewAdmin(cfg, store, sessions, keys, csrf, syncer)
@@ -207,6 +208,7 @@ func main() {
 		metrics.SetKeyGauges(total, soon)
 	}
 	refreshGauges()
+	metrics.CountMissingKeysWith(store.CountMissingKeys)
 
 	// Expire stale sessions periodically; previously this ran once at startup
 	// and rows accumulated for the lifetime of the process.

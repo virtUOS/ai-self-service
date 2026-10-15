@@ -11,14 +11,25 @@ import (
 	"github.com/virtuos/keyosk/internal/metrics"
 )
 
+// Gauge returns the current value of one series. It reads the same way as
+// Counter, which is named for how tests mostly use it.
+func Gauge(t testing.TB, name, labels string) float64 {
+	t.Helper()
+	return Counter(t, name, labels)
+}
+
 // Counter returns the current value of one series, such as
-// `keyosk_keys_missing_total{source="sync"}`, or 0 when it is absent.
-// Labels are given as they appear in the exposition, in label-name order.
+// `keyosk_keys_marked_missing_total{source="sync"}`, or 0 when it is absent.
+// Labels are given as they appear in the exposition, in label-name order, and
+// are empty for a series without any.
 func Counter(t testing.TB, name, labels string) float64 {
 	t.Helper()
 	rec := httptest.NewRecorder()
 	metrics.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
-	prefix := name + "{" + labels + "} "
+	prefix := name + " "
+	if labels != "" {
+		prefix = name + "{" + labels + "} "
+	}
 	for _, line := range strings.Split(rec.Body.String(), "\n") {
 		if !strings.HasPrefix(line, prefix) {
 			continue
