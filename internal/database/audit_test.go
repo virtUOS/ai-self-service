@@ -2,7 +2,9 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 )
 
 func TestAuditRecordAndList(t *testing.T) {
@@ -77,6 +79,37 @@ func TestAuditSurvivesKeyDeletion(t *testing.T) {
 	events, _ := s.ListAuditEvents(ctx, 10)
 	if len(events) != 1 || events[0].SubjectEmail != "s@uni.de" {
 		t.Fatalf("audit row lost: %#v", events)
+	}
+}
+
+func TestCountAPIKeys(t *testing.T) {
+	s := migratedStore(t, "au5")
+	ctx := context.Background()
+
+	if total, soon, err := s.CountAPIKeys(ctx, 7); err != nil || total != 0 || soon != 0 {
+		t.Fatalf("empty table: got %d, %d, %v; want 0, 0, nil", total, soon, err)
+	}
+
+	day := 24 * time.Hour
+	for i, expiresIn := range []time.Duration{3 * day, 30 * day, -day} {
+		u, err := s.GetOrCreateUser(ctx, fmt.Sprintf("cs%d", i), fmt.Sprintf("c%d@uni.de", i), "C")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.ReplaceAPIKey(ctx, &APIKey{
+			UserID: u.ID, KeyRef: "sk-x", KeyPrefix: "sk-x",
+			ExpiresAt: time.Now().Add(expiresIn),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	total, soon, err := s.CountAPIKeys(ctx, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 3 || soon != 1 {
+		t.Fatalf("got total %d, expiring %d; want 3, 1", total, soon)
 	}
 }
 
