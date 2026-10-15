@@ -12,6 +12,7 @@ import (
 
 	"github.com/virtuos/ai-self-service/internal/database"
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/ai-self-service/internal/metrics/metricstest"
 )
 
 // gatewayStub records pushes. Refs in failing are rejected, and beforePush,
@@ -478,6 +479,7 @@ func TestRunRemovesAKeyTheGatewayNoLongerHas(t *testing.T) {
 	f := newFixture(t)
 	gone, kept := f.addKey(t, "a"), f.addKey(t, "b")
 	f.gw.missing[gone] = true
+	before := metricstest.Counter(t, "aiselfservice_keys_missing_total", `source="sync"`)
 
 	res, err := New(f.store, f.gw, plainUser, 1).Run(f.ctx)
 	if err != nil {
@@ -485,6 +487,10 @@ func TestRunRemovesAKeyTheGatewayNoLongerHas(t *testing.T) {
 	}
 	if res.Removed != 1 || res.Synced != 1 || res.Failed != 0 {
 		t.Errorf("result = %+v, want one removed and one synced", res)
+	}
+	// The removal is counted, so a spike shows on the monitoring dashboard.
+	if got := metricstest.Counter(t, "aiselfservice_keys_missing_total", `source="sync"`) - before; got != 1 {
+		t.Errorf("keys_missing{source=sync} rose by %v, want 1", got)
 	}
 	u, err := f.store.GetUserByOIDCSub(f.ctx, "a")
 	if err != nil {

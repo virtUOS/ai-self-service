@@ -22,6 +22,7 @@ import (
 
 	"github.com/virtuos/ai-self-service/internal/database"
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/ai-self-service/internal/metrics"
 )
 
 // gateway is the slice of the key provider the sync needs.
@@ -249,12 +250,18 @@ func (s *Syncer) pushFailed(ctx context.Context, t database.LimitSyncTarget, err
 		return failed, true, s.fail(ctx, t, err.Error())
 	}
 	slog.Warn("key no longer exists in the gateway; removing it", "key_prefix", t.KeyPrefix, "user", t.Email, "err", err)
-	if _, rerr := s.store.RemoveMissingKey(ctx, t.KeyID, t.UserID, t.Email,
-		"key "+t.KeyPrefix+" no longer exists in the gateway (limit sync)"); rerr != nil {
+	dropped, rerr := s.store.RemoveMissingKey(ctx, t.KeyID, t.UserID, t.Email,
+		"key "+t.KeyPrefix+" no longer exists in the gateway (limit sync)")
+	if rerr != nil {
 		if ctx.Err() != nil {
 			return failed, false, nil
 		}
 		return failed, true, fmt.Errorf("remove missing key %s: %w", t.KeyPrefix, rerr)
+	}
+	// Counted only when this run dropped the row: the dashboard may have
+	// noticed first, and then it is its removal.
+	if dropped {
+		metrics.KeysMissing.WithLabelValues("sync").Inc()
 	}
 	return removed, true, nil
 }

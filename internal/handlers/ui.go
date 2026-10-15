@@ -144,9 +144,15 @@ func (u *UI) audit(r *http.Request, action string, user *database.User, detail s
 // work either way, and replacing it handles a stale record too.
 func (u *UI) removeMissingKey(ctx context.Context, user *database.User, k *database.APIKey, where string) {
 	slog.Warn("key no longer exists in the gateway; removing it", "key_prefix", k.KeyPrefix, "user", user.Email, "noticed_by", where)
-	if _, err := u.store.RemoveMissingKey(ctx, k.ID, user.ID, user.Email,
-		"key "+k.KeyPrefix+" no longer exists in the gateway ("+where+")"); err != nil {
+	removed, err := u.store.RemoveMissingKey(ctx, k.ID, user.ID, user.Email,
+		"key "+k.KeyPrefix+" no longer exists in the gateway ("+where+")")
+	if err != nil {
 		slog.Error("remove missing key", "key_prefix", k.KeyPrefix, "err", err)
+	}
+	// Counted only when this request dropped the row, so two views of the same
+	// gone key are one removal on the monitoring dashboard.
+	if removed {
+		metrics.KeysMissing.WithLabelValues(where).Inc()
 	}
 }
 
