@@ -26,9 +26,10 @@ A self-service web portal that lets users generate, manage, and renew their own 
 - **Admin panel** — manage profiles and assign them to users
 - **Limit sync** — a change to a profile or an assignment reaches every
   affected key in the background, with its progress shown to all admins
-- **Admin rights on the account** — admins promote and remove other admins in
-  the panel, with no redeploy; the first admin is marked with one command on
-  the server, which is also the way back in if every admin is ever lost
+- **Admins from the login system or the panel** — either the members of an
+  IdP group are the admins, or admins promote and remove each other in the
+  panel, with the first one marked by one command on the server; never by
+  email address
 - **Local development** — one `docker compose up` in `dev/` starts an OIDC
   mock, a LiteLLM gateway with mock models, and a mail catcher; Keycloak is
   opt-in
@@ -47,6 +48,9 @@ in:
 | `OIDC_CLIENT_ID`     | yes      | —           | OIDC client ID                                                     |
 | `OIDC_CLIENT_SECRET` | yes      | —           | OIDC client secret                                                 |
 | `OIDC_REDIRECT_URL`  | yes      | —           | Callback URL (must match OIDC client config)                       |
+| `OIDC_EXTRA_SCOPES`  | no       | —           | Space-separated scopes requested on top of `openid profile email`, e.g. `groups` for IdPs that send groups only when asked |
+| `ADMIN_GROUP`        | no       | —           | IdP group whose members are the admins; see [Admin panel](#admin-panel). Unset, admins are managed in the panel |
+| `ADMIN_GROUP_CLAIM`  | no       | `groups`    | Dot path to the ID token claim that lists the groups, e.g. `realm_access.roles` for Keycloak realm roles. Only with `ADMIN_GROUP` |
 | `FRONTEND_URL`       | yes      | —           | Public base URL of this app (shown to users as the API base URL)   |
 | `LITELLM_USER_ID_PREFIX` | no   |             | Only for several portals on one gateway; see [Several portals on one gateway](#several-portals-on-one-gateway) |
 | `LITELLM_USER_EMAIL` | no       | `false`     | Record people's email addresses on their LiteLLM users, so LiteLLM's user search finds them. Only where addresses are unique across everything connected to the gateway; see [People in LiteLLM](#people-in-litellm) |
@@ -113,14 +117,51 @@ end-to-end tests run against the local gateway with
 
 ## Admin panel
 
-Admin rights are recorded on the account, and nothing else grants them: not an
-email address, which the IdP can reassign to someone else, and not a setting
-in the deployment. Someone is an admin because another admin promoted them in
-the panel, or because the operator marked their account with the command
-below. The former settings `ADMIN_IDS`, `ADMIN_EMAILS` and `ADMIN_ROLE` are no
-longer read; the portal warns at startup if one is still set (issue #107).
+Admin rights are recorded on the account, as a flag that the admin panel
+checks on every request. An email address never grants them: the IdP can
+reassign an address to someone else. The flag is set in one of two ways, and a
+deployment uses exactly one:
+
+- **From the login system**, with `ADMIN_GROUP` set: the members of that group
+  are the admins. Membership is managed in the IdP and the panel cannot change
+  it.
+- **In the panel**, without `ADMIN_GROUP`: admins promote and remove each
+  other, and the first one is marked with a command on the server.
+
+The former settings `ADMIN_IDS`, `ADMIN_EMAILS` and `ADMIN_ROLE` are no longer
+read; the portal warns at startup if one is still set (issue #107).
+
+### Admins from the login system
+
+Set `ADMIN_GROUP` to a group in the IdP, and make sure the IdP puts the
+account's groups into the **ID token**. At every login the portal reads the
+claim, by default `groups`, and sets the account's flag to whether it lists
+the group. Each change is written to the audit log with the login system as
+the actor. The **Admins** tab then lists who was a member at their last login,
+with nothing to promote or remove.
+
+- **Timing.** Adding someone to the group or removing them takes effect at
+  their next login, not straight away. To cut someone off at once, end their
+  session in the IdP as well; the portal honours back-channel logout.
+- **Exact match.** The group name is matched exactly. A token without the
+  claim, or with a claim of another shape, makes nobody an admin.
+- **Keycloak.** Add a *Group Membership* mapper with the claim name `groups`,
+  "Add to ID token" on, and "Full group path" off; with the full path on, the
+  claim lists `/name`, so set `ADMIN_GROUP=/name` instead. Realm roles work
+  too: set `ADMIN_GROUP_CLAIM=realm_access.roles` and add a mapper that puts
+  realm roles in the ID token, since Keycloak sends them only in the access
+  token by default. A client role is
+  `resource_access.<client id>.roles`. `dev/realm-export.json` has working
+  examples of both mappers.
+- **Other IdPs.** Dex, Okta and Authentik send `groups` only when asked: set
+  `OIDC_EXTRA_SCOPES=groups`. Microsoft Entra ID lists groups by object ID, so
+  `ADMIN_GROUP` is that ID, not the group's name; a user in too many groups
+  gets no `groups` claim from Entra at all and is therefore not an admin.
 
 ### The first admin
+
+This and the next section apply when the panel manages admins, without
+`ADMIN_GROUP`.
 
 Nobody is an admin on a fresh database, and the portal says so at startup. The
 person logs in once, so the portal has their account, and whoever runs the
@@ -149,6 +190,19 @@ admin can remove any other admin but not themselves, so the panel can never be
 left with nobody in charge by accident. A removal takes effect on the person's
 next request, and every promotion and removal is written to the audit log.
 
+### Switching between the two
+
+The flags stay as they are when the setting changes. Going from the login
+system to the panel keeps the last group members as admins, so nobody is
+locked out. Going from the panel to the login system keeps the panel's admins
+until each of them next logs in, when the group decides. To end them at once,
+clear every flag after the switch; members of the group get theirs back at
+their next login:
+
+```sh
+sqlite3 "$DB_PATH" "UPDATE users SET is_admin = 0"
+```
+
 The admin panel at `/admin` provides:
 
 - **Profiles** — create and edit profiles with model restrictions, TPM/RPM limits, and budget caps. Mark one profile as default; it applies to users with no explicit profile assignment.
@@ -157,7 +211,8 @@ The admin panel at `/admin` provides:
   date and the user reverts to the default profile when it passes, or to a
   profile you choose, or their key is deleted if you tick that instead. Leave
   the date empty for a permanent assignment.
-- **Admins** — promote and remove admins, as described above.
+- **Admins** — list the admins, and promote and remove them when the panel
+  manages them, as described above.
 - **Audit log** — the 50 most recent key and profile changes, recording who did
   what to whom. Rows outlive the key and user they describe, so revoking does
   not erase the history. Changes nobody in the portal made, such as a profile
@@ -461,7 +516,8 @@ Register the application with your OIDC provider:
 - **Redirect URI**: `{FRONTEND_URL}/callback`
 - **Post-logout redirect URI**: `{FRONTEND_URL}/` (optional)
 - **Back-channel logout URI**: `{FRONTEND_URL}/backchannel-logout` (optional)
-- Required scopes: `openid`, `email`, `profile`
+- Required scopes: `openid`, `email`, `profile`, plus whatever your IdP needs
+  to send groups when `ADMIN_GROUP` is set (see `OIDC_EXTRA_SCOPES`)
 
 ## Technology stack
 
