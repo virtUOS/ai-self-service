@@ -189,11 +189,9 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		models = u.userModels(r.Context(), profile)
 	}
 
-	// The Admin link must agree with what the /admin gate will actually allow,
-	// so it is decided by the same resolver rather than a second copy of the
-	// precedence rule.
-	src, _ := resolveAdmin(r.Context(), u.cfg, u.store, su.IDToken, su.User.OIDCSub, su.User.Email)
-	isAdmin := src.isAdmin()
+	// The Admin link must agree with what the /admin gate allows, and both
+	// read the same flag on the account the session just loaded.
+	isAdmin := su.User.IsAdmin
 
 	// Redeem a one-time new key stashed by GenerateKey. The secret never
 	// appears in the URL; the query string carries only an opaque token.

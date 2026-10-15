@@ -26,9 +26,9 @@ A self-service web portal that lets users generate, manage, and renew their own 
 - **Admin panel** — manage profiles and assign them to users
 - **Limit sync** — a change to a profile or an assignment reaches every
   affected key in the background, with its progress shown to all admins
-- **Admin rights from the panel** — admins can grant and withdraw the admin
-  panel for other users without a redeploy; `ADMIN_IDS` still always grants and
-  cannot be removed there, so a lockout is always recoverable
+- **Admin rights on the account** — admins promote and remove other admins in
+  the panel, with no redeploy; the first admin is marked with one command on
+  the server, which is also the way back in if every admin is ever lost
 - **Local development** — one `docker compose up` in `dev/` starts an OIDC
   mock, a LiteLLM gateway with mock models, and a mail catcher; Keycloak is
   opt-in
@@ -50,9 +50,6 @@ in:
 | `FRONTEND_URL`       | yes      | —           | Public base URL of this app (shown to users as the API base URL)   |
 | `LITELLM_USER_ID_PREFIX` | no   |             | Only for several portals on one gateway; see [Several portals on one gateway](#several-portals-on-one-gateway) |
 | `LITELLM_USER_EMAIL` | no       | `false`     | Record people's email addresses on their LiteLLM users, so LiteLLM's user search finds them. Only where addresses are unique across everything connected to the gateway; see [People in LiteLLM](#people-in-litellm) |
-| `ADMIN_ROLE`         | no       | —           | IdP role that grants the admin panel; supersedes `ADMIN_IDS` and grants made in the panel |
-| `ADMIN_IDS`          | no       | —           | Comma-separated admins, each an OIDC subject **or** an email. Always grant, and cannot be removed from the panel — this is the recovery path if the last admin is removed |
-| `ADMIN_EMAILS`       | no       | —           | Deprecated alias for `ADMIN_IDS`; still read, email entries only   |
 | `DB_PATH`            | no       | `./data.db` | Path to the SQLite database file. It runs in WAL mode, so `-wal` and `-shm` files sit next to it; keep the directory on a local filesystem (not NFS), and back up with `sqlite3 data.db .backup` rather than copying the file |
 | `LISTEN_ADDR`        | no       | `:8080`     | Address and port to listen on                                      |
 | `TRUSTED_PROXIES`    | no       | private ranges | Comma-separated CIDRs or IPs of reverse proxies whose `X-Forwarded-For` is believed for the client address in the request log. The default is loopback and the private ranges (`127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`); `none` trusts nobody and always logs the connecting address |
@@ -116,36 +113,43 @@ end-to-end tests run against the local gateway with
 
 ## Admin panel
 
-**Prefer `ADMIN_ROLE`.** Set it to a realm role and admin membership is managed
-in the IdP, where staff changes are already handled — the portal stops being a
-second list to keep in step, and nothing has to be redeployed when someone
-joins or leaves. It needs the IdP team to create the role and add a mapper that
-puts it in the **ID token**: Keycloak sends realm roles only in the access
-token by default. `dev/realm-export.json` contains a working example of both.
+Admin rights are recorded on the account, and nothing else grants them: not an
+email address, which the IdP can reassign to someone else, and not a setting
+in the deployment. Someone is an admin because another admin promoted them in
+the panel, or because the operator marked their account with the command
+below. The former settings `ADMIN_IDS`, `ADMIN_EMAILS` and `ADMIN_ROLE` are no
+longer read; the portal warns at startup if one is still set (issue #107).
 
-A realm that emits no role claim falls back to `ADMIN_IDS`, so configuring a
-role before the IdP is ready locks nobody out. With `ADMIN_ROLE` unset, roles
-are ignored entirely.
+### The first admin
 
-Users listed in `ADMIN_IDS` see an **Admin** link in the header. An entry is
-either an **OIDC subject** or an email address, and the subject is the form to
-prefer: an address is assigned by the IdP and can be reassigned, so an
-allowlist keyed on it grants admin to whoever holds that address today rather
-than to a person. Each user's subject is shown in the admin panel's user table,
-click to copy. Granting by email still works and is logged as such, so an
-existing `ADMIN_EMAILS` deployment keeps running while it is migrated.
+Nobody is an admin on a fresh database, and the portal says so at startup. The
+person logs in once, so the portal has their account, and whoever runs the
+server marks it:
 
-Admin rights can also be granted from the panel itself, on the **Admins** tab,
-without a redeploy. The three sources are checked in order, first match wins:
-`ADMIN_ROLE` first, then `ADMIN_IDS`, then the grants made from the panel.
-`ADMIN_IDS` always wins over a panel grant, and a panel grant can never remove
-an `ADMIN_IDS` entry, which makes the env allowlist the recovery path if the
-last panel-granted admin is ever removed by mistake — there is always a way
-back in that does not depend on the database. A grant can be made by email
-address before the person has ever logged in; their **OIDC subject** is
-recorded the first time they authenticate, and from that point the grant no
-longer depends on the address, for the same reason `ADMIN_IDS` prefers subjects
-over emails above. The admin panel at `/admin` provides:
+```sh
+sqlite3 "$DB_PATH" "SELECT id, name, email FROM users"
+sqlite3 "$DB_PATH" "UPDATE users SET is_admin = 1 WHERE id = 7"
+```
+
+`DB_PATH` is the database file from the configuration. When the portal runs in
+a container, run the command on the host against the mounted file. The update
+is safe while the portal runs, and takes effect on the person's next request.
+
+The same command is the way back in if every admin is ever lost, for example
+because the only admin left. Running the server already means having full
+access to it, so this adds no new risk.
+
+### Further admins
+
+The **Admins** tab lists every admin with their name, email and OIDC subject,
+and lets an admin promote any account that has logged in before: the form
+offers the accounts the portal knows, filtered by name or email as you type,
+and the right is recorded against the account rather than the address. An
+admin can remove any other admin but not themselves, so the panel can never be
+left with nobody in charge by accident. A removal takes effect on the person's
+next request, and every promotion and removal is written to the audit log.
+
+The admin panel at `/admin` provides:
 
 - **Profiles** — create and edit profiles with model restrictions, TPM/RPM limits, and budget caps. Mark one profile as default; it applies to users with no explicit profile assignment.
 - **Users** — view everyone who has logged in, see their key prefix and expiry,
@@ -153,14 +157,7 @@ over emails above. The admin panel at `/admin` provides:
   date and the user reverts to the default profile when it passes, or to a
   profile you choose, or their key is deleted if you tick that instead. Leave
   the date empty for a permanent assignment.
-- **Admins** — grant and revoke admin rights, and see where each admin's
-  rights come from. Entries from `ADMIN_ROLE` or `ADMIN_IDS` show as "from
-  configuration" with no remove button, since removing them here would not
-  actually take effect. `ADMIN_ROLE` holders cannot be listed individually,
-  because role membership lives in the IdP rather than this app, so the tab
-  says as much instead of implying its list is complete. An admin can neither
-  revoke their own rights nor revoke an `ADMIN_IDS` entry, and every grant and
-  revocation is written to the audit log.
+- **Admins** — promote and remove admins, as described above.
 - **Audit log** — the 50 most recent key and profile changes, recording who did
   what to whom. Rows outlive the key and user they describe, so revoking does
   not erase the history. Changes nobody in the portal made, such as a profile

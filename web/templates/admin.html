@@ -231,9 +231,9 @@
             <tr>
               <td>{{.Name}}</td>
               <td>{{.Email}}</td>
-              {{/* The subject is what ADMIN_IDS should list: it identifies the
-                   person durably, where an address can be reassigned. Shown so
-                   an operator can copy it without querying the database. */}}
+              {{/* The subject identifies the person durably, where an address
+                   can be reassigned. Shown so an operator can tell accounts
+                   apart without querying the database. */}}
               <td><button type="button" class="model-copy" data-model="{{.OIDCSub}}"
                           onclick="copyModel(this)" title="{{T $.Lang "admin.col.oidcsub.help"}}"><code>{{.OIDCSub}}</code></button></td>
               <td>
@@ -308,41 +308,31 @@
       <p class="text-muted" style="margin-bottom:1rem;font-size:.9rem">
         {{T .Lang "admin.admins.note"}}
       </p>
-      {{if .AdminRoleName}}
-      <p class="text-muted" style="margin-bottom:1rem;font-size:.9rem">
-        {{printf (T .Lang "admin.admins.role") .AdminRoleName}}
-      </p>
-      {{end}}
 
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>{{T .Lang "admin.admins.entry"}}</th>
-              <th>{{T .Lang "admin.admins.who"}}</th>
-              <th>{{T .Lang "admin.admins.source"}}</th>
+              <th>{{T .Lang "admin.col.name"}}</th>
+              <th>{{T .Lang "admin.col.email"}}</th>
+              <th>{{T .Lang "admin.col.oidcsub"}}</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {{range .Admins}}
             <tr>
-              {{/* Shown verbatim: this is the string an operator has to match
-                   when editing ADMIN_IDS, so prettifying it would mislead. */}}
-              <td><code>{{.ID}}</code>{{if .IsSelf}} <span class="badge">{{T $.Lang "admin.admins.self"}}</span>{{end}}</td>
+              <td>{{.Name}}{{if .IsSelf}} <span class="badge">{{T $.Lang "admin.admins.self"}}</span>{{end}}</td>
+              <td>{{.Email}}</td>
+              <td><code>{{.OIDCSub}}</code></td>
               <td>
-                {{if .Identity}}{{.Identity}}
-                {{else}}<em class="text-faint">{{T $.Lang "admin.admins.unknown"}}</em>{{end}}
-              </td>
-              <td>
-                {{if eq .Source "config"}}<em class="text-faint">{{T $.Lang "admin.admins.fromconfig"}}</em>
-                {{else}}{{T $.Lang "admin.admins.granted"}}{{end}}
-              </td>
-              <td>
+                {{/* The acting admin's own row has no button: nobody can
+                     remove their own rights, so the panel is never left with
+                     nobody in charge by accident. */}}
                 {{if .Removable}}
                 <form method="POST" action="/admin/admins/revoke" style="display:inline">
                   <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                  <input type="hidden" name="email" value="{{.ID}}">
+                  <input type="hidden" name="user_id" value="{{.ID}}">
                   <button class="btn btn-sm btn-danger">{{T $.Lang "admin.admins.revoke"}}</button>
                 </form>
                 {{end}}
@@ -355,11 +345,25 @@
         </table>
       </div>
 
+      <h3 style="margin-top:1.5rem;margin-bottom:.5rem">{{T .Lang "admin.admins.promote"}}</h3>
+      <p class="text-muted" style="margin-bottom:.75rem;font-size:.9rem">
+        {{T .Lang "admin.admins.promote.note"}}
+      </p>
+      {{/* The form names an account, never an address: the right is recorded
+           on the person, so only people who have logged in can be chosen. The
+           filter narrows the list client-side; the id is what is posted. */}}
       <form method="POST" action="/admin/admins"
-            style="display:flex;gap:.5rem;align-items:center;margin-top:1rem">
+            style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <input type="email" name="email" required
-               placeholder="{{T .Lang "admin.admins.add"}}" style="width:auto">
+        <input type="search" id="admin-filter" autocomplete="off"
+               placeholder="{{T .Lang "admin.admins.filter"}}" style="width:auto"
+               oninput="filterCandidates(this.value)">
+        <select name="user_id" id="admin-candidates" required style="width:auto">
+          <option value="">{{T .Lang "admin.admins.choose"}}</option>
+          {{range .Candidates}}
+          <option value="{{.ID}}">{{.Name}} &lt;{{.Email}}&gt;</option>
+          {{end}}
+        </select>
         <button type="submit" class="btn btn-sm btn-primary">{{T .Lang "admin.admins.grant"}}</button>
       </form>
     </div>
@@ -410,6 +414,18 @@
 function toggleExpiryOptions(input) {
   const opts = input.closest('form').querySelector('.expiry-options');
   if (opts) opts.hidden = !input.value;
+}
+
+// The promotion form's dropdown, narrowed by the filter box. Options are
+// swapped in and out rather than hidden, since not every browser hides a
+// hidden <option> inside a native <select>.
+const adminCandidates = Array.from(
+  document.querySelectorAll('#admin-candidates option')).filter(o => o.value !== '');
+function filterCandidates(q) {
+  q = q.trim().toLowerCase();
+  const sel = document.getElementById('admin-candidates');
+  sel.replaceChildren(sel.options[0], ...adminCandidates.filter(
+    o => q === '' || o.textContent.toLowerCase().includes(q)));
 }
 
 function showTab(name, btn) {

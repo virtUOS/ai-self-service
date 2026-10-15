@@ -27,7 +27,10 @@ Phases 1–6 of the original assessment all shipped:
   the database, transactional key rotation, Postgres support removed (it never
   worked; the DDL was SQLite-only).
 - **Profiles** — per-profile key validity and fair-use token quotas.
-- **Admin** — key revocation, key visibility, audit log.
+- **Admin** — key revocation, key visibility, audit log. Admin rights live on
+  the account (#107): the first admin is marked with one command on the
+  server, further ones are promoted in the panel, and neither an email
+  address nor a setting grants them.
 - **Provider abstraction** — `keyprovider.Provider`, with LiteLLM as one
   adapter and a fake for tests.
 - **Operations** — graceful shutdown, timeouts, health checks, Dockerfile, CI,
@@ -490,12 +493,14 @@ and `ADMIN_IDS` carries subjects rather than addresses.
 ## Suggested next steps
 
 1. Provision production: VM, DNS, Keycloak client, vault secrets, pricing.
-2. Ask the IdP team for an `ai-self-service-admin` **realm role** plus a mapper
-   that puts realm roles in the **ID token** — Keycloak sends them only in the
-   access token by default, and the portal reads the ID token. Then set
-   `ADMIN_ROLE` and drop `asvc_admin_ids` from the deploy repo. The app already
-   supports this and falls back to the list until the claim appears;
-   `dev/realm-export.json` has a working example of both halves.
+2. When the IdP team provides an `ai-self-service-admin` **realm role**, or a
+   group claim, in the **ID token** (Keycloak sends realm roles only in the
+   access token by default), add the IdP-managed option from issue #107: with
+   it configured the portal reads admin rights from the claim and the panel
+   stops managing them. Until then admins are managed in the panel.
+   `asvc_admin_ids` in the deploy repo is no longer read and can be dropped
+   once the first admin on each host is marked. `dev/realm-export.json` has a
+   working example of the role and the mapper.
 3. Ask the same team what group or affiliation claim the realm emits, then map
    profiles onto it.
 4. Issue #7 — several named keys per user, for different services. Blocked by

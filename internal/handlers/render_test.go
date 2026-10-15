@@ -188,14 +188,9 @@ func TestAdminTemplateRenders(t *testing.T) {
 	}
 }
 
-// Tooltips explain jargon like TPM to admins who do not know it. Assert they
-// render with real text, since Go's contextual escaping would mangle a badly
-// quoted attribute rather than fail loudly.
-// The Admins tab interpolates the configured role name into a translated
-// sentence via {{printf (T .Lang "admin.admins.role") .AdminRoleName}} — a
-// template construct not used anywhere else in this repo. Prove it actually
-// renders, in both the branch that shows a role name and the branch that
-// omits the whole paragraph because none is configured.
+// The Admins tab lists every account that holds the panel, offers a remove
+// button on everyone but the acting admin, names accounts rather than
+// addresses in its forms, and says so when nobody is an admin.
 func TestAdminTemplateRendersAdminsTab(t *testing.T) {
 	tmpl := parseAdminTemplate()
 
@@ -208,35 +203,44 @@ func TestAdminTemplateRendersAdminsTab(t *testing.T) {
 		return buf.String()
 	}
 
-	withRole := render(adminData{
+	withAdmins := render(adminData{
 		Lang:      i18n.EN,
 		Profiles:  []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
 		CSRFToken: "TOK",
 		Admins: []adminRow{
-			{ID: "fixed@uni-osnabrueck.de", Source: "config", Removable: false},
-			{ID: "granted@uni-osnabrueck.de", Source: "granted", Removable: true},
+			{User: database.User{ID: 1, Name: "Acting", Email: "acting@uni-osnabrueck.de", OIDCSub: "sub-acting"}, IsSelf: true},
+			{User: database.User{ID: 2, Name: "Other", Email: "other@uni-osnabrueck.de", OIDCSub: "sub-other"}, Removable: true},
 		},
-		AdminRoleName: "ai-self-service-admin",
+		Candidates: []database.User{{ID: 3, Name: "Student", Email: "student@uni-osnabrueck.de"}},
 	})
-	if !strings.Contains(withRole, "ai-self-service-admin") {
-		t.Error("role name not interpolated into the sentence")
+	for _, want := range []string{"acting@uni-osnabrueck.de", "other@uni-osnabrueck.de", "sub-other"} {
+		if !strings.Contains(withAdmins, want) {
+			t.Errorf("admin rows do not show %q", want)
+		}
 	}
-	if !strings.Contains(withRole, "fixed@uni-osnabrueck.de") || !strings.Contains(withRole, "granted@uni-osnabrueck.de") {
-		t.Error("admin rows not rendered")
+	if n := strings.Count(withAdmins, `action="/admin/admins/revoke"`); n != 1 {
+		t.Errorf("%d remove forms, want one: the acting admin's own row offers none", n)
+	}
+	if !strings.Contains(withAdmins, `name="user_id" value="2"`) {
+		t.Error("the remove form does not name the account")
+	}
+	if !strings.Contains(withAdmins, `<option value="3">Student &lt;student@uni-osnabrueck.de&gt;</option>`) {
+		t.Error("the promotion form does not offer the candidate account")
 	}
 
-	withoutRole := render(adminData{
+	empty := render(adminData{
 		Lang:      i18n.EN,
 		Profiles:  []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
 		CSRFToken: "TOK",
 	})
-	if strings.Contains(withoutRole, "is an admin as well") {
-		t.Error("role sentence rendered with no role configured")
-	}
-	if !strings.Contains(withoutRole, "No admin rights granted here.") {
+	if !strings.Contains(empty, "No account holds admin rights.") {
 		t.Error("empty-admins fallback row did not render")
 	}
 }
+
+// Tooltips explain jargon like TPM to admins who do not know it. Assert they
+// render with real text, since Go's contextual escaping would mangle a badly
+// quoted attribute rather than fail loudly.
 
 func TestAdminTooltipsRender(t *testing.T) {
 	tmpl := parseAdminTemplate()
@@ -374,10 +378,10 @@ func TestAdminPageFullyGerman(t *testing.T) {
 		Users:           []userRow{{User: database.User{ID: 2, Name: "U", Email: "u@x.de"}}},
 		CSRFToken:       "T",
 		Admins: []adminRow{
-			{ID: "fixed@uni-osnabrueck.de", Source: "config", Removable: false},
-			{ID: "granted@uni-osnabrueck.de", Source: "granted", Removable: true},
+			{User: database.User{ID: 1, Name: "A", Email: "a@x.de"}, IsSelf: true},
+			{User: database.User{ID: 3, Name: "B", Email: "b@x.de"}, Removable: true},
 		},
-		AdminRoleName: "ai-self-service-admin",
+		Candidates: []database.User{{ID: 2, Name: "U", Email: "u@x.de"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -394,10 +398,9 @@ func TestAdminPageFullyGerman(t *testing.T) {
 		">Audit log<",
 		"Allowed models",
 		"Usage limit (cost)",
-		"is an admin as well",
-		"from configuration",
-		"granted here",
-		"Email address",
+		"Make someone an admin",
+		"Choose an account",
+		"Filter by name or email",
 		"Make admin",
 	} {
 		if strings.Contains(out, english) {
@@ -405,7 +408,7 @@ func TestAdminPageFullyGerman(t *testing.T) {
 		}
 	}
 	// And confirm the German actually rendered.
-	for _, german := range []string{"Benutzende", "Audit-Log", "Token pro Minute", "Administrator", "aus der Konfiguration"} {
+	for _, german := range []string{"Benutzende", "Audit-Log", "Token pro Minute", "Administrator", "Konto auswählen"} {
 		if !strings.Contains(out, german) {
 			t.Errorf("expected German text %q missing", german)
 		}
@@ -596,10 +599,9 @@ func TestDashboardFallsBackToOneBar(t *testing.T) {
 	}
 }
 
-// The admin panel shows each user's OIDC subject, because that is the value
-// ADMIN_IDS should list: an email address can be reassigned by the IdP, so an
-// allowlist keyed on it grants rights to whoever holds the address today.
-// Without this an operator would have to query the database to find it.
+// The admin panel shows each user's OIDC subject, the identifier that stays
+// with the person: an email address can be reassigned by the IdP. Without
+// this an operator would have to query the database to tell accounts apart.
 func TestAdminShowsOIDCSubject(t *testing.T) {
 	var buf bytes.Buffer
 	err := parseAdminTemplate().Execute(&buf, adminData{

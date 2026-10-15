@@ -3,7 +3,6 @@ package oidc
 import (
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -232,33 +231,4 @@ func generateState() string {
 	// Never fails since Go 1.24; a broken entropy source crashes the process.
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
-}
-
-// RealmRoles reads the roles a Keycloak-style ID token carries.
-//
-// Keycloak puts realm roles under realm_access.roles, and only in the access
-// token unless a mapper is told to add them to the ID token as well. A realm
-// without that mapper simply yields nothing, which is why role checking has to
-// degrade to the configured list rather than assume the claim is present.
-//
-// The token is not re-verified here: it was verified when the session was
-// created, and this reads the same string back out of it.
-func RealmRoles(rawIDToken string) []string {
-	parts := strings.Split(rawIDToken, ".")
-	if len(parts) != 3 {
-		return nil
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil
-	}
-	var claims struct {
-		RealmAccess struct {
-			Roles []string `json:"roles"`
-		} `json:"realm_access"`
-	}
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return nil
-	}
-	return claims.RealmAccess.Roles
 }

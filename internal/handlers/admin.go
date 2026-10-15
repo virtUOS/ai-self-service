@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
-	"net/mail"
 	"net/url"
 	"strconv"
 	"strings"
@@ -89,13 +88,22 @@ func NewAdmin(cfg *config.Config, store *database.Store, sessions *session.Manag
 		models: newModelCache(lister), tmpl: tmpl, csrf: csrf, sync: sync}
 }
 
-// actorEmail identifies the admin performing the current request, for audit.
-func (a *Admin) actorEmail(r *http.Request) string {
+// actor is the admin performing the current request, or nil when the session
+// has gone in the meantime, which is a race with logout.
+func (a *Admin) actor(r *http.Request) *database.User {
 	su, err := a.sessions.Get(r.Context(), a.sessions.TokenFromRequest(r))
 	if err != nil || su == nil {
-		return "unknown"
+		return nil
 	}
-	return su.User.Email
+	return su.User
+}
+
+// actorEmail identifies the admin performing the current request, for audit.
+func (a *Admin) actorEmail(r *http.Request) string {
+	if u := a.actor(r); u != nil {
+		return u.Email
+	}
+	return "unknown"
 }
 
 // audit records an event without failing the request if the write fails.
@@ -167,18 +175,12 @@ func (a *Admin) Middleware(next http.Handler) http.Handler {
 			http.Redirect(w, r, "/login", http.StatusFound)
 			return
 		}
-		src, bySubject := resolveAdmin(r.Context(), a.cfg, a.store,
-			su.IDToken, su.User.OIDCSub, su.User.Email)
-		if !src.isAdmin() {
+		// The flag on the account is the only thing that opens the panel. The
+		// session loads the account on every request, so a removal takes
+		// effect on the person's next click rather than their next login.
+		if !su.User.IsAdmin {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
-		}
-		if (src == adminSourceEnv || src == adminSourceGrant) && !bySubject {
-			// The entry that granted this is an email address, which the IdP
-			// can reassign. Say so once per request rather than silently
-			// relying on it, so an operator can migrate the allowlist.
-			slog.Warn("admin granted by email rather than OIDC subject",
-				"email", su.User.Email, "sub", su.User.OIDCSub, "source", src)
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -219,11 +221,10 @@ type adminData struct {
 	CSRFToken      string
 	// BudgetUnit labels quota amounts
 	BudgetUnit string
-	// Admins are the rows of the Admins tab. AdminRoleName is non-empty when
-	// ADMIN_ROLE is configured, so the tab can say that role holders are
-	// admins too without being able to list them.
-	Admins        []adminRow
-	AdminRoleName string
+	// Admins are the rows of the Admins tab, and Candidates the accounts its
+	// promotion form offers: everyone who has logged in and is not an admin.
+	Admins     []adminRow
+	Candidates []database.User
 	// LimitSync is the card saying whether keys carry their profiles'
 	// limits yet.
 	LimitSync limitSyncView
@@ -278,18 +279,18 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("list audit events", "err", err)
 	}
-	grants, err := a.store.ListAdminGrants(r.Context())
+	admins, err := a.store.ListAdmins(r.Context())
 	if err != nil {
-		slog.Error("list admin grants", "err", err)
+		slog.Error("list admins", "err", err)
 	}
 	flash := r.URL.Query().Get("flash")
 	// The gate in front of this route has already loaded the session, so a
 	// failure here is a race with logout; the page still renders, without
 	// the account menu.
-	var user *database.User
-	actor := "unknown"
-	if su, err := a.sessions.Get(r.Context(), a.sessions.TokenFromRequest(r)); err == nil && su != nil {
-		user, actor = su.User, su.User.Email
+	user := a.actor(r)
+	var actorID int64
+	if user != nil {
+		actorID = user.ID
 	}
 	lang := i18n.FromRequest(r)
 	if err := a.tmpl.Execute(w, adminData{
@@ -308,8 +309,8 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 		Flash:           flash,
 		CSRFToken:       a.csrf.Token(w, r),
 		BudgetUnit:      a.cfg.BudgetUnit,
-		Admins:          adminRows(a.cfg, grants, actor, rawUsers),
-		AdminRoleName:   a.cfg.AdminRole,
+		Admins:          adminRows(admins, actorID),
+		Candidates:      adminCandidates(rawUsers),
 		LimitSync:       a.limitSyncStatus(r.Context(), lang),
 	}); err != nil {
 		slog.Error("admin template", "err", err)
@@ -505,58 +506,68 @@ func (a *Admin) SetUserProfile(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin?flash=User+profile+updated#users", http.StatusFound)
 }
 
-// GrantAdmin handles POST /admin/admins, giving an address the admin panel.
+// GrantAdmin handles POST /admin/admins, giving an account the admin panel.
+//
+// The form names an account the portal has seen, never an address: rights are
+// recorded against the person, so an address the IdP reassigns later carries
+// nothing with it.
 func (a *Admin) GrantAdmin(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+	user, ok := a.accountFromForm(w, r)
+	if !ok {
 		return
 	}
-	email := strings.TrimSpace(r.FormValue("email"))
-	if _, err := mail.ParseAddress(email); err != nil {
-		http.Redirect(w, r, "/admin?flash=Enter+a+valid+email+address#admins", http.StatusFound)
-		return
-	}
-
-	if err := a.store.GrantAdmin(r.Context(), email, a.actorEmail(r)); err != nil {
-		slog.Error("grant admin", "email", email, "err", err)
+	if err := a.store.SetUserAdmin(r.Context(), user.ID, true); err != nil {
+		slog.Error("grant admin", "user_id", user.ID, "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+grant+admin#admins", http.StatusFound)
 		return
 	}
-	a.audit(r, database.AuditAdminGranted, email, nil, "admin granted")
+	a.audit(r, database.AuditAdminGranted, user.Email, &user.ID, "admin granted")
 	http.Redirect(w, r, "/admin?flash=Admin+granted#admins", http.StatusFound)
 }
 
 // RevokeAdmin handles POST /admin/admins/revoke.
 //
-// An admin cannot remove their own rights: doing so would need the deployment
-// edited to get them back, which is the very thing this feature exists to
-// avoid.
+// An admin cannot remove their own rights. Every removal is then made by
+// someone who stays, so the panel can never be left with nobody in charge by
+// accident.
 func (a *Admin) RevokeAdmin(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+	user, ok := a.accountFromForm(w, r)
+	if !ok {
 		return
 	}
-	email := strings.TrimSpace(r.FormValue("email"))
-	if strings.EqualFold(email, a.actorEmail(r)) {
+	if actor := a.actor(r); actor != nil && actor.ID == user.ID {
 		http.Redirect(w, r, "/admin?flash=You+cannot+remove+your+own+admin+rights#admins", http.StatusFound)
 		return
 	}
-
-	// An address in ADMIN_IDS keeps its rights whatever this table says, so
-	// deleting a row for it would report a revoke that did not happen. Say so
-	// instead, and do not audit it.
-	if admin, _ := a.cfg.IsAdmin("", email); admin {
-		http.Redirect(w, r, "/admin?flash=That+admin+comes+from+the+configuration+and+cannot+be+removed+here#admins", http.StatusFound)
-		return
-	}
-
-	if err := a.store.RevokeAdmin(r.Context(), email); err != nil {
-		slog.Error("revoke admin", "email", email, "err", err)
+	if err := a.store.SetUserAdmin(r.Context(), user.ID, false); err != nil {
+		slog.Error("revoke admin", "user_id", user.ID, "err", err)
 		http.Redirect(w, r, "/admin?flash=Failed+to+revoke+admin#admins", http.StatusFound)
 		return
 	}
-	a.audit(r, database.AuditAdminRevoked, email, nil, "admin revoked")
+	a.audit(r, database.AuditAdminRevoked, user.Email, &user.ID, "admin revoked")
 	http.Redirect(w, r, "/admin?flash=Admin+revoked#admins", http.StatusFound)
+}
+
+// accountFromForm reads the account the Admins tab's forms name. A malformed
+// id is a hand-made request and gets a 400; an id that names no account, from
+// a form that outlived the account, sends the admin back with a notice. Either
+// way nothing is changed or audited.
+func (a *Admin) accountFromForm(w http.ResponseWriter, r *http.Request) (*database.User, bool) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return nil, false
+	}
+	id, err := strconv.ParseInt(r.FormValue("user_id"), 10, 64)
+	if err != nil || id < 1 {
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return nil, false
+	}
+	user, err := a.store.GetUserByID(r.Context(), id)
+	if err != nil {
+		http.Redirect(w, r, "/admin?flash=That+account+is+not+known+to+this+portal#admins", http.StatusFound)
+		return nil, false
+	}
+	return user, true
 }
 
 // --- helpers ---

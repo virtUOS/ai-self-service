@@ -86,6 +86,9 @@ func newRouteTest(t *testing.T) *routeTest {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := store.SetUserAdmin(ctx, admin.ID, true); err != nil {
+		t.Fatal(err)
+	}
 	user, err := store.GetOrCreateUser(ctx, "sub-user", "user@uni-osnabrueck.de", "User")
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +101,6 @@ func newRouteTest(t *testing.T) *routeTest {
 		OIDCClientSecret: "secret",
 		OIDCRedirectURL:  "http://localhost:8080/callback",
 		FrontendURL:      "http://localhost:8080",
-		AdminIDs:         []string{"sub-admin"},
 		KeyDurationDays:  90,
 		BudgetUnit:       "$",
 	}

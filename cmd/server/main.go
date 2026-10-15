@@ -95,6 +95,19 @@ func main() {
 		slog.Error("cleanup sessions", "err", err)
 	}
 
+	// Admin rights are recorded on the account (issue #107). An operator who
+	// still sets the old settings, or has not marked a first admin yet, would
+	// otherwise find nobody can reach the panel and not know why.
+	for _, name := range cfg.ObsoleteSettings {
+		slog.Warn("setting is no longer read: admin rights are recorded on the account, see README, Admin panel",
+			"setting", name)
+	}
+	if n, err := store.CountAdmins(ctx); err != nil {
+		slog.Error("count admins", "err", err)
+	} else if n == 0 {
+		slog.Warn("no account holds the admin panel: mark one with the command in README, Admin panel")
+	}
+
 	// ── Dependencies ──────────────────────────────────────────────────────────
 	oidcProvider, err := oidcpkg.NewProvider(ctx, cfg, store)
 	if err != nil {

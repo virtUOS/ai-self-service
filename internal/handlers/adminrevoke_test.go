@@ -14,7 +14,7 @@ import (
 // than the acting admin who holds a key in it.
 func newRevokeTestAdmin(t *testing.T, name string) (*Admin, *database.Store, string, *keyprovider.Fake, *database.User) {
 	t.Helper()
-	a, store, token := newGrantTestAdmin(t, name)
+	a, store, token, _ := newTestAdmin(t, name)
 	fake := keyprovider.NewFake()
 	a.keys = fake
 
