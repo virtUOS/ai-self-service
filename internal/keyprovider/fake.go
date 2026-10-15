@@ -62,6 +62,10 @@ type Fake struct {
 	// test can assert that a figure survives a key rotation.
 	QuotaByOwner map[string]Quota
 
+	// OnCreate, when set, runs at the start of CreateKey before it takes the
+	// fake's lock, so a test can hold a request there and force overlap.
+	OnCreate func()
+
 	// CreateErr, DeleteErr and ExpiryErr force the respective call to fail.
 	CreateErr error
 	DeleteErr error
@@ -154,6 +158,9 @@ func (f *Fake) EmbeddingModels(context.Context) (map[string]bool, error) {
 }
 
 func (f *Fake) CreateKey(_ context.Context, req KeyRequest) (KeyResult, error) {
+	if f.OnCreate != nil {
+		f.OnCreate()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.CreateErr != nil {

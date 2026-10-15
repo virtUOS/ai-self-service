@@ -105,17 +105,17 @@
              Without the profile, extending and regenerating would fail: both take
              the key's validity and limits from it. Deleting still works. */}}
         {{if not (or .SuccessorURL .ProfileError)}}
-        <form method="POST" action="/key/extend">
+        <form method="POST" action="/key/extend" data-once>
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button type="submit" class="btn btn-secondary">{{T .Lang "dash.extend"}} ({{T .Lang "dash.extend.until"}} {{.ExtendUntil}})</button>
         </form>
-        <form method="POST" action="/key/generate"
+        <form method="POST" action="/key/generate" data-once
               onsubmit="return confirm({{T .Lang "dash.confirm.regenerate"}})">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button type="submit" class="btn btn-secondary">{{T .Lang "dash.regenerate"}}</button>
         </form>
         {{end}}
-        <form method="POST" action="/key/delete"
+        <form method="POST" action="/key/delete" data-once
               onsubmit="return confirm({{T .Lang "dash.confirm.delete"}})">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button type="submit" class="btn btn-danger">{{T .Lang "dash.delete"}}</button>
@@ -134,7 +134,7 @@
       {{end}}
       <p class="text-muted" style="margin-bottom:1.25rem">{{T .Lang "dash.nokey"}}</p>
       {{if not (or .SuccessorURL .ProfileError)}}
-      <form method="POST" action="/key/generate">
+      <form method="POST" action="/key/generate" data-once>
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button type="submit" class="btn btn-primary">{{T .Lang "dash.generate"}}</button>
       </form>
@@ -321,6 +321,29 @@ const T_TIME = {
   today:   {{T .Lang "badge.today"}},
   left:    {{T .Lang "badge.daysleft"}},
 };
+
+// Send each key form once. A second click while the first request is still
+// running would only queue another key change; the server serializes them, but
+// the user gains nothing from it. Runs on submit, after the confirm() in the
+// form's onsubmit: a declined confirm leaves the button usable, and disabling
+// on click instead can cancel the submit in some browsers.
+document.querySelectorAll('form[data-once]').forEach(form => {
+  form.addEventListener('submit', e => {
+    if (e.defaultPrevented) return;
+    if (form.dataset.sent) { e.preventDefault(); return; }
+    form.dataset.sent = '1';
+    form.querySelectorAll('button[type=submit]').forEach(b => b.disabled = true);
+  });
+});
+// Back from the next page can restore this one from the bfcache with its
+// buttons still disabled.
+window.addEventListener('pageshow', e => {
+  if (!e.persisted) return;
+  document.querySelectorAll('form[data-once]').forEach(form => {
+    delete form.dataset.sent;
+    form.querySelectorAll('button[type=submit]').forEach(b => b.disabled = false);
+  });
+});
 
 function copyText(id, btn) {
   const text = document.getElementById(id).textContent.trim();

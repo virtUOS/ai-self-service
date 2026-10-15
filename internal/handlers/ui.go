@@ -32,6 +32,9 @@ type UI struct {
 	models   *modelCache
 	usage    *usageCache
 
+	// keyLocks serializes the handlers that read and replace a user's key.
+	keyLocks keyedLock
+
 	// kickSync starts a limit sync run. A login may bring a new name or
 	// email, which the owner's gateway user is labelled with; the run pushes
 	// it without waiting for the interval. Nil in tests.
@@ -337,6 +340,17 @@ func (u *UI) refuseIfRetired(w http.ResponseWriter) bool {
 	return true
 }
 
+// lockKeys takes the user's key lock, answering 503 itself when the request
+// ends while it waits. The caller returns without a response when ok is false.
+func (u *UI) lockKeys(w http.ResponseWriter, r *http.Request, userID int64) (unlock func(), ok bool) {
+	unlock, err := u.keyLocks.Lock(r.Context(), userID)
+	if err != nil {
+		httpError(w, r, http.StatusServiceUnavailable, "Another key request is still running; please try again", err)
+		return nil, false
+	}
+	return unlock, true
+}
+
 // GenerateKey creates a new LiteLLM key for the user, replacing any existing one.
 func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	su, err := u.requireSession(r)
@@ -347,6 +361,17 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	if u.refuseIfRetired(w) {
 		return
 	}
+
+	// Hold the lock from reading the old key to revoking it. A second request
+	// for the same user waits here and then sees the first one's key as the
+	// existing one, so it replaces that key instead of orphaning it. Waiting,
+	// not refusing, means the response the browser keeps (a double-click
+	// abandons the first) shows a key that works.
+	unlock, ok := u.lockKeys(w, r, su.User.ID)
+	if !ok {
+		return
+	}
+	defer unlock()
 
 	existing, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
 	if err != nil {
@@ -441,6 +466,12 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	unlock, ok := u.lockKeys(w, r, su.User.ID)
+	if !ok {
+		return
+	}
+	defer unlock()
+
 	k, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
 	if err != nil {
 		httpError(w, r, http.StatusInternalServerError, "Failed to load your key", err)
@@ -491,6 +522,12 @@ func (u *UI) DeleteKey(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
+
+	unlock, ok := u.lockKeys(w, r, su.User.ID)
+	if !ok {
+		return
+	}
+	defer unlock()
 
 	k, err := u.store.GetAPIKeyByUser(r.Context(), su.User.ID)
 	if err != nil || k == nil {

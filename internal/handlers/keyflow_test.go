@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -439,5 +441,120 @@ func TestRetiredPortalRefusesGenerateAndExtend(t *testing.T) {
 	}
 	if fake.LiveCount() != 0 {
 		t.Errorf("delete left %d keys live", fake.LiveCount())
+	}
+}
+
+// gateCreate makes the first CreateKey call block until release is closed and
+// reports how many calls have started. The rest pass straight through, so a
+// request that is not serialized behind the first shows up in the count.
+func gateCreate(fake *keyprovider.Fake) (release chan struct{}, started *atomic.Int32, entered chan struct{}) {
+	release = make(chan struct{})
+	entered = make(chan struct{}, 1)
+	started = new(atomic.Int32)
+	fake.OnCreate = func() {
+		if started.Add(1) == 1 {
+			entered <- struct{}{}
+			<-release
+		}
+	}
+	return release, started, entered
+}
+
+// Two generate requests from one user (a double-click) must not both act on
+// the same old key: the second waits, then replaces the first's key, and
+// nothing is left live upstream without a record.
+func TestConcurrentGenerateLeavesOneKey(t *testing.T) {
+	ui, fake, store, user := newTestUI(t, "kf-concurrent")
+	release, started, entered := gateCreate(fake)
+
+	var wg sync.WaitGroup
+	recs := make([]*httptest.ResponseRecorder, 2)
+	run := func(i int) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			recs[i] = post(t, ui, ui.GenerateKey, "/key/generate")
+		}()
+	}
+	run(0)
+	<-entered
+	run(1)
+	time.Sleep(100 * time.Millisecond)
+	if n := started.Load(); n != 1 {
+		t.Fatalf("%d CreateKey calls started while the first was in flight, want 1", n)
+	}
+	close(release)
+	wg.Wait()
+
+	for i, rec := range recs {
+		if rec.Code != http.StatusFound {
+			t.Errorf("request %d returned %d: %s", i, rec.Code, rec.Body.String())
+		}
+	}
+	if fake.LiveCount() != 1 {
+		t.Fatalf("provider holds %d live keys, want 1", fake.LiveCount())
+	}
+	k, err := store.GetAPIKeyByUser(context.Background(), user.ID)
+	if err != nil || k == nil {
+		t.Fatalf("key not stored: %v", err)
+	}
+	if _, ok := fake.Keys[k.KeyRef]; !ok {
+		t.Errorf("the stored key %q is not the live one", k.KeyRef)
+	}
+}
+
+// Deleting while a regenerate is in flight waits for it, so it revokes the
+// key the user ends up with instead of the one being replaced.
+func TestDeleteWaitsForGenerate(t *testing.T) {
+	ui, fake, store, user := newTestUI(t, "kf-delete-wait")
+	post(t, ui, ui.GenerateKey, "/key/generate")
+	release, _, entered := gateCreate(fake)
+	// The setup call above ran before the gate; the next CreateKey is the first gated one.
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		post(t, ui, ui.GenerateKey, "/key/generate")
+	}()
+	<-entered
+
+	del := make(chan *httptest.ResponseRecorder, 1)
+	go func() { del <- post(t, ui, ui.DeleteKey, "/key/delete") }()
+	select {
+	case <-del:
+		t.Fatal("delete finished while the regenerate was still running")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	wg.Wait()
+	if rec := <-del; rec.Code != http.StatusFound {
+		t.Fatalf("delete returned %d: %s", rec.Code, rec.Body.String())
+	}
+
+	if fake.LiveCount() != 0 {
+		t.Errorf("provider holds %d live keys after delete, want 0", fake.LiveCount())
+	}
+	if k, err := store.GetAPIKeyByUser(context.Background(), user.ID); err != nil || k != nil {
+		t.Errorf("key row remains after delete: %v, %v", k, err)
+	}
+}
+
+// The key forms disable their button on submit; the script keys off data-once,
+// so a form that loses it can be double-submitted again.
+func TestDashboardKeyFormsSubmitOnce(t *testing.T) {
+	ui, _, _, _ := newTestUI(t, "kf-once")
+
+	noKey := getPage(t, ui, ui.Dashboard, "/").Body.String()
+	if !strings.Contains(noKey, `action="/key/generate" data-once`) {
+		t.Error("generate form lacks data-once")
+	}
+
+	post(t, ui, ui.GenerateKey, "/key/generate")
+	withKey := getPage(t, ui, ui.Dashboard, "/").Body.String()
+	for _, action := range []string{"/key/generate", "/key/extend", "/key/delete"} {
+		if !strings.Contains(withKey, `action="`+action+`" data-once`) {
+			t.Errorf("%s form lacks data-once", action)
+		}
 	}
 }
