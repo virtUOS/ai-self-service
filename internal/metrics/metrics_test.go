@@ -22,6 +22,22 @@ func TestKeyOperationSeriesPreRegistered(t *testing.T) {
 	}
 }
 
+// Keys removed because the gateway no longer had them are counted per place
+// the portal noticed, and every series exists at zero: the dashboard panel is
+// an alarm for a gateway or configuration problem, so "no data" must never be
+// mistaken for "none" (issue #108).
+func TestMissingKeySeriesPreRegistered(t *testing.T) {
+	rec := httptest.NewRecorder()
+	Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
+	body := rec.Body.String()
+	for _, source := range []string{"dashboard", "extend", "sync"} {
+		want := `aiselfservice_keys_missing_total{source="` + source + `"} 0`
+		if !strings.Contains(body, want) {
+			t.Errorf("missing pre-registered series: %s", want)
+		}
+	}
+}
+
 // Scrapers that negotiate OpenMetrics get it; everyone else still gets the
 // Prometheus text format.
 func TestHandlerNegotiatesOpenMetrics(t *testing.T) {

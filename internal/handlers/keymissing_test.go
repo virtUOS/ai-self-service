@@ -11,7 +11,14 @@ import (
 	"github.com/virtuos/ai-self-service/internal/database"
 	"github.com/virtuos/ai-self-service/internal/i18n"
 	"github.com/virtuos/ai-self-service/internal/keyprovider"
+	"github.com/virtuos/ai-self-service/internal/metrics/metricstest"
 )
+
+// missingKeyCount reads the counter of keys removed as missing for one source.
+func missingKeyCount(t *testing.T, source string) float64 {
+	t.Helper()
+	return metricstest.Counter(t, "aiselfservice_keys_missing_total", `source="`+source+`"`)
+}
 
 var errGone = fmt.Errorf("LiteLLM /key/info returned 404: %w", keyprovider.ErrKeyNotFound)
 
@@ -38,6 +45,7 @@ func TestDashboardRemovesAKeyTheGatewayNoLongerHas(t *testing.T) {
 	ui, fake, store, user := newTestUI(t, "missing-dash")
 	post(t, ui, ui.GenerateKey, "/key/generate")
 	fake.WindowsErr = errGone
+	before := missingKeyCount(t, "dashboard")
 
 	body := getPage(t, ui, ui.Dashboard, "/").Body.String()
 	if !strings.Contains(body, i18n.T(dashboardLang(), "dash.key.gone")) {
@@ -51,6 +59,10 @@ func TestDashboardRemovesAKeyTheGatewayNoLongerHas(t *testing.T) {
 	}
 	if n := missingKeyAudits(t, store); n != 1 {
 		t.Errorf("key.missing audit entries = %d, want 1", n)
+	}
+	// The removal is counted, so a spike shows on the monitoring dashboard.
+	if got := missingKeyCount(t, "dashboard") - before; got != 1 {
+		t.Errorf("keys_missing{source=dashboard} rose by %v, want 1", got)
 	}
 }
 
@@ -76,6 +88,7 @@ func TestExtendRemovesAKeyTheGatewayNoLongerHas(t *testing.T) {
 	ui, fake, store, user := newTestUI(t, "missing-extend")
 	post(t, ui, ui.GenerateKey, "/key/generate")
 	fake.ExpiryErr = fmt.Errorf("LiteLLM /key/update returned 404: %w", keyprovider.ErrKeyNotFound)
+	before := missingKeyCount(t, "extend")
 
 	rec := post(t, ui, ui.ExtendKey, "/key/extend")
 	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/?gone=1" {
@@ -86,6 +99,9 @@ func TestExtendRemovesAKeyTheGatewayNoLongerHas(t *testing.T) {
 	}
 	if n := missingKeyAudits(t, store); n != 1 {
 		t.Errorf("key.missing audit entries = %d, want 1", n)
+	}
+	if got := missingKeyCount(t, "extend") - before; got != 1 {
+		t.Errorf("keys_missing{source=extend} rose by %v, want 1", got)
 	}
 	body := getPage(t, ui, ui.Dashboard, "/?gone=1").Body.String()
 	if !strings.Contains(body, i18n.T(dashboardLang(), "dash.key.gone")) {

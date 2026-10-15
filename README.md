@@ -280,7 +280,8 @@ ordinary failure: the record is kept and the call retried.
 This trusts the gateway's answer. A portal pointed at the wrong LiteLLM, or at
 one whose database was reset, sees every key as missing and removes every
 record; check `LITELLM_BASE_URL` before starting a portal against a new
-gateway.
+gateway. Each removal also counts on `aiselfservice_keys_missing_total`, by
+where the portal noticed it, so such a run shows on the monitoring dashboard.
 
 **After upgrading** to the version that introduced the sync, every existing
 key counts as out of date once, so the first run updates all keys. With many
@@ -427,6 +428,7 @@ restricts the endpoint to the monitoring host.
 | `aiselfservice_http_requests_total` | requests by route, method, status |
 | `aiselfservice_http_request_duration_seconds` | latency by route |
 | `aiselfservice_key_operations_total` | key issue/extend/delete/revoke by outcome |
+| `aiselfservice_keys_missing_total` | keys removed because the gateway no longer had them, by where the portal noticed (`dashboard`, `extend`, `sync`) |
 | `aiselfservice_active_keys` | keys currently issued |
 | `aiselfservice_keys_expiring_7d` | keys expiring within a week |
 

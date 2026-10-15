@@ -33,6 +33,17 @@ var (
 		Help: "API key operations by action and outcome.",
 	}, []string{"action", "outcome"})
 
+	// KeysMissing counts keys whose record the portal dropped because the
+	// gateway answered that the key no longer exists, by where the portal
+	// noticed: the dashboard, an extend, or the limit sync. A key deleted in
+	// the gateway on purpose is rare; a run of them means a portal pointed at
+	// the wrong gateway or a restored gateway database, which this is the
+	// alarm for (issue #108).
+	KeysMissing = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "aiselfservice_keys_missing_total",
+		Help: "Keys removed because the gateway no longer had them, by where the portal noticed.",
+	}, []string{"source"})
+
 	// Gauges are refreshed from the database rather than incremented, so a
 	// restart cannot leave them drifting from reality.
 	activeKeys = promauto.NewGauge(prometheus.GaugeOpts{
@@ -54,6 +65,9 @@ func init() {
 		for _, outcome := range []string{"success", "provider_error", "store_error"} {
 			KeyOperations.WithLabelValues(action, outcome)
 		}
+	}
+	for _, source := range []string{"dashboard", "extend", "sync"} {
+		KeysMissing.WithLabelValues(source)
 	}
 }
 
