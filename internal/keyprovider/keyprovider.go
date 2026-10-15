@@ -118,16 +118,16 @@ type Quota struct {
 type WindowUsage struct {
 	// Period is the window this covers ("1h" | "24h" | "7d" | "30d").
 	Period string
-	// Used is consumption since the window last reset, as spend summed from
-	// the log.
+	// Used is consumption since the window last reset, as the spend the
+	// gateway counts against this window.
 	Used float64
 	// Limit is the allowance for this window.
 	Limit float64
 	// ResetsAt is when this window rolls over.
 	ResetsAt time.Time
-	// UsedKnown reports whether Used is a real figure. Spend logging can
-	// be switched off, and a bar drawn from a silent zero would claim a full
-	// allowance the user may not have.
+	// UsedKnown reports whether Used is a real figure. It is false when the
+	// gateway reported no spend for the window, and a bar drawn from a silent
+	// zero would claim a full allowance the user may not have.
 	UsedKnown bool
 }
 

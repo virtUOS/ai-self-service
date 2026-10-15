@@ -62,9 +62,9 @@ func TestUserUsageHeadlineFollowsTheBindingWindow(t *testing.T) {
 	}
 }
 
-// Spend logging can be switched off, and consumption per window is summed from
-// it. A bar drawn from a silent zero would promise a full allowance, so the
-// card falls back to the single gateway-reported bar instead.
+// A window the gateway reports no consumption for cannot be drawn: a bar from a
+// silent zero would promise a full allowance, so the card falls back to the
+// single gateway-reported bar instead.
 func TestUserUsageFallsBackWhenWindowSpendUnknown(t *testing.T) {
 	fake := keyprovider.NewFake()
 	fake.WindowsByRef = map[string][]keyprovider.WindowUsage{

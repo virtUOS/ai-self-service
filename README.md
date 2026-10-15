@@ -222,8 +222,9 @@ and rejects with `ExceededBudget: Key over 1h budget` when any one is spent.
 The tightest window binds, so a shorter period may not carry a larger budget
 than a longer one; the admin form rejects that. The widest window is held
 against the user rather than the key so regenerating a key does not reset it
-(issue #26). This needs LiteLLM v1.97.0 or later; v1.90.0 accepted the field
-and ignored it.
+(issue #26). This needs LiteLLM v1.105.0 or later: the dashboard reads what has
+been spent in each window from the `budget_limits_usage` that `/key/info`
+reports since then (issue #116).
 
 ### How profile changes reach existing keys
 
