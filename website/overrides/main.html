@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{#- Extra <head> content: the SVG favicon (the ICO set in zensical.toml stays
+    as the fallback) and the link preview, which needs absolute URLs. -#}
+{% block extrahead %}
+  <link rel="icon" href="{{ 'assets/favicon.svg' | url }}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="{{ 'assets/apple-touch-icon.png' | url }}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  <meta property="og:title" content="{{ config.site_name }}: Grab a key. Start building.">
+  <meta property="og:description" content="{{ config.site_description }}">
+  <meta property="og:image" content="{{ config.site_url }}assets/social-preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+{% endblock %}
