@@ -47,3 +47,15 @@ func SecurityHeaders(secure bool, idpOrigin string) func(http.Handler) http.Hand
 		})
 	}
 }
+
+// NoStore keeps browsers and proxies from storing a response. The dashboard
+// shows a new key only once, but a stored copy of that page would show it
+// again on Back or from the disk cache; the other pages carry personal data or
+// session-bound tokens. It is set before the handler runs, so redirects and
+// error pages carry it too.
+func NoStore(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
+}
