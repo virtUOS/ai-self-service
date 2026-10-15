@@ -1,6 +1,15 @@
-# AI API Key Self-Service Portal
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme-banner-dark.svg">
+    <img src="docs/brand/readme-banner-light.svg" alt="Keyosk: Grab a key. Start building." width="100%">
+  </picture>
+</p>
 
-A self-service web portal that lets users generate, manage, and renew their own [LiteLLM](https://www.litellm.ai/) API keys after authenticating with an OIDC provider. Administrators can define usage profiles (model access, rate limits, budgets) and assign them to individual users.
+# Keyosk
+
+Keyosk is your self-service counter for local AI. Users log in with an OIDC provider and generate, manage and renew their own [LiteLLM](https://www.litellm.ai/) API keys. Administrators define usage profiles (model access, rate limits, budgets) and assign them to individual users.
+
+> **Naming:** the project was formerly called *AI API Key Self-Service Portal*. The Go module, the binary and image (`ai-self-service`), the OIDC client ID and the metric names (`aiselfservice_*`) keep the old name for now.
 
 ## How it works
 
@@ -52,7 +61,7 @@ in:
 | `ADMIN_GROUP`        | no       | —           | IdP group whose members are the admins; see [Admin panel](#admin-panel). Unset, admins are managed in the panel |
 | `ADMIN_GROUP_CLAIM`  | no       | `groups`    | Dot path to the ID token claim that lists the groups, e.g. `realm_access.roles` for Keycloak realm roles. Only with `ADMIN_GROUP` |
 | `FRONTEND_URL`       | yes      | —           | Public base URL of this app (shown to users as the API base URL)   |
-| `LITELLM_USER_ID_PREFIX` | no   |             | Only for several portals on one gateway; see [Several portals on one gateway](#several-portals-on-one-gateway) |
+| `LITELLM_USER_ID_PREFIX` | no   |             | Only for several Keyosk instances on one gateway; see [Several Keyosk instances on one gateway](#several-keyosk-instances-on-one-gateway) |
 | `LITELLM_USER_EMAIL` | no       | `false`     | Record people's email addresses on their LiteLLM users, so LiteLLM's user search finds them. Only where addresses are unique across everything connected to the gateway; see [People in LiteLLM](#people-in-litellm) |
 | `DB_PATH`            | no       | `./data.db` | Path to the SQLite database file. It runs in WAL mode, so `-wal` and `-shm` files sit next to it; keep the directory on a local filesystem (not NFS), and back up with `sqlite3 data.db .backup` rather than copying the file |
 | `LISTEN_ADDR`        | no       | `:8080`     | Address and port to listen on                                      |
@@ -62,7 +71,7 @@ in:
 | `KEY_DURATION_DAYS`  | no       | `90`        | Default key validity; profiles may override it                     |
 | `BUDGET_UNIT`        | no       | `$`         | Unit label for quota amounts; use a word such as `credits` when model prices are nominal |
 | `USAGE_HISTORY_DAYS` | no       | `30`        | How far back the usage chart and per-model table reach; the gateway's spend-log retention must cover it |
-| `SUCCESSOR_URL`      | no       |             | Set on a portal being retired: the dashboard shows a banner sending users to this address. Keys can no longer be created or extended here, only deleted; existing keys expire on their own |
+| `SUCCESSOR_URL`      | no       |             | Set on a Keyosk instance being retired: the dashboard shows a banner sending users to this address. Keys can no longer be created or extended here, only deleted; existing keys expire on their own |
 | `PRIVACY_NOTICE_FILE_DE` | no   | —           | Path to an HTML fragment shown at `/privacy` (no login needed) as this deployment's privacy notice, and linked from the dashboard. A named file that is missing or empty stops startup |
 | `PRIVACY_NOTICE_FILE_EN` | no   | —           | The same in English. With only one language set, readers of the other get that one |
 | `SMTP_HOST`          | no       | —           | `host:port` of a mail relay; unset disables expiry emails          |
@@ -70,7 +79,7 @@ in:
 | `SMTP_USERNAME`      | no       | —           | Only if the relay requires authentication                          |
 | `SMTP_PASSWORD`      | no       | —           | Only if the relay requires authentication                          |
 | `LOG_LEVEL`          | no       | `info`      | `debug`, `info`, `warn` or `error`                                 |
-| `LIMIT_SYNC_WORKERS` | no       | `1`         | How many limit updates the portal sends to the gateway at once. One is gentle on the gateway but slow for large changes: about 25 minutes for 5,000 keys |
+| `LIMIT_SYNC_WORKERS` | no       | `1`         | How many limit updates Keyosk sends to the gateway at once. One is gentle on the gateway but slow for large changes: about 25 minutes for 5,000 keys |
 | `LIMIT_SYNC_INTERVAL` | no      | `5m`        | How often the limit sync retries keys whose update failed. Admin changes start a run straight away and do not wait for it |
 
 ## Running
@@ -129,12 +138,12 @@ deployment uses exactly one:
   other, and the first one is marked with a command on the server.
 
 The former settings `ADMIN_IDS`, `ADMIN_EMAILS` and `ADMIN_ROLE` are no longer
-read; the portal warns at startup if one is still set (issue #107).
+read; Keyosk warns at startup if one is still set (issue #107).
 
 ### Admins from the login system
 
 Set `ADMIN_GROUP` to a group in the IdP, and make sure the IdP puts the
-account's groups into the **ID token**. At every login the portal reads the
+account's groups into the **ID token**. At every login Keyosk reads the
 claim, by default `groups`, and sets the account's flag to whether it lists
 the group. Each change is written to the audit log with the login system as
 the actor. The **Admins** tab then lists who was a member at their last login,
@@ -142,7 +151,7 @@ with nothing to promote or remove.
 
 - **Timing.** Adding someone to the group or removing them takes effect at
   their next login, not straight away. To cut someone off at once, end their
-  session in the IdP as well; the portal honours back-channel logout.
+  session in the IdP as well; Keyosk honours back-channel logout.
 - **Exact match.** The group name is matched exactly. A token without the
   claim, or with a claim of another shape, makes nobody an admin.
 - **Keycloak.** Add a *Group Membership* mapper with the claim name `groups`,
@@ -163,8 +172,8 @@ with nothing to promote or remove.
 This and the next section apply when the panel manages admins, without
 `ADMIN_GROUP`.
 
-Nobody is an admin on a fresh database, and the portal says so at startup. The
-person logs in once, so the portal has their account, and whoever runs the
+Nobody is an admin on a fresh database, and Keyosk says so at startup. The
+person logs in once, so Keyosk has their account, and whoever runs the
 server marks it:
 
 ```sh
@@ -172,9 +181,9 @@ sqlite3 "$DB_PATH" "SELECT id, name, email FROM users"
 sqlite3 "$DB_PATH" "UPDATE users SET is_admin = 1 WHERE id = 7"
 ```
 
-`DB_PATH` is the database file from the configuration. When the portal runs in
+`DB_PATH` is the database file from the configuration. When Keyosk runs in
 a container, run the command on the host against the mounted file. The update
-is safe while the portal runs, and takes effect on the person's next request.
+is safe while Keyosk runs, and takes effect on the person's next request.
 
 The same command is the way back in if every admin is ever lost, for example
 because the only admin left. Running the server already means having full
@@ -184,7 +193,7 @@ access to it, so this adds no new risk.
 
 The **Admins** tab lists every admin with their name, email and OIDC subject,
 and lets an admin promote any account that has logged in before: the form
-offers the accounts the portal knows, filtered by name or email as you type,
+offers the accounts Keyosk knows, filtered by name or email as you type,
 and the right is recorded against the account rather than the address. An
 admin can remove any other admin but not themselves, so the panel can never be
 left with nobody in charge by accident. A removal takes effect on the person's
@@ -215,7 +224,7 @@ The admin panel at `/admin` provides:
   manages them, as described above.
 - **Audit log** — the 50 most recent key and profile changes, recording who did
   what to whom. Rows outlive the key and user they describe, so revoking does
-  not erase the history. Changes nobody in the portal made, such as a profile
+  not erase the history. Changes nobody in Keyosk made, such as a profile
   deadline passing or a key found deleted in the gateway (`key.missing`), are
   recorded with `system` as the actor.
 - **Limit sync status** — a card above the tabs says whether all keys
@@ -321,9 +330,9 @@ default profile exists, is never updated with empty limits, which the gateway
 would read as "unlimited"; it is reported as failed instead.
 
 **Keys deleted in the gateway.** A key deleted in LiteLLM directly, outside
-the portal, cannot be restored: the portal does not have what it would need to
+Keyosk, cannot be restored: Keyosk does not have what it would need to
 recreate it. When the sync, the dashboard or an extension finds that the
-gateway no longer has a key, the portal removes its record, logs a warning and
+gateway no longer has a key, Keyosk removes its record, logs a warning and
 writes a `key.missing` entry to the audit log. The owner's dashboard says the
 key was deleted and offers a new one. Deleting or revoking a key the gateway
 no longer has succeeds, since the key is gone either way.
@@ -332,17 +341,17 @@ Only LiteLLM's own "not found" answer counts. A 404 from anything in front of
 it, such as a reverse proxy whose route changed or a maintenance page, is an
 ordinary failure: the record is kept and the call retried.
 
-This trusts the gateway's answer. A portal pointed at the wrong LiteLLM, or at
+This trusts the gateway's answer. A Keyosk instance pointed at the wrong LiteLLM, or at
 one whose database was reset, sees every key as missing and removes every
-record; check `LITELLM_BASE_URL` before starting a portal against a new
+record; check `LITELLM_BASE_URL` before starting a Keyosk instance against a new
 gateway. Each removal also counts on `aiselfservice_keys_missing_total`, by
-where the portal noticed it, so such a run shows on the monitoring dashboard.
+where Keyosk noticed it, so such a run shows on the monitoring dashboard.
 
 **After upgrading** to the version that introduced the sync, every existing
 key counts as out of date once, so the first run updates all keys. With many
 users this takes a while; the admin panel shows the progress.
 
-**Changes made directly in the gateway** are invisible to the portal. To undo
+**Changes made directly in the gateway** are invisible to Keyosk. To undo
 them, mark every key as out of date:
 
 ```bash
@@ -365,7 +374,7 @@ the previous one.
 ### People in LiteLLM
 
 Each person with a key has a LiteLLM internal user, which holds their budget.
-The portal labels it with the person's username (`user_alias`), so LiteLLM's
+Keyosk labels it with the person's username (`user_alias`), so LiteLLM's
 user list shows who is who. Each key is bound to that user, and its alias,
 `<subject>-<username>-<random>`, names the person as well. When someone logs
 in with a new username, the limit sync updates both labels.
@@ -375,10 +384,10 @@ in their metadata, which is left as it is: rewriting a key's metadata would
 also replace settings an admin made there in LiteLLM. It goes when the key is
 regenerated.
 
-With `LITELLM_USER_EMAIL=true` the portal also records the person's email
+With `LITELLM_USER_EMAIL=true` Keyosk also records the person's email
 address on their user. That is what makes them findable: LiteLLM's user
 search only matches user IDs and addresses. Turn it on only where every
-address is unique across everything connected to the gateway, other portals
+address is unique across everything connected to the gateway, other Keyosk instances
 included. LiteLLM's own SSO login, for its admin UI, looks users up by
 address, and with two users sharing one it attaches the login to either of
 them. Turning the option on or off changes nothing until each key is pushed
@@ -388,25 +397,25 @@ Turning it off does not remove addresses already recorded.
 After upgrading to the version that added the labels, the first sync updates
 every unexpired key once, so every user and key is labelled.
 
-### Several portals on one gateway
+### Several Keyosk instances on one gateway
 
 A person's budget, the widest quota window of their profile, is held on a
 LiteLLM internal user rather than on their key, so it survives a key rotation.
-That user is named after the person's OIDC subject. Two portals that use the
+That user is named after the person's OIDC subject. Two instances that use the
 same gateway and the same identity provider therefore share every person's
-budget, and each portal's limit sync overwrites what the other one set.
+budget, and each instance's limit sync overwrites what the other one set.
 
-Give every portal on a shared gateway but at most one its own
+Give every instance on a shared gateway but at most one its own
 `LITELLM_USER_ID_PREFIX`. Its users are then named `<prefix>:<subject>`, and
-the portals no longer touch each other's budgets. A single portal needs no
+the instances no longer touch each other's budgets. A single instance needs no
 prefix, and existing deployments keep their users and budgets unchanged.
 
-Set the prefix before the portal issues its first key. Changing it later is
+Set the prefix before Keyosk issues its first key. Changing it later is
 not supported: keys stay bound to the old users, and keep counting against
 their budgets, until each key is updated again. If it has to be done, run
 `ai-self-service -resync-limits` afterwards. The sync then moves every
 unexpired key to the new users, which start with nothing spent. The old users
-are left in the gateway; don't delete them while another portal's keys still
+are left in the gateway; don't delete them while another instance's keys still
 belong to them, as deleting a LiteLLM user also deletes its keys.
 
 ## Usage reporting
@@ -450,12 +459,12 @@ in someone's pipeline.
   Each notice is sent at most once per key and threshold; a delivery failure
   leaves it pending so the next run retries.
 - The notice is bilingual, German first: nothing records a per-user language,
-  so it cannot pick one. Both halves carry the expiry date and the portal link.
+  so it cannot pick one. Both halves carry the expiry date and the Keyosk link.
 
 The thresholds are a code-level default (`notify.DefaultThresholds`), not an
 admin setting.
 
-Without `SMTP_HOST` the portal logs what it would have sent. It does not
+Without `SMTP_HOST` Keyosk logs what it would have sent. It does not
 silently pretend mail was delivered.
 
 ## Languages
@@ -483,7 +492,7 @@ restricts the endpoint to the monitoring host.
 | `aiselfservice_http_requests_total` | requests by route, method, status |
 | `aiselfservice_http_request_duration_seconds` | latency by route |
 | `aiselfservice_key_operations_total` | key issue/extend/delete/revoke by outcome |
-| `aiselfservice_keys_missing_total` | keys removed because the gateway no longer had them, by where the portal noticed (`dashboard`, `extend`, `sync`) |
+| `aiselfservice_keys_missing_total` | keys removed because the gateway no longer had them, by where Keyosk noticed (`dashboard`, `extend`, `sync`) |
 | `aiselfservice_active_keys` | keys currently issued |
 | `aiselfservice_keys_expiring_7d` | keys expiring within a week |
 

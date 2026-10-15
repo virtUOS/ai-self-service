@@ -134,7 +134,7 @@ A real LiteLLM gateway, with its Postgres database, configured by
 
 None of its models reaches a provider. The chat models answer every request
 with a canned text, which still goes through LiteLLM's key checks, budgets and
-spend logging — so a key generated in the portal can be used for real, and the
+spend logging — so a key generated in Keyosk can be used for real, and the
 dashboard shows the usage:
 
 | Model        | Kind      | Cost of a short request |
