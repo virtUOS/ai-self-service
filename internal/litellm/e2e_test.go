@@ -37,8 +37,8 @@ import (
 // What a request costs is read back from the gateway rather than fixed here:
 // LiteLLM's token count for the same mock request differs between releases.
 const (
-	spendLogPatience   = 60 * time.Second
-	spendLogPollPeriod = time.Second
+	flushPatience   = 60 * time.Second
+	flushPollPeriod = time.Second
 )
 
 type e2eGateway struct {
@@ -125,11 +125,11 @@ func (g e2eGateway) mustComplete(t *testing.T, secret, model string) {
 	}
 }
 
-// eventually retries check until it passes. The spend log is written in
-// batches, so usage shows up a few seconds after the request that caused it.
+// eventually retries check until it passes. LiteLLM records spend in batches,
+// so usage shows up a few seconds after the request that caused it.
 func eventually(t *testing.T, what string, check func() error) {
 	t.Helper()
-	deadline := time.Now().Add(spendLogPatience)
+	deadline := time.Now().Add(flushPatience)
 	for {
 		err := check()
 		if err == nil {
@@ -138,11 +138,17 @@ func eventually(t *testing.T, what string, check func() error) {
 		if time.Now().After(deadline) {
 			t.Fatalf("%s: %v", what, err)
 		}
-		time.Sleep(spendLogPollPeriod)
+		time.Sleep(flushPollPeriod)
 	}
 }
 
 func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
+
+// keySpend is the key's own spend counter, which /key/info reports.
+func (g e2eGateway) keySpend(ctx context.Context, ref string) (float64, error) {
+	q, err := g.client.KeyQuota(ctx, ref)
+	return q.Used, err
+}
 
 func TestE2EModels(t *testing.T) {
 	g := newE2EGateway(t)
@@ -290,7 +296,7 @@ func TestE2EOwnerQuotaSurvivesRotation(t *testing.T) {
 	// Spend through the replacement adds to the same allowance.
 	g.mustComplete(t, k2.Secret, "mock-small")
 	eventually(t, "spend accumulates across keys", func() error {
-		spent2, err := g.TotalSpend(ctx, k2.Ref)
+		spent2, err := g.keySpend(ctx, k2.Ref)
 		if err != nil {
 			return err
 		}
@@ -352,7 +358,7 @@ func TestE2EWindowsByShape(t *testing.T) {
 
 				// A key this fresh has spent the same inside every window it
 				// holds, and so has its owner.
-				keySpend, err := g.TotalSpend(ctx, k.Ref)
+				keySpend, err := g.keySpend(ctx, k.Ref)
 				if err != nil {
 					return err
 				}
@@ -385,14 +391,15 @@ func TestE2EWindowsByShape(t *testing.T) {
 func TestE2EHistoryByModel(t *testing.T) {
 	g := newE2EGateway(t)
 	ctx := context.Background()
-	k := g.createKey(t, e2eOwner(t), keyprovider.Limits{})
+	owner := e2eOwner(t)
+	k := g.createKey(t, owner, keyprovider.Limits{})
 
 	g.mustComplete(t, k.Secret, "mock-small")
 	g.mustComplete(t, k.Secret, "mock-small")
 	g.mustComplete(t, k.Secret, "mock-large")
 
 	eventually(t, "history shows both models", func() error {
-		h, err := g.History(ctx, k.Ref, 30)
+		h, err := g.History(ctx, owner, 30)
 		if err != nil {
 			return err
 		}
@@ -410,8 +417,57 @@ func TestE2EHistoryByModel(t *testing.T) {
 			}
 			total += m.TotalTokens
 		}
-		if len(h.Days) != 1 || h.Days[0].Tokens != total {
-			return fmt.Errorf("days = %+v, want one day of %d tokens", h.Days, total)
+		// Usually one day, but a run across UTC midnight spans two.
+		var daily int64
+		for _, d := range h.Days {
+			daily += d.Tokens
+		}
+		if len(h.Days) == 0 || daily != total {
+			return fmt.Errorf("days = %+v, want %d tokens in all", h.Days, total)
+		}
+		return nil
+	})
+}
+
+// The history belongs to the person, so regenerating a key does not start it
+// over: what the old key used stays, and the new key's usage adds to it.
+func TestE2EHistorySurvivesRotation(t *testing.T) {
+	g := newE2EGateway(t)
+	ctx := context.Background()
+	owner := e2eOwner(t)
+
+	k1 := g.createKey(t, owner, keyprovider.Limits{})
+	g.mustComplete(t, k1.Secret, "mock-small")
+	g.mustComplete(t, k1.Secret, "mock-small")
+	eventually(t, "history shows the first key", func() error {
+		h, err := g.History(ctx, owner, 30)
+		if err != nil {
+			return err
+		}
+		if len(h.Models) != 1 || h.Models[0].Requests != 2 {
+			return fmt.Errorf("models = %+v, want mock-small×2", h.Models)
+		}
+		return nil
+	})
+
+	// A rotation: the old key goes, a new one takes its place.
+	if err := g.DeleteKey(ctx, k1.Ref); err != nil {
+		t.Fatalf("delete first key: %v", err)
+	}
+	k2 := g.createKey(t, owner, keyprovider.Limits{})
+	g.mustComplete(t, k2.Secret, "mock-large")
+
+	eventually(t, "history holds both keys", func() error {
+		h, err := g.History(ctx, owner, 30)
+		if err != nil {
+			return err
+		}
+		got := map[string]int64{}
+		for _, m := range h.Models {
+			got[m.Model] = m.Requests
+		}
+		if got["mock-small"] != 2 || got["mock-large"] != 1 {
+			return fmt.Errorf("models = %+v, want mock-small×2 from the old key and mock-large×1 from the new", h.Models)
 		}
 		return nil
 	})

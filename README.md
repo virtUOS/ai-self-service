@@ -358,40 +358,33 @@ belong to them, as deleting a LiteLLM user also deletes its keys.
 
 ## Usage reporting
 
-The dashboard shows what a key has consumed, from two sources with different
-granularity:
+The dashboard shows what a person has consumed, from two sources with
+different granularity:
 
 - **Over the history window** (`USAGE_HISTORY_DAYS`, default 30) — read from
-  LiteLLM's per-request spend log, filtered by the key's SHA-256 and
-  aggregated by the portal. The chart spans the whole window, empty days
-  included, so a bar's position says when the key was used. Windows up to
-  two months draw a bar per day; up to two years, per ISO week (Monday
-  first); beyond that, per calendar month. Labels are thinned on wide
-  windows; every bar names its date on hover.
-- **Per model, over the same window** — the same log summed by model, with
-  the prompt/completion split.
-- **Against the quota** — read from the key's own spend counter, which is what
-  the gateway enforces against. Shown as a percentage of the budget with the
-  amounts beside it. It resets on the budget period, so it need not agree with
-  the 30-day chart above it.
+  the daily totals LiteLLM keeps per user, key and model
+  (`/user/daily/activity`), filtered by the person's LiteLLM user. The chart
+  spans the whole window, empty days included, so a bar's position says when
+  the person used the gateway. Windows up to two months draw a bar per day; up
+  to two years, per ISO week (Monday first); beyond that, per calendar month.
+  Labels are thinned on wide windows; every bar names its date on hover. The
+  days are UTC days, as LiteLLM buckets them.
+- **Per model, over the same window** — the same daily totals by the public
+  model name, with the requests sent and the prompt/completion split.
+- **Against the quota** — read from the spend counter the gateway keeps for
+  each window, which is what it enforces against. Shown as a percentage of the
+  budget with the amounts beside it. It resets on the budget period, so it
+  need not agree with the 30-day chart above it.
 
-Usage belongs to a key, not a person: regenerating a key starts the history
-over, and the card says so.
+The history belongs to the person, across every key they have held, so
+regenerating a key does not start it over. Usage from before a key was bound
+to its owner is not included.
 
-Two gateway-side settings affect this:
-
-- `disable_spend_logs: true` switches off the per-request log. The portal then
-  falls back to the key's cumulative spend and hides the chart and the
-  per-model table.
-- `maximum_spend_logs_retention_period` must be at least as long as
-  `USAGE_HISTORY_DAYS`, or users silently see less history than the page
-  offers. A long window also means a larger log download per dashboard
-  load, since the route cannot be narrowed server-side.
-
-Passing `start_date`/`end_date` to `/spend/logs` returns a **different shape** —
-daily aggregates carrying spend but no token counts. Since local models are
-priced so that spend is near zero, that response looks valid and carries no
-usable signal. The portal reads the raw per-request rows instead.
+LiteLLM writes the daily totals whether or not `disable_spend_logs` is set,
+and `maximum_spend_logs_retention_period` does not remove them, so neither
+setting affects the dashboard. It never reads the per-request spend log: that
+response grows with every request, and LiteLLM builds it on the worker that
+serves everyone else (#116).
 
 ## Expiry notifications
 

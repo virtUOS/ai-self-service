@@ -203,15 +203,7 @@
       </p>
     {{end}}
 
-    {{if .Usage.TotalOnly}}
-      <p style="margin-bottom:.5rem">
-        <strong>{{fmtBudget .Usage.TotalSpend .BudgetUnit}}</strong>
-        <span class="text-muted">({{T .Lang "dash.usagestats.total"}})</span>
-      </p>
-      <p class="text-muted" style="font-size:.85rem">
-        {{T .Lang "dash.usagestats.nobreakdown"}}
-      </p>
-    {{else if .Usage.Days}}
+    {{if .Usage.Days}}
       <p style="margin-bottom:1rem">
         <strong>{{thousands .Usage.Total}}</strong> {{T .Lang "dash.tokens"}}
         <span class="text-muted">({{T .Lang "dash.usagestats.total"}})</span>

@@ -601,17 +601,8 @@ type usageReport struct {
 	// is no traffic, and callers must not divide by it unchecked.
 	Peak int64
 	// Models is what each model consumed over the same window as Days, from
-	// the same per-request log. Empty when the gateway keeps none.
+	// the same daily totals.
 	Models []keyprovider.ModelUsage
-	// TotalOnly marks a report with a real total but no per-day breakdown,
-	// which is what a gateway with per-request logging switched off can give.
-	// The card then shows the figure without a chart, rather than implying the
-	// key was never used.
-	TotalOnly bool
-	// TotalSpend is the key's cumulative spend, shown when TotalOnly. Tokens
-	// cannot be reported then: without a per-request log there is nothing to
-	// count, only the spend counter the gateway keeps regardless.
-	TotalSpend float64
 
 	// HasQuota is set when the key has an enforced allowance. Profiles may
 	// leave it unset, and an unlimited key must not read as an exhausted one.
@@ -661,10 +652,9 @@ type quotaWindowView struct {
 
 // userUsage summarises what the user has consumed.
 //
-// The per-day history belongs to a key upstream, so regenerating starts that
-// chart over — the new key is a different key. The quota does not: ownerID
-// names the person, and the allowance enforced against them survives a
-// rotation, which is the figure users are actually held to.
+// ownerID names the person. The history and the widest allowance are both
+// theirs upstream, across every key they have held, so regenerating a key
+// starts neither over. The shorter windows belong to the key.
 //
 // An empty report means "show nothing": no key, or a provider that does not
 // report usage at all. A gateway that cannot be reached sets Incomplete.
@@ -673,7 +663,7 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 		return usageReport{}
 	}
 	var rep usageReport
-	h, err := u.usage.History(ctx, k.KeyRef)
+	h, err := u.usage.History(ctx, ownerID)
 	if err != nil {
 		rep.Incomplete = true
 	}
@@ -715,20 +705,6 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 		rep.HasQuota = true
 		rep.Used, rep.Limit = b.Used, b.Limit
 		rep.QuotaPct, rep.ResetsAt = b.Pct, b.ResetsAt
-	}
-
-	if len(days) > 0 {
-		return rep
-	}
-
-	// No per-day rows. That may mean an unused key, or a gateway that records
-	// spend without keeping a per-request log — the two are indistinguishable
-	// here, so ask for the cumulative figure before reporting nothing.
-	total, err := u.usage.TotalSpend(ctx, k.KeyRef)
-	if err != nil {
-		rep.Incomplete = true
-	} else if total > 0 {
-		rep.TotalSpend, rep.TotalOnly = total, true
 	}
 	return rep
 }

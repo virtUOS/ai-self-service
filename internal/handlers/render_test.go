@@ -575,7 +575,7 @@ func TestDashboardDrawsABarPerWindow(t *testing.T) {
 }
 
 // With no per-window figures the card keeps the single bar rather than showing
-// nothing, so a gateway without spend logging still reports a quota.
+// nothing, so a gateway that cannot report every window still reports a quota.
 func TestDashboardFallsBackToOneBar(t *testing.T) {
 	var buf bytes.Buffer
 	err := parseDashboardTemplate().Execute(&buf, dashboardData{

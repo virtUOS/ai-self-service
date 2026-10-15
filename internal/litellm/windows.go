@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"sort"
 	"time"
 
@@ -93,33 +91,6 @@ func (c *Client) keyWindows(ctx context.Context, ref string) ([]budgetWindow, er
 		}}, nil
 	}
 	return nil, nil
-}
-
-// spendLog fetches a key's per-request log, for History.
-//
-// The whole log comes back whatever is asked for: LiteLLM ignores page_size,
-// limit and size on this route, and passing start_date/end_date switches the
-// response to an aggregated shape that drops token counts entirely.
-func (c *Client) spendLog(ctx context.Context, ref string) ([]spendRow, error) {
-	q := url.Values{}
-	q.Set("api_key", ref)
-
-	resp, err := c.do(ctx, http.MethodGet, "/spend/logs?"+q.Encode(), nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("LiteLLM /spend/logs returned %d: %s", resp.StatusCode, b)
-	}
-
-	var rows []spendRow
-	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
-		return nil, fmt.Errorf("decode spend log: %w", err)
-	}
-	return rows, nil
 }
 
 // Windows reports consumption against every quota window applying to a key and
