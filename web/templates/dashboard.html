@@ -73,6 +73,11 @@
     <h2>{{T .Lang "dash.apikey"}}</h2>
 
     {{if .APIKey}}
+      {{if .KeyMissing}}
+      {{/* The gateway does not have this key. The portal keeps the record for
+           a while in case it returns, but it does not work meanwhile. */}}
+      <div class="alert alert-warning" style="margin-bottom:1.25rem">{{T .Lang "dash.key.missing"}}</div>
+      {{end}}
       {{if .ExpiryUrgent}}
       <div class="alert {{if lt .ExpiresInDays 0}}alert-danger{{else}}alert-warning{{end}}"
            style="margin-bottom:1.25rem">
@@ -105,10 +110,12 @@
              Without the profile, extending and regenerating would fail: both take
              the key's validity and limits from it. Deleting still works. */}}
         {{if not (or .SuccessorURL .ProfileError)}}
+        {{if not .KeyMissing}}
         <form method="POST" action="/key/extend" data-once>
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button type="submit" class="btn btn-secondary">{{T .Lang "dash.extend"}} ({{T .Lang "dash.extend.until"}} {{.ExtendUntil}})</button>
         </form>
+        {{end}}
         <form method="POST" action="/key/generate" data-once
               onsubmit="return confirm({{T .Lang "dash.confirm.regenerate"}})">
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -129,9 +136,6 @@
 
     {{else}}
 
-      {{if .KeyGone}}
-      <div class="alert alert-warning">{{T .Lang "dash.key.gone"}}</div>
-      {{end}}
       <p class="text-muted" style="margin-bottom:1.25rem">{{T .Lang "dash.nokey"}}</p>
       {{if not (or .SuccessorURL .ProfileError)}}
       <form method="POST" action="/key/generate" data-once>
@@ -149,7 +153,7 @@
     {{end}}
   </div>
 
-  {{if .APIKey}}
+  {{if and .APIKey (not .KeyMissing)}}
   <div class="card">
     <h2>{{T .Lang "dash.usagestats"}}</h2>
     {{if .Usage.Incomplete}}

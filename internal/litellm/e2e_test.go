@@ -269,6 +269,30 @@ func TestE2EKeyLifecycle(t *testing.T) {
 	}
 }
 
+// The sync asks the gateway whether it still has a key it marked as missing
+// (issue #108): present while the key lives, gone once it is deleted, and gone
+// for a ref the gateway never had.
+func TestE2ECheckKey(t *testing.T) {
+	g := newE2EGateway(t)
+	ctx := context.Background()
+	owner := e2eOwner(t)
+	k := g.createKey(t, owner, keyprovider.Limits{Models: []string{"mock-small"}})
+
+	if err := g.CheckKey(ctx, k.Ref); err != nil {
+		t.Fatalf("check of a live key: %v", err)
+	}
+	if err := g.DeleteKey(ctx, k.Ref); err != nil {
+		t.Fatalf("delete key: %v", err)
+	}
+	if err := g.CheckKey(ctx, k.Ref); !errors.Is(err, keyprovider.ErrKeyNotFound) {
+		t.Errorf("check of a deleted key: err = %v, want ErrKeyNotFound", err)
+	}
+	unknown := strings.Repeat("0", 64)
+	if err := g.CheckKey(ctx, unknown); !errors.Is(err, keyprovider.ErrKeyNotFound) {
+		t.Errorf("check of an unknown key: err = %v, want ErrKeyNotFound", err)
+	}
+}
+
 // Issue #26: the widest window lives on the owner, so regenerating a key must
 // neither reset its spend nor change its allowance.
 func TestE2EOwnerQuotaSurvivesRotation(t *testing.T) {

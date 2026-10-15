@@ -687,18 +687,77 @@ func (s *Store) DeleteAPIKey(ctx context.Context, keyID int64) error {
 	return err
 }
 
-// RemoveMissingKey drops the record of a key that no longer exists in the
-// gateway, and records that in the audit log. Such a key was deleted outside
-// the portal; it cannot be restored, so keeping the row would only leave the
-// owner with a key that does not work and the sync with one it cannot push.
-// The owner can generate a new key.
+// MarkKeyMissing records that the gateway no longer has a key, and writes the
+// first sighting to the audit log. The key row stays: a gateway that was wrong
+// or restored would otherwise make the portal forget keys that come back, and
+// the limit sync removes it only once it has stayed missing for the grace
+// period (see RemoveMissingKey).
 //
-// It reports whether it removed anything: another request may have dropped
-// the row first, and then there is nothing to record.
-func (s *Store) RemoveMissingKey(ctx context.Context, keyID, ownerID int64, ownerEmail, detail string) (bool, error) {
+// It reports whether this call marked the key. A key already marked keeps its
+// first timestamp, which starts the grace period, and nothing more is
+// recorded: the dashboard, an extend and the sync may all notice the same key.
+func (s *Store) MarkKeyMissing(ctx context.Context, keyID, ownerID int64, ownerEmail, detail string) (bool, error) {
+	marked := false
+	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		res, err := tx.NewUpdate().Model((*APIKey)(nil)).
+			Set("missing_since = ?", time.Now()).
+			Where("id = ?", keyID).
+			Where("missing_since IS NULL").Exec(ctx)
+		if err != nil {
+			return fmt.Errorf("mark key missing: %w", err)
+		}
+		if n, err := res.RowsAffected(); err != nil || n == 0 {
+			return err
+		}
+		marked = true
+		return recordKeyAudit(ctx, tx, AuditKeyMissing, ownerID, ownerEmail, detail)
+	})
+	return marked, err
+}
+
+// ClearKeyMissing unmarks a key the gateway has again, and records that. The
+// key is also made out of date, so the limit sync pushes it its owner's limits
+// again: whatever changed while it was gone has not reached it.
+//
+// It reports whether the key was marked: the sync and nothing else clears
+// markers, but two runs may overlap.
+func (s *Store) ClearKeyMissing(ctx context.Context, keyID, ownerID int64, ownerEmail, detail string) (bool, error) {
+	cleared := false
+	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		res, err := tx.NewUpdate().Model((*APIKey)(nil)).
+			Set("missing_since = NULL").
+			Set("synced_rev = NULL").
+			Where("id = ?", keyID).
+			Where("missing_since IS NOT NULL").Exec(ctx)
+		if err != nil {
+			return fmt.Errorf("clear missing key: %w", err)
+		}
+		if n, err := res.RowsAffected(); err != nil || n == 0 {
+			return err
+		}
+		cleared = true
+		return recordKeyAudit(ctx, tx, AuditKeyFound, ownerID, ownerEmail, detail)
+	})
+	return cleared, err
+}
+
+// RemoveMissingKey drops the record of a key that has been missing from the
+// gateway since before missingBefore, and records that in the audit log. Such
+// a key was deleted outside the portal, or the gateway lost it; it cannot be
+// restored, so keeping the row would only leave the owner with a key that does
+// not work. The owner can generate a new key.
+//
+// The grace period is checked in the same statement that deletes, so a key
+// that was unmarked meanwhile is kept. It reports whether it removed anything:
+// another run may have dropped the row first, and then there is nothing to
+// record.
+func (s *Store) RemoveMissingKey(ctx context.Context, keyID, ownerID int64, ownerEmail, detail string, missingBefore time.Time) (bool, error) {
 	removed := false
 	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		res, err := tx.NewDelete().Model((*APIKey)(nil)).Where("id = ?", keyID).Exec(ctx)
+		res, err := tx.NewDelete().Model((*APIKey)(nil)).
+			Where("id = ?", keyID).
+			Where("missing_since IS NOT NULL").
+			Where("missing_since <= ?", missingBefore).Exec(ctx)
 		if err != nil {
 			return fmt.Errorf("delete key row: %w", err)
 		}
@@ -706,17 +765,53 @@ func (s *Store) RemoveMissingKey(ctx context.Context, keyID, ownerID int64, owne
 			return err
 		}
 		removed = true
-		_, err = tx.NewInsert().Model(&AuditEvent{
-			CreatedAt:    time.Now(),
-			Action:       AuditKeyMissing,
-			ActorEmail:   "system", // nobody in the portal deleted it
-			SubjectEmail: ownerEmail,
-			SubjectID:    &ownerID,
-			Detail:       detail,
-		}).Exec(ctx)
-		return err
+		return recordKeyAudit(ctx, tx, AuditKeyGone, ownerID, ownerEmail, detail)
 	})
 	return removed, err
+}
+
+// recordKeyAudit writes an audit entry for something that happened to a key
+// without anybody in the portal doing it, inside the caller's transaction.
+func recordKeyAudit(ctx context.Context, tx bun.Tx, action string, ownerID int64, ownerEmail, detail string) error {
+	_, err := tx.NewInsert().Model(&AuditEvent{
+		CreatedAt:    time.Now(),
+		Action:       action,
+		ActorEmail:   "system", // nobody in the portal did it
+		SubjectEmail: ownerEmail,
+		SubjectID:    &ownerID,
+		Detail:       detail,
+	}).Exec(ctx)
+	return err
+}
+
+// MissingKey is a key marked as missing from the gateway, with its owner.
+type MissingKey struct {
+	KeyID        int64     `bun:"key_id"`
+	KeyRef       string    `bun:"key_ref"`
+	KeyPrefix    string    `bun:"key_prefix"`
+	MissingSince time.Time `bun:"missing_since"`
+	UserID       int64     `bun:"user_id"`
+	Email        string    `bun:"email"`
+}
+
+// ListMissingKeys returns every key marked as missing, oldest first.
+func (s *Store) ListMissingKeys(ctx context.Context) ([]MissingKey, error) {
+	var rows []MissingKey
+	err := s.db.NewSelect().Model((*APIKey)(nil)).
+		ColumnExpr("api_key.id AS key_id, api_key.key_ref, api_key.key_prefix, api_key.missing_since").
+		ColumnExpr("u.id AS user_id, u.email AS email").
+		Join("JOIN users AS u ON u.id = api_key.user_id").
+		Where("api_key.missing_since IS NOT NULL").
+		OrderExpr("api_key.missing_since, api_key.id").
+		Scan(ctx, &rows)
+	return rows, err
+}
+
+// CountMissingKeys returns how many keys are marked as missing.
+func (s *Store) CountMissingKeys(ctx context.Context) (int, error) {
+	n, err := s.db.NewSelect().Model((*APIKey)(nil)).
+		Where("missing_since IS NOT NULL").Count(ctx)
+	return int(n), err
 }
 
 // --- Sessions ---
@@ -836,6 +931,9 @@ func (s *Store) KeysExpiringWithin(ctx context.Context, daysBefore int) ([]Expir
 		Join("JOIN users AS u ON u.id = api_key.user_id").
 		Where("api_key.expires_at <= ?", cutoff).
 		Where("api_key.expires_at > ?", time.Now()).
+		// A key the gateway does not have is not worth a reminder to extend
+		// it. The notice is not recorded, so it goes out if the key returns.
+		Where("api_key.missing_since IS NULL").
 		Where(`NOT EXISTS (
 			SELECT 1 FROM expiry_notices n
 			WHERE n.api_key_id = api_key.id AND n.days_before = ?

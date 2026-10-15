@@ -35,7 +35,7 @@ build:
 	CGO_ENABLED=0 go build ./...
 
 e2e: up
-	go test -tags e2e -race ./internal/litellm/
+	go test -tags e2e -race ./internal/litellm/ ./internal/limitsync/
 
 # Readiness is polled here rather than left to `up --wait`, so it does not
 # depend on the compose implementation supporting that flag.

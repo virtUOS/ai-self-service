@@ -116,6 +116,12 @@ type APIKey struct {
 	// cleared when a push succeeds.
 	SyncError    string     `bun:"sync_error,notnull"`
 	SyncFailedAt *time.Time `bun:"sync_failed_at"`
+
+	// MissingSince is when the gateway first reported the key as gone, or nil
+	// for a key it has. A marked key is neither pushed nor reminded about: the
+	// limit sync unmarks it if it returns and removes it once the grace period
+	// has passed.
+	MissingSince *time.Time `bun:"missing_since"`
 }
 
 type Session struct {
@@ -135,7 +141,9 @@ const (
 	AuditKeyExtended    = "key.extended"
 	AuditKeyDeleted     = "key.deleted"
 	AuditKeyRevoked     = "key.revoked" // by an admin, not the owner
-	AuditKeyMissing     = "key.missing" // deleted in the gateway, outside the portal
+	AuditKeyMissing     = "key.missing" // first found gone from the gateway; it is marked, not yet removed
+	AuditKeyFound       = "key.found"   // a key marked missing is back in the gateway
+	AuditKeyGone        = "key.gone"    // a key marked missing stayed missing past the grace period; its record was removed
 	AuditProfileSet     = "user.profile_set"
 	AuditProfileExpired = "user.profile_expired" // by the deadline, not an admin
 	AuditAdminGranted   = "admin.granted"

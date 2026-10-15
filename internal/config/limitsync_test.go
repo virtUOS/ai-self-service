@@ -51,3 +51,40 @@ func TestLimitSyncRejectsNonsense(t *testing.T) {
 		})
 	}
 }
+
+// A key the gateway lacks is kept for a day by default: long enough to fix a
+// wrong or restored gateway, short enough not to leave dead keys around.
+func TestKeyMissingGracePeriodDefault(t *testing.T) {
+	setRequiredEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.KeyMissingGracePeriod != 24*time.Hour {
+		t.Errorf("KeyMissingGracePeriod = %v, want 24h", cfg.KeyMissingGracePeriod)
+	}
+}
+
+func TestKeyMissingGracePeriodIsRead(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("KEY_MISSING_GRACE_PERIOD", "72h")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.KeyMissingGracePeriod != 72*time.Hour {
+		t.Errorf("KeyMissingGracePeriod = %v, want 72h", cfg.KeyMissingGracePeriod)
+	}
+}
+
+func TestKeyMissingGracePeriodRejectsNonsense(t *testing.T) {
+	for _, value := range []string{"0s", "-1h", "a day", "24"} {
+		t.Run(value, func(t *testing.T) {
+			setRequiredEnv(t)
+			t.Setenv("KEY_MISSING_GRACE_PERIOD", value)
+			if _, err := Load(); err == nil {
+				t.Errorf("Load accepted KEY_MISSING_GRACE_PERIOD=%s", value)
+			}
+		})
+	}
+}

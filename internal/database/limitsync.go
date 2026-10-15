@@ -29,6 +29,10 @@ import (
 // and is picked up again if it is out of date. The query takes the current
 // time as its first argument for this.
 //
+// Keys marked as missing are never pending either: the gateway does not have
+// them, so a push could only fail. The sync checks them separately, and a key
+// that returns is made out of date then (see ClearKeyMissing).
+//
 // IS NOT is SQLite's null-safe comparison, so a key that was never pushed
 // (null columns) counts as different.
 const pendingLimitSyncs = `
@@ -42,6 +46,7 @@ WITH effective AS (
 	FROM api_keys AS k
 	JOIN users AS u ON u.id = k.user_id
 	WHERE k.expires_at > ?
+	  AND k.missing_since IS NULL
 ), pending AS (
 	SELECT effective.*
 	FROM effective
