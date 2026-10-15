@@ -41,6 +41,9 @@ type Claims struct {
 	Email             string
 	Name              string
 	PreferredUsername string
+	// Extra are further claims for the id_token, such as groups. They are
+	// added after the standard set and may not replace it.
+	Extra map[string]any
 }
 
 // NewServer starts an issuer that is shut down when the test ends.
@@ -150,7 +153,11 @@ func (m *Server) SignIDToken(c Claims, aud string, expiry time.Time) (string, er
 		return "", err
 	}
 	now := time.Now()
-	return jwt.Signed(signer).Claims(map[string]any{
+	claims := map[string]any{}
+	for k, v := range c.Extra {
+		claims[k] = v
+	}
+	return jwt.Signed(signer).Claims(claims).Claims(map[string]any{
 		"iss":                m.server.URL,
 		"sub":                c.Sub,
 		"aud":                aud,

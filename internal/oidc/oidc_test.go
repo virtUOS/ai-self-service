@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -137,5 +138,26 @@ func TestLoginDoesNotLoopWhenHostIsRewritten(t *testing.T) {
 
 	if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, m.Issuer()) {
 		t.Errorf("Location = %q, want the provider's authorize endpoint", loc)
+	}
+}
+
+// Extra scopes are requested on top of the standard ones, for IdPs that send
+// groups only when asked.
+func TestLoginRequestsExtraScopes(t *testing.T) {
+	m := oidctest.NewServer(t)
+	cfg := *newTestProvider(t, m).cfg
+	cfg.OIDCExtraScopes = []string{"groups"}
+	p, err := NewProvider(context.Background(), &cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	p.LoginHandler(rec, httptest.NewRequest(http.MethodGet, "http://localhost:8080/login", nil))
+	loc, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := loc.Query().Get("scope"); got != "openid profile email groups" {
+		t.Errorf("scope = %q, want openid profile email groups", got)
 	}
 }
