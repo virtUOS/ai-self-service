@@ -225,6 +225,10 @@ type adminData struct {
 	// promotion form offers: everyone who has logged in and is not an admin.
 	Admins     []adminRow
 	Candidates []database.User
+	// AdminGroup is the IdP group whose members are admins, when the login
+	// system decides. The tab then only lists who held the panel at their
+	// last login, with nothing to grant or remove.
+	AdminGroup string
 	// LimitSync is the card saying whether keys carry their profiles'
 	// limits yet.
 	LimitSync limitSyncView
@@ -311,6 +315,7 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 		BudgetUnit:      a.cfg.BudgetUnit,
 		Admins:          adminRows(admins, actorID),
 		Candidates:      adminCandidates(rawUsers),
+		AdminGroup:      a.cfg.AdminGroup,
 		LimitSync:       a.limitSyncStatus(r.Context(), lang),
 	}); err != nil {
 		slog.Error("admin template", "err", err)
@@ -512,6 +517,9 @@ func (a *Admin) SetUserProfile(w http.ResponseWriter, r *http.Request) {
 // recorded against the person, so an address the IdP reassigns later carries
 // nothing with it.
 func (a *Admin) GrantAdmin(w http.ResponseWriter, r *http.Request) {
+	if a.refuseWhenGroupManaged(w, r) {
+		return
+	}
 	user, ok := a.accountFromForm(w, r)
 	if !ok {
 		return
@@ -531,6 +539,9 @@ func (a *Admin) GrantAdmin(w http.ResponseWriter, r *http.Request) {
 // someone who stays, so the panel can never be left with nobody in charge by
 // accident.
 func (a *Admin) RevokeAdmin(w http.ResponseWriter, r *http.Request) {
+	if a.refuseWhenGroupManaged(w, r) {
+		return
+	}
 	user, ok := a.accountFromForm(w, r)
 	if !ok {
 		return
@@ -546,6 +557,18 @@ func (a *Admin) RevokeAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 	a.audit(r, database.AuditAdminRevoked, user.Email, &user.ID, "admin revoked")
 	http.Redirect(w, r, "/admin?flash=Admin+revoked#admins", http.StatusFound)
+}
+
+// refuseWhenGroupManaged turns a grant or removal away when the login system
+// decides who is an admin. The next login would overwrite the flag anyway, so
+// a change here would only look like it worked. The tab offers no such forms
+// then; this catches a stale page or a hand-made request.
+func (a *Admin) refuseWhenGroupManaged(w http.ResponseWriter, r *http.Request) bool {
+	if !a.cfg.AdminFromGroups() {
+		return false
+	}
+	http.Redirect(w, r, "/admin?flash=Admins+are+managed+in+the+login+system#admins", http.StatusFound)
+	return true
 }
 
 // accountFromForm reads the account the Admins tab's forms name. A malformed

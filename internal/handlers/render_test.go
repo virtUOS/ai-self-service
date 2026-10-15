@@ -238,6 +238,40 @@ func TestAdminTemplateRendersAdminsTab(t *testing.T) {
 	}
 }
 
+// When the login system decides, the Admins tab names the group, lists who
+// held the panel at their last login, and offers nothing to grant or remove.
+func TestAdminTemplateRendersGroupManagedAdminsTab(t *testing.T) {
+	tmpl := parseAdminTemplate()
+	for _, lang := range []i18n.Lang{i18n.EN, i18n.DE} {
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, adminData{
+			Lang:      lang,
+			Profiles:  []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
+			CSRFToken: "TOK",
+			Admins: []adminRow{
+				{User: database.User{ID: 1, Name: "Acting", Email: "acting@uni-osnabrueck.de"}, IsSelf: true},
+				{User: database.User{ID: 2, Name: "Other", Email: "other@uni-osnabrueck.de"}, Removable: true},
+			},
+			Candidates: []database.User{{ID: 3, Name: "Student", Email: "student@uni-osnabrueck.de"}},
+			AdminGroup: "ai-admin",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		out := buf.String()
+		if !strings.Contains(out, "other@uni-osnabrueck.de") {
+			t.Errorf("%s: the admins are not listed", lang)
+		}
+		if !strings.Contains(out, "ai-admin") {
+			t.Errorf("%s: the tab does not name the group", lang)
+		}
+		for _, form := range []string{`action="/admin/admins/revoke"`, `action="/admin/admins"`} {
+			if strings.Contains(out, form) {
+				t.Errorf("%s: the tab offers %s while the login system decides", lang, form)
+			}
+		}
+	}
+}
+
 // Tooltips explain jargon like TPM to admins who do not know it. Assert they
 // render with real text, since Go's contextual escaping would mangle a badly
 // quoted attribute rather than fail loudly.

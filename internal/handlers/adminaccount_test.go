@@ -261,3 +261,34 @@ func TestAdminCandidatesLeaveOutAdmins(t *testing.T) {
 		t.Errorf("candidates = %+v, want only the account without the flag", got)
 	}
 }
+
+// When the login system decides, the next login would overwrite whatever the
+// panel set, so granting and removing are refused and nothing is audited.
+func TestAdminChangesRefusedWhenGroupManaged(t *testing.T) {
+	a, store, token, _ := newTestAdmin(t, "acct-group1")
+	a.cfg.AdminGroup = "ai-admin"
+	other, err := store.GetOrCreateUser(context.Background(), "sub-other", "other@uni-osnabrueck.de", "Other")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if rec := postAccount(a.GrantAdmin, token, "/admin/admins", other.ID); rec.Code != http.StatusFound {
+		t.Errorf("grant: status %d, want a redirect back to the panel", rec.Code)
+	}
+	if isAdmin(t, store, other.ID) {
+		t.Error("the panel granted admin while the login system decides")
+	}
+
+	if err := store.SetUserAdmin(context.Background(), other.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if rec := postAccount(a.RevokeAdmin, token, "/admin/admins/revoke", other.ID); rec.Code != http.StatusFound {
+		t.Errorf("revoke: status %d, want a redirect back to the panel", rec.Code)
+	}
+	if !isAdmin(t, store, other.ID) {
+		t.Error("the panel removed admin while the login system decides")
+	}
+	if e := lastAudit(t, store); e != nil {
+		t.Errorf("audit = %+v, want nothing recorded", e)
+	}
+}
