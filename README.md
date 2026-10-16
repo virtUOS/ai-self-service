@@ -48,11 +48,12 @@ stack: an OIDC mock, a LiteLLM gateway with mock models and a mail catcher.
 
 Everything else is in the documentation:
 
-- [Getting started](https://virtuos.github.io/keyosk/getting-started/): how it works, running and local development
+- [Getting started](https://virtuos.github.io/keyosk/getting-started/): what Keyosk does and how
 - [Configuration](https://virtuos.github.io/keyosk/configuration/): every setting, and the OIDC client registration
-- [Admin panel](https://virtuos.github.io/keyosk/admin/): admins from the login system or the panel, profiles, assignments
-- [Concepts](https://virtuos.github.io/keyosk/concepts/keys-and-limits/): keys and limits, how profile changes reach keys, the LiteLLM gateway
-- [Operating Keyosk](https://virtuos.github.io/keyosk/operations/): usage reporting, expiry emails, metrics, health checks
+- [Administrators](https://virtuos.github.io/keyosk/administrators/): admins from the login system or the panel, and the first admin
+- [Monitoring](https://virtuos.github.io/keyosk/monitoring/): metrics, the Prometheus scrape job and health checks
+- [Concepts](https://virtuos.github.io/keyosk/concepts/usage-limits/): usage limits, key expiration, profiles, the LiteLLM gateway
+- [Development](https://virtuos.github.io/keyosk/development/): the dev stack and the tests
 
 The website is built from [`docs/`](docs/) with
 [Zensical](https://zensical.org/); `make website-serve` previews it locally.

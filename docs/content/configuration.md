@@ -14,7 +14,7 @@ in:
 | `OIDC_CLIENT_SECRET` | yes      | —           | OIDC client secret                                                 |
 | `OIDC_REDIRECT_URL`  | yes      | —           | Callback URL (must match OIDC client config)                       |
 | `OIDC_EXTRA_SCOPES`  | no       | —           | Space-separated scopes requested on top of `openid profile email`, e.g. `groups` for IdPs that send groups only when asked |
-| `ADMIN_GROUP`        | no       | —           | IdP group whose members are the admins; see [Admin panel](admin.md). Unset, admins are managed in the panel |
+| `ADMIN_GROUP`        | no       | —           | IdP group whose members are the admins; see [Administrators](administrators.md). Unset, admins are managed in the panel |
 | `ADMIN_GROUP_CLAIM`  | no       | `groups`    | Dot path to the ID token claim that lists the groups, e.g. `realm_access.roles` for Keycloak realm roles. Only with `ADMIN_GROUP` |
 | `FRONTEND_URL`       | yes      | —           | Public base URL of this app (shown to users as the API base URL)   |
 | `LITELLM_USER_ID_PREFIX` | no   |             | Only for several Keyosk instances on one gateway; see [Several Keyosk instances on one gateway](concepts/gateway.md#several-keyosk-instances-on-one-gateway) |
@@ -26,7 +26,7 @@ in:
 | `SESSION_DURATION`   | no       | `24h`       | How long a login session lasts                                     |
 | `KEY_DURATION_DAYS`  | no       | `90`        | Default key validity; profiles may override it                     |
 | `BUDGET_UNIT`        | no       | `$`         | Unit label for quota amounts; use a word such as `credits` when model prices are nominal |
-| `USAGE_HISTORY_DAYS` | no       | `30`        | How far back the usage chart and per-model table reach; see [Usage reporting](operations.md#usage-reporting) |
+| `USAGE_HISTORY_DAYS` | no       | `30`        | How far back the usage chart and per-model table reach; see [Usage reporting](concepts/usage-limits.md#usage-reporting) |
 | `SUCCESSOR_URL`      | no       |             | Set on a Keyosk instance being retired: the dashboard shows a banner sending users to this address. Keys can no longer be created or extended here, only deleted; existing keys expire on their own |
 | `PRIVACY_NOTICE_FILE_DE` | no   | —           | Path to an HTML fragment shown at `/privacy` (no login needed) as this deployment's privacy notice, and linked from the dashboard. A named file that is missing or empty stops startup |
 | `PRIVACY_NOTICE_FILE_EN` | no   | —           | The same in English. With only one language set, readers of the other get that one |
@@ -34,11 +34,11 @@ in:
 | `SMTP_FROM`          | no       | `noreply@example.com` | Sender address for expiry emails                   |
 | `SMTP_USERNAME`      | no       | —           | Only if the relay requires authentication                          |
 | `SMTP_PASSWORD`      | no       | —           | Only if the relay requires authentication                          |
-| `METRICS_TOKEN`      | no       | —           | Bearer token `/metrics` requires. Without it the endpoint is open. See [Metrics](operations.md#metrics) |
+| `METRICS_TOKEN`      | no       | —           | Bearer token `/metrics` requires. Without it the endpoint is open. See [Metrics](monitoring.md#metrics) |
 | `LOG_LEVEL`          | no       | `info`      | `debug`, `info`, `warn` or `error`                                 |
 | `LIMIT_SYNC_WORKERS` | no       | `1`         | How many limit updates Keyosk sends to the gateway at once. One is gentle on the gateway but slow for large changes: about 25 minutes for 5,000 keys |
 | `LIMIT_SYNC_INTERVAL` | no      | `5m`        | How often the limit sync retries keys whose update failed. Admin changes start a run straight away and do not wait for it |
-| `KEY_MISSING_GRACE_PERIOD` | no | `24h`       | How long a key the gateway no longer has stays marked as missing before Keyosk removes its record. A key that returns in time is unmarked. See [Keys deleted in the gateway](concepts/profile-changes.md) |
+| `KEY_MISSING_GRACE_PERIOD` | no | `24h`       | How long a key the gateway no longer has stays marked as missing before Keyosk removes its record. A key that returns in time is unmarked. See [Keys deleted in the gateway](concepts/profiles.md#how-profile-changes-reach-existing-keys) |
 
 
 ## OIDC client registration

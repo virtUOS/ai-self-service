@@ -1,5 +1,45 @@
-# How profile changes reach existing keys
+# Profiles
 
+A profile says what a key may do: which models, how fast, and how much. Every
+person has one, either assigned by an admin or the default profile.
+
+The admin panel at `/admin` provides:
+
+- **Profiles** — create and edit profiles with model restrictions, TPM/RPM limits, and budget caps. Mark one profile as default; it applies to users with no explicit profile assignment.
+- **Users** — view everyone who has logged in, see their key prefix and expiry,
+  assign a profile, and revoke a key. An assignment can carry a deadline: set a
+  date and the user reverts to the default profile when it passes, or to a
+  profile you choose, or their key is deleted if you tick that instead. Leave
+  the date empty for a permanent assignment.
+- **Admins** — list the admins, and promote and remove them when the panel
+  manages them; see [Administrators](../administrators.md).
+- **Audit log** — the 50 most recent key and profile changes, recording who did
+  what to whom. Rows outlive the key and user they describe, so revoking does
+  not erase the history. Changes nobody in Keyosk made, such as a profile
+  deadline passing or a key found missing from the gateway (`key.missing`,
+  and later `key.found` or `key.gone`), are recorded with `system` as the
+  actor.
+- **Limit sync status** — a card above the tabs says whether all keys
+  carry their profile's current limits yet. If not, it shows how many are still
+  waiting, whether an update is running, which keys failed and why, and each
+  profile shows how many of its keys are waiting. See
+  [How profile changes reach existing keys](#how-profile-changes-reach-existing-keys).
+
+Profile fields:
+
+| Field            | Description                                                              |
+| ---------------- | ------------------------------------------------------------------------ |
+| Models           | Comma-separated list of allowed model names (empty = all models)          |
+| Key validity     | How long a generated key lasts, in days (blank = `KEY_DURATION_DAYS`)     |
+| Usage limit      | Spend allowance per period, in `BUDGET_UNIT` (blank = unlimited); several windows may apply at once |
+| Limit resets     | `hourly`, `daily`, `weekly` or `monthly`                                  |
+| TPM limit        | Maximum tokens per minute — burst control, complements the usage limit    |
+| RPM limit        | Maximum requests per minute                                               |
+
+Different cohorts get different profiles: students might get 30-day keys with a
+$1.00 daily allowance, lecturers 365-day keys with no quota.
+
+## How profile changes reach existing keys
 
 Limits are pushed to the gateway when a key is issued. After that, a background
 **limit sync** keeps every key in line with its owner's profile. It reacts to
@@ -72,7 +112,7 @@ ordinary failure: the record is kept and the call retried.
 
 If a Keyosk instance is pointed at the wrong LiteLLM, every key is marked
 within one sync run and the monitoring dashboard shows it (see
-[Metrics](../operations.md#metrics)): correct `LITELLM_BASE_URL` within the grace period and
+[Metrics](../monitoring.md#metrics)): correct `LITELLM_BASE_URL` within the grace period and
 the next run unmarks them all. The same run asks the gateway about every marked key, one request
 each, so this costs as many requests as there are keys.
 

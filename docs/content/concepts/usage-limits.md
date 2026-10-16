@@ -1,15 +1,4 @@
-# Keys and usage limits
-
-## How extending works
-
-Extend sets the expiry to **now + the profile's key validity**. It does not add
-to the existing expiry, so clicking twice does not stockpile time, and it does
-not use the duration the key was originally created with — that is never
-stored.
-
-The consequence is that policy changes apply on the next extend: move a user
-from a 30-day profile to a 365-day one and their existing key extends by 365,
-without needing to be regenerated.
+# Key usage limits
 
 ## How usage limits work
 
@@ -40,3 +29,33 @@ against the user rather than the key so regenerating a key does not reset it
 ([issue #26](https://github.com/virtUOS/keyosk/issues/26)). This needs LiteLLM v1.105.0 or later: the dashboard reads what has
 been spent in each window from the `budget_limits_usage` that `/key/info`
 reports since then ([issue #116](https://github.com/virtUOS/keyosk/issues/116)).
+
+## Usage reporting
+
+The dashboard shows what a person has consumed, from two sources with
+different granularity:
+
+- **Over the history window** (`USAGE_HISTORY_DAYS`, default 30) — read from
+  the daily totals LiteLLM keeps per user, key and model
+  (`/user/daily/activity`), filtered by the person's LiteLLM user. The chart
+  spans the whole window, empty days included, so a bar's position says when
+  the person used the gateway. Windows up to two months draw a bar per day; up
+  to two years, per ISO week (Monday first); beyond that, per calendar month.
+  Labels are thinned on wide windows; every bar names its date on hover. The
+  days are UTC days, as LiteLLM buckets them.
+- **Per model, over the same window** — the same daily totals by the public
+  model name, with the requests sent and the prompt/completion split.
+- **Against the quota** — read from the spend counter the gateway keeps for
+  each window, which is what it enforces against. Shown as a percentage of the
+  budget with the amounts beside it. It resets on the budget period, so it
+  need not agree with the 30-day chart above it.
+
+The history belongs to the person, across every key they have held, so
+regenerating a key does not start it over. Usage from before a key was bound
+to its owner is not included.
+
+LiteLLM writes the daily totals whether or not `disable_spend_logs` is set,
+and `maximum_spend_logs_retention_period` does not remove them, so neither
+setting affects the dashboard. It never reads the per-request spend log: that
+response grows with every request, and LiteLLM builds it on the worker that
+serves everyone else ([#116](https://github.com/virtUOS/keyosk/issues/116)).
