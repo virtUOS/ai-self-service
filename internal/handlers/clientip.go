@@ -28,8 +28,13 @@ func ClientIP(trusted []netip.Prefix) func(http.Handler) http.Handler {
 		cidrs[i] = p.String()
 	}
 	return func(next http.Handler) http.Handler {
-		fromXFF := middleware.ClientIPFromXFF(cidrs...)(next)
 		fromPeer := middleware.ClientIPFromRemoteAddr(next)
+		// With no trusted proxy every peer is logged by its own address, and
+		// chi refuses to build ClientIPFromXFF without a trusted prefix.
+		if len(cidrs) == 0 {
+			return fromPeer
+		}
+		fromXFF := middleware.ClientIPFromXFF(cidrs...)(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if peerTrusted(r.RemoteAddr, trusted) {
 				fromXFF.ServeHTTP(w, r)
