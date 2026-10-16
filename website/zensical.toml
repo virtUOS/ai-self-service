@@ -13,6 +13,16 @@ copyright = "Copyright &copy; 2026 virtUOS, Osnabrück University"
 extra_css = ["stylesheets/extra.css"]
 nav = [
   { "Home" = "index.md" },
+  { "Getting started" = "getting-started.md" },
+  { "Configuration" = "configuration.md" },
+  { "Admin panel" = "admin.md" },
+  { "Concepts" = [
+    { "Keys and usage limits" = "concepts/keys-and-limits.md" },
+    { "Profile changes" = "concepts/profile-changes.md" },
+    { "The LiteLLM gateway" = "concepts/gateway.md" },
+  ] },
+  { "Operating Keyosk" = "operations.md" },
+  { "Upgrading" = "upgrading.md" },
 ]
 
 [project.theme]
