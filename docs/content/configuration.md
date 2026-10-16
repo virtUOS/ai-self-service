@@ -26,7 +26,7 @@ in:
 | `SESSION_DURATION`   | no       | `24h`       | How long a login session lasts                                     |
 | `KEY_DURATION_DAYS`  | no       | `90`        | Default key validity; profiles may override it                     |
 | `BUDGET_UNIT`        | no       | `$`         | Unit label for quota amounts; use a word such as `credits` when model prices are nominal |
-| `USAGE_HISTORY_DAYS` | no       | `30`        | How far back the usage chart and per-model table reach; the gateway's spend-log retention must cover it |
+| `USAGE_HISTORY_DAYS` | no       | `30`        | How far back the usage chart and per-model table reach; see [Usage reporting](operations.md#usage-reporting) |
 | `SUCCESSOR_URL`      | no       |             | Set on a Keyosk instance being retired: the dashboard shows a banner sending users to this address. Keys can no longer be created or extended here, only deleted; existing keys expire on their own |
 | `PRIVACY_NOTICE_FILE_DE` | no   | —           | Path to an HTML fragment shown at `/privacy` (no login needed) as this deployment's privacy notice, and linked from the dashboard. A named file that is missing or empty stops startup |
 | `PRIVACY_NOTICE_FILE_EN` | no   | —           | The same in English. With only one language set, readers of the other get that one |

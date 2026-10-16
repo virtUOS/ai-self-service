@@ -42,8 +42,8 @@ The app needs an OIDC provider before it will serve traffic — it fetches the
 discovery document at startup. The mock starts in seconds and needs no
 configuration, but serves no back-channel logout, so that path cannot be
 exercised against it. When touching anything auth-shaped, switch to Keycloak,
-the software production runs: start `--profile keycloak`, which runs next to
-the mock, and set `OIDC_ISSUER_URL=http://localhost:8082/realms/virtuos`. See
+a full IdP that also serves back-channel logout: start `--profile keycloak`,
+which runs next to the mock, and set `OIDC_ISSUER_URL=http://localhost:8082/realms/virtuos`. See
 [`dev/README.md`](https://github.com/virtUOS/keyosk/blob/main/dev/README.md) for details.
 
 The auth-path tests need neither: `internal/oidc/mockprovider_test.go` runs an

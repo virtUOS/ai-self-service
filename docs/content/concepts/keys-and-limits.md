@@ -26,8 +26,9 @@ converts existing token quotas at that nominal rate (0.0000001 per token) so
 enforced caps keep their size; deployments that priced models differently
 should review profile budgets after upgrading.
 
-Requests fail with HTTP 429 once the allowance is spent and resume when the
-period resets.
+Requests fail with HTTP 422 (`budget_exceeded`, "Budget has been exceeded!")
+once the allowance is spent and resume when the period resets. The TPM and RPM
+rate limits answer 429 instead.
 
 **Several windows per profile.** A profile can hold one allowance per period
 (hourly, daily, weekly, monthly) and LiteLLM enforces each independently — a
