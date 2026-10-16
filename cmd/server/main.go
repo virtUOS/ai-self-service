@@ -99,7 +99,7 @@ func main() {
 	// still sets the old settings, or has not marked a first admin yet, would
 	// otherwise find nobody can reach the panel and not know why.
 	for _, name := range cfg.ObsoleteSettings {
-		slog.Warn("setting is no longer read: admin rights are recorded on the account, see https://virtuos.github.io/keyosk/admin/",
+		slog.Warn("setting is no longer read: admin rights are recorded on the account, see https://virtuos.github.io/keyosk/administrators/",
 			"setting", name)
 	}
 	if cfg.AdminFromGroups() {
@@ -110,7 +110,7 @@ func main() {
 	} else if n, err := store.CountAdmins(ctx); err != nil {
 		slog.Error("count admins", "err", err)
 	} else if n == 0 {
-		slog.Warn("no account holds the admin panel: mark one with the command in https://virtuos.github.io/keyosk/admin/#the-first-admin")
+		slog.Warn("no account holds the admin panel: mark one with the command in https://virtuos.github.io/keyosk/administrators/#the-first-admin")
 	}
 
 	// ── Dependencies ──────────────────────────────────────────────────────────

@@ -17,13 +17,15 @@ nav = [
   { "Home" = "index.md" },
   { "Getting started" = "getting-started.md" },
   { "Configuration" = "configuration.md" },
-  { "Admin panel" = "admin.md" },
+  { "Administrators" = "administrators.md" },
+  { "Monitoring" = "monitoring.md" },
   { "Concepts" = [
-    { "Keys and usage limits" = "concepts/keys-and-limits.md" },
-    { "Profile changes" = "concepts/profile-changes.md" },
+    { "Key usage limits" = "concepts/usage-limits.md" },
+    { "Key expiration" = "concepts/expiration.md" },
+    { "Profiles" = "concepts/profiles.md" },
     { "The LiteLLM gateway" = "concepts/gateway.md" },
   ] },
-  { "Operating Keyosk" = "operations.md" },
+  { "Development" = "development.md" },
 ]
 
 [project.theme]
