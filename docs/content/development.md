@@ -23,7 +23,7 @@ configuration, but serves no back-channel logout, so that path cannot be
 exercised against it. When touching anything auth-shaped, switch to Keycloak,
 a full IdP that also serves back-channel logout: start `--profile keycloak`,
 which runs next to the mock, and set
-`OIDC_ISSUER_URL=http://localhost:8082/realms/virtuos`. See
+`OIDC_ISSUER_URL=http://localhost:8082/realms/keyosk`. See
 [`dev/README.md`](https://github.com/virtUOS/keyosk/blob/main/dev/README.md) for details.
 
 ## Tests
