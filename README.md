@@ -52,7 +52,7 @@ Everything else is in the documentation:
 - [Configuration](https://virtuos.github.io/keyosk/configuration/): every setting, and the OIDC client registration
 - [Admin panel](https://virtuos.github.io/keyosk/admin/): admins from the login system or the panel, profiles, assignments
 - [Concepts](https://virtuos.github.io/keyosk/concepts/keys-and-limits/): keys and limits, how profile changes reach keys, the LiteLLM gateway
-- [Operating Keyosk](https://virtuos.github.io/keyosk/operations/): usage reporting, expiry emails, metrics, routes
+- [Operating Keyosk](https://virtuos.github.io/keyosk/operations/): usage reporting, expiry emails, metrics, health checks
 
 The website is built from [`docs/`](docs/) with
 [Zensical](https://zensical.org/); `make website-serve` previews it locally.
