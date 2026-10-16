@@ -68,6 +68,41 @@ icon = "fontawesome/brands/github"
 link = "https://github.com/virtUOS/keyosk"
 name = "Keyosk on GitHub"
 
+# llms.txt (https://llmstxt.org/): a map of the documentation for AI
+# assistants and agents, with a Markdown copy of every page and the whole
+# documentation in llms-full.txt. A model picks pages by their descriptions,
+# so a new page needs an entry here; concepts/ is picked up by its pattern
+# but listed one by one for the descriptions. "Optional" is the spec's name
+# for what a model may skip when its context is short.
+[project.plugins.llmstxt]
+full_output = "llms-full.txt"
+markdown_description = """
+Keyosk is a self-hosted web app that issues personal LiteLLM API keys. People
+log in through an OIDC provider and generate, extend or delete their own key;
+administrators assign profiles that set the models, rate limits, spend quotas
+and key validity. Keyosk needs an existing OIDC provider and a LiteLLM gateway
+(v1.105.0 or later), and is configured with environment variables. It runs as
+one container with a SQLite database.
+"""
+
+[project.plugins.llmstxt.sections]
+"Documentation" = [
+  { "getting-started.md" = "What Keyosk does, and the commands to try it locally or against your own gateway and identity provider" },
+  { "installation.md" = "Running Keyosk with Docker Compose: the settings to make, the first admin, backups and updates" },
+  { "configuration.md" = "Every environment variable with its default, and how to register the OIDC client" },
+  { "administrators.md" = "Who is an admin: members of an identity-provider group (ADMIN_GROUP) or accounts marked in the database, with IdP-specific notes" },
+  { "monitoring.md" = "The Prometheus metrics, the bearer token for /metrics, suggested alerts, and the health check endpoints" },
+]
+"Concepts" = [
+  { "concepts/usage-limits.md" = "Spend quotas per period, how LiteLLM enforces them (422 vs 429), and what the usage dashboard shows" },
+  { "concepts/expiration.md" = "How extending a key works and when expiry warnings go out by dashboard and email" },
+  { "concepts/profiles.md" = "Profile fields, assigning profiles with deadlines, how changes reach existing keys, and keys deleted in the gateway" },
+  { "concepts/gateway.md" = "How Keyosk names users and keys in LiteLLM, and running several Keyosk instances on one gateway" },
+]
+"Optional" = [
+  { "development.md" = "Working on Keyosk itself: the dev stack and the tests" },
+]
+
 [project.markdown_extensions]
 admonition = {}
 attr_list = {}

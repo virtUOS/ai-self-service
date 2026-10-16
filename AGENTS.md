@@ -33,6 +33,9 @@ Pages by `.github/workflows/website.yaml`. Only `docs/content/` is published;
 site with `--strict`, so a broken link fails; `make website-serve` previews it.
 Neither is part of `make check`, which needs no Python. The fonts and icons are
 copied in from `web/static` and are not committed under `docs/content/`.
+A new page goes into the `nav` in `docs/zensical.toml` and, with a one-line
+description, into the `llms.txt` sections below it; the site does not fail
+when it is missing from them, it is just not listed.
 
 ## Running the app
 
