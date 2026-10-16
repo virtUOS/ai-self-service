@@ -102,7 +102,12 @@ func main() {
 		slog.Warn("setting is no longer read: admin rights are recorded on the account, see README, Admin panel",
 			"setting", name)
 	}
-	if n, err := store.CountAdmins(ctx); err != nil {
+	if cfg.AdminFromGroups() {
+		// Nobody holds the flag until a member of the group logs in, so a
+		// count would only raise a false alarm here.
+		slog.Info("admin rights come from the login system",
+			"group", cfg.AdminGroup, "claim", cfg.AdminGroupClaim)
+	} else if n, err := store.CountAdmins(ctx); err != nil {
 		slog.Error("count admins", "err", err)
 	} else if n == 0 {
 		slog.Warn("no account holds the admin panel: mark one with the command in README, Admin panel")

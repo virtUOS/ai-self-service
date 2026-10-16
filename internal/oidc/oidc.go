@@ -32,6 +32,10 @@ type UserInfo struct {
 	Subject string
 	Email   string
 	Name    string
+	// IsAdmin is whether the ID token lists the admin group, when admin
+	// rights come from the login system. It is nil when they do not, so the
+	// login leaves the account's flag to the panel.
+	IsAdmin *bool
 }
 
 func NewProvider(ctx context.Context, cfg *config.Config, store *database.Store) (*Provider, error) {
@@ -45,7 +49,7 @@ func NewProvider(ctx context.Context, cfg *config.Config, store *database.Store)
 		ClientSecret: cfg.OIDCClientSecret,
 		Endpoint:     provider.Endpoint(),
 		RedirectURL:  cfg.OIDCRedirectURL,
-		Scopes:       []string{gooidc.ScopeOpenID, "profile", "email"},
+		Scopes:       append([]string{gooidc.ScopeOpenID, "profile", "email"}, cfg.OIDCExtraScopes...),
 	}
 
 	verifier := provider.Verifier(&gooidc.Config{ClientID: cfg.OIDCClientID})
@@ -154,12 +158,19 @@ func (p *Provider) HandleCallback(w http.ResponseWriter, r *http.Request) (*Call
 		Name              string `json:"name"`
 		PreferredUsername string `json:"preferred_username"`
 		Sub               string `json:"sub"`
-		RealmAccess       struct {
-			Roles []string `json:"roles"`
-		} `json:"realm_access"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		return nil, fmt.Errorf("parse claims: %w", err)
+	}
+	info := &UserInfo{Subject: claims.Sub, Email: claims.Email}
+
+	if p.cfg.AdminFromGroups() {
+		var all map[string]any
+		if err := idToken.Claims(&all); err != nil {
+			return nil, fmt.Errorf("parse claims: %w", err)
+		}
+		admin := HasGroup(all, p.cfg.AdminGroupClaim, p.cfg.AdminGroup)
+		info.IsAdmin = &admin
 	}
 
 	name := claims.PreferredUsername
@@ -170,14 +181,77 @@ func (p *Provider) HandleCallback(w http.ResponseWriter, r *http.Request) (*Call
 		name = claims.Email
 	}
 
-	return &CallbackResult{
-		UserInfo: &UserInfo{Subject: claims.Sub, Email: claims.Email, Name: name},
-		IDToken:  rawIDToken,
-	}, nil
+	info.Name = name
+
+	return &CallbackResult{UserInfo: info, IDToken: rawIDToken}, nil
 }
 
+// HasGroup reports whether the claim at path lists group.
+//
+// The path is split on dots and walks nested objects, so realm_access.roles
+// reaches Keycloak's realm roles. The claim may be a list of strings, which is
+// how IdPs send groups, or a single string. Matching is exact: a group name is
+// an opaque identifier, and folding case or trimming Keycloak's leading slash
+// could match a group the IdP considers distinct. A claim that is missing or
+// has another shape matches nothing, so a token without it grants nothing.
+func HasGroup(claims map[string]any, path, group string) bool {
+	var v any = claims
+	for _, key := range strings.Split(path, ".") {
+		obj, ok := v.(map[string]any)
+		if !ok {
+			return false
+		}
+		if v, ok = obj[key]; !ok {
+			return false
+		}
+	}
+	switch v := v.(type) {
+	case string:
+		return v == group
+	case []any:
+		for _, item := range v {
+			if s, ok := item.(string); ok && s == group {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// GetOrCreateUser records the account behind a login. When admin rights come
+// from the login system, it also sets the account's admin flag to what the
+// token says, so granting and removing the group takes effect at the person's
+// next login.
+//
+// Failing to write the flag fails the login: starting a session on a flag
+// the IdP has since withdrawn would keep someone in the panel.
 func (p *Provider) GetOrCreateUser(ctx context.Context, info *UserInfo) (*database.User, error) {
-	return p.store.GetOrCreateUser(ctx, info.Subject, info.Email, info.Name)
+	user, err := p.store.GetOrCreateUser(ctx, info.Subject, info.Email, info.Name)
+	if err != nil || info.IsAdmin == nil || user.IsAdmin == *info.IsAdmin {
+		return user, err
+	}
+	if err := p.store.SetUserAdmin(ctx, user.ID, *info.IsAdmin); err != nil {
+		return nil, fmt.Errorf("set admin flag: %w", err)
+	}
+	user.IsAdmin = *info.IsAdmin
+
+	// Audit the change as the panel does, so the log shows when someone
+	// gained or lost the panel even though no admin pressed a button. The
+	// actor is the group, which is what decided.
+	action, detail := database.AuditAdminRevoked, "left group "+p.cfg.AdminGroup
+	if user.IsAdmin {
+		action, detail = database.AuditAdminGranted, "member of group "+p.cfg.AdminGroup
+	}
+	if err := p.store.RecordAudit(ctx, &database.AuditEvent{
+		Action:       action,
+		ActorEmail:   "login system",
+		SubjectEmail: user.Email,
+		SubjectID:    &user.ID,
+		Detail:       detail,
+	}); err != nil {
+		slog.Error("record audit event", "action", action, "err", err)
+	}
+	return user, nil
 }
 
 func (p *Provider) ValidateLogoutToken(ctx context.Context, rawToken string) (string, error) {

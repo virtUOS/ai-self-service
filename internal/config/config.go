@@ -36,7 +36,23 @@ type Config struct {
 	OIDCClientSecret string
 	OIDCRedirectURL  string
 
+	// OIDCExtraScopes are requested on top of openid, profile and email. Some
+	// IdPs (Dex, Okta, Authentik) put group membership in the ID token only
+	// when the groups scope is asked for; Keycloak needs nothing here.
+	OIDCExtraScopes []string
+
 	FrontendURL string
+
+	// AdminGroup, when set, hands admin rights to the login system: an account
+	// is an admin exactly when its ID token lists this group in
+	// AdminGroupClaim, re-read at every login, and the panel stops granting
+	// and removing them. Empty leaves admin rights to the panel and the
+	// database, as recorded on the account (issue #107).
+	AdminGroup string
+	// AdminGroupClaim is the dot path to the claim that lists the account's
+	// groups. It defaults to groups, which most IdPs send; Keycloak realm
+	// roles are realm_access.roles.
+	AdminGroupClaim string
 
 	// ObsoleteSettings names the settings that are set in the environment but
 	// no longer read, so startup can say so. Admin rights used to come from
@@ -143,6 +159,20 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("LITELLM_USER_EMAIL must be true or false: %w", err)
 	}
 	cfg.LiteLLMUserEmail = userEmail
+
+	cfg.OIDCExtraScopes = strings.Fields(os.Getenv("OIDC_EXTRA_SCOPES"))
+
+	cfg.AdminGroup = strings.TrimSpace(os.Getenv("ADMIN_GROUP"))
+	claim := strings.TrimSpace(os.Getenv("ADMIN_GROUP_CLAIM"))
+	if claim != "" && cfg.AdminGroup == "" {
+		// A claim with no group to look for would silently leave admin rights
+		// to the panel, which is not what someone setting it expects.
+		return nil, fmt.Errorf("ADMIN_GROUP_CLAIM is set but ADMIN_GROUP is not")
+	}
+	if claim == "" {
+		claim = "groups"
+	}
+	cfg.AdminGroupClaim = claim
 
 	for _, name := range []string{"ADMIN_IDS", "ADMIN_EMAILS", "ADMIN_ROLE"} {
 		if strings.TrimSpace(os.Getenv(name)) != "" {
@@ -288,6 +318,10 @@ func (c *Config) LiteLLMUser(sub, name, email string) keyprovider.User {
 // A named file that is missing or blank is an error rather than no notice: the
 // operator asked for the page, and a typo in the path would otherwise remove it
 // without anyone noticing.
+// AdminFromGroups reports whether admin rights come from the login system's
+// group claim rather than from the panel.
+func (c *Config) AdminFromGroups() bool { return c.AdminGroup != "" }
+
 func readNotice(path string) (string, error) {
 	if path == "" {
 		return "", nil

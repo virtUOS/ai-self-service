@@ -79,9 +79,10 @@ type User struct {
 	// explicitly by the admin; it is never implied by an unset destination.
 	RevokeKeyAtExpiry bool `bun:"revoke_key_at_expiry,notnull"`
 
-	// IsAdmin opens the admin panel, and is the only thing that does: set by
-	// another admin there or by the operator with one command on the server,
-	// never derived from an address or a claim (issue #107).
+	// IsAdmin opens the admin panel, and is the only thing that does (issue
+	// #107). It is never derived from an address. With ADMIN_GROUP set, every
+	// login writes it from the IdP's group claim; otherwise another admin sets
+	// it in the panel, or the operator with one command on the server.
 	IsAdmin bool `bun:"is_admin,notnull"`
 
 	CreatedAt time.Time `bun:"created_at,notnull"`

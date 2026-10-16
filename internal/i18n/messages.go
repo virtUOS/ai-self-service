@@ -190,6 +190,8 @@ var messages = map[string]map[Lang]string{
 	"admin.admins.self":         {DE: "Sie", EN: "you"},
 	"admin.admins.revoke":       {DE: "Entfernen", EN: "Remove"},
 	"admin.admins.none":         {DE: "Kein Konto hat Administratorrechte.", EN: "No account holds admin rights."},
+	"admin.admins.group":        {DE: "Administratoren sind die Mitglieder der Gruppe %s im Login-System. Die Mitgliedschaft wird bei jeder Anmeldung gelesen; diese Liste zeigt, wer bei der letzten Anmeldung Mitglied war.", EN: "Admins are the members of the group %s in the login system. Membership is read at each login, so this list shows who was a member when they last logged in."},
+	"admin.admins.group.none":   {DE: "Aus dieser Gruppe hat sich noch niemand angemeldet.", EN: "Nobody from this group has logged in yet."},
 	"admin.admins.promote":      {DE: "Jemanden zum Administrator machen", EN: "Make someone an admin"},
 	"admin.admins.promote.note": {DE: "Nur Personen, die sich schon einmal an diesem Portal angemeldet haben, können ausgewählt werden. Das Recht wird am Konto hinterlegt, nicht an der E-Mail-Adresse.", EN: "Only people who have logged in to this portal before can be chosen. The right is recorded on the account, not on the email address."},
 	"admin.admins.filter":       {DE: "Nach Name oder E-Mail filtern", EN: "Filter by name or email"},

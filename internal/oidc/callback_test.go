@@ -58,7 +58,7 @@ func TestCallbackReturnsTheIdentity(t *testing.T) {
 	if *res.UserInfo != want {
 		t.Errorf("user info = %+v, want %+v", *res.UserInfo, want)
 	}
-	// The session keeps the raw token for the logout hint and the role check.
+	// The session keeps the raw token for the logout hint.
 	if tok, err := p.verifier.Verify(context.Background(), res.IDToken); err != nil || tok.Subject != "sub-1" {
 		t.Errorf("id token does not verify as sub-1's: %v", err)
 	}
@@ -140,4 +140,54 @@ func TestCallbackRejectsAnUnknownCode(t *testing.T) {
 	if _, _, err := callback(p, state, "never-issued", cookie); err == nil {
 		t.Error("callback with an unknown code accepted")
 	}
+}
+
+// With admin rights in the login system, the callback reports whether the
+// token lists the group; without, it reports nothing, so the login leaves the
+// account's flag to the panel.
+func TestCallbackReportsAdminGroup(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		group  string
+		groups []any
+		want   *bool
+	}{
+		{"member", "ai-admin", []any{"staff", "ai-admin"}, ptr(true)},
+		{"not a member", "ai-admin", []any{"staff"}, ptr(false)},
+		{"no claim", "ai-admin", nil, ptr(false)},
+		{"panel manages admins", "", []any{"ai-admin"}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := oidctest.NewServer(t)
+			p := newTestProvider(t, m)
+			p.cfg.AdminGroup, p.cfg.AdminGroupClaim = tc.group, "groups"
+			state, cookie := startLogin(t, p)
+			claims := oidctest.Claims{Sub: "sub-1", Email: "a@uni-osnabrueck.de"}
+			if tc.groups != nil {
+				claims.Extra = map[string]any{"groups": tc.groups}
+			}
+			m.IssueCode("code-1", claims)
+
+			res, _, err := callback(p, state, "code-1", cookie)
+			if err != nil {
+				t.Fatalf("callback: %v", err)
+			}
+			got := res.UserInfo.IsAdmin
+			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
+				t.Errorf("IsAdmin = %v, want %v", fmtBool(got), fmtBool(tc.want))
+			}
+		})
+	}
+}
+
+func ptr(b bool) *bool { return &b }
+
+func fmtBool(b *bool) string {
+	if b == nil {
+		return "nil"
+	}
+	if *b {
+		return "true"
+	}
+	return "false"
 }
