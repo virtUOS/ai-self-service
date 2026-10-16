@@ -1,5 +1,5 @@
 # Build
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 
 # CGO stays off: the sqlite driver in use is uptrace/bun's sqliteshim, which
 # selects the pure-Go modernc.org/sqlite backend when cgo is unavailable. That
