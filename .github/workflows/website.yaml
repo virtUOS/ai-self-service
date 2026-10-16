@@ -1,8 +1,9 @@
 name: Website
 
 # The website and documentation (docs/, built with Zensical) are published
-# on GitHub Pages from main. A pull request only builds them, so a broken link
-# or template shows up before the merge. Settings -> Pages -> Source must be
+# on GitHub Pages from main, and only from main: there is no manual trigger,
+# which could deploy another branch. A pull request only builds them, so a
+# broken link or template shows up before the merge. Settings -> Pages -> Source must be
 # "GitHub Actions".
 on:
   push:
@@ -23,7 +24,6 @@ on:
       - web/static/apple-touch-icon.png
       - .github/workflows/website.yaml
       - Makefile
-  workflow_dispatch:
 
 permissions:
   contents: read
