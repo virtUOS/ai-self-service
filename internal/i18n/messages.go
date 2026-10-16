@@ -15,6 +15,20 @@ var messages = map[string]map[Lang]string{
 	"nav.account":   {DE: "Konto", EN: "Account"},
 	"privacy.title": {DE: "Datenschutzhinweise", EN: "Privacy notice"},
 	"lang.label":    {DE: "Sprache", EN: "Language"},
+	"nav.settings":  {DE: "Kontoeinstellungen", EN: "Account settings"},
+
+	// ── Account settings ────────────────────────────────────────────────
+	"account.title":      {DE: "Kontoeinstellungen", EN: "Account settings"},
+	"account.username":   {DE: "Benutzername", EN: "Username"},
+	"account.id":         {DE: "Benutzer-ID", EN: "User ID"},
+	"account.subject":    {DE: "OIDC-Subject", EN: "OIDC subject"},
+	"account.appearance": {DE: "Darstellung", EN: "Appearance"},
+	"account.theme":      {DE: "Farbschema", EN: "Theme"},
+	"account.system":     {DE: "Wie im System", EN: "System default"},
+	"account.light":      {DE: "Hell", EN: "Light"},
+	"account.dark":       {DE: "Dunkel", EN: "Dark"},
+	"account.save":       {DE: "Speichern", EN: "Save"},
+	"account.saved":      {DE: "Ihre Einstellungen wurden gespeichert.", EN: "Your settings have been saved."},
 
 	// ── Dashboard ───────────────────────────────────────────────────────
 	"dash.intro.title":     {DE: "Worum geht es?", EN: "What is this?"},

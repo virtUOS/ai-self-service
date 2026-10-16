@@ -65,10 +65,11 @@ func newRouter(cfg *config.Config, ui *handlers.UI, admin *handlers.Admin, csrf 
 		r.Get("/callback", ui.Callback)
 		r.Post("/logout", ui.Logout)
 		r.Get("/session/status", ui.SessionStatus)
-		r.Post("/lang", handlers.SetLanguage(cfg.CookieSecure))
 		r.Get("/privacy", ui.Privacy)
 
 		r.Get("/", ui.Dashboard)
+		r.Get("/account", ui.Account)
+		r.Post("/account", ui.SaveAccount)
 		r.Post("/key/generate", ui.GenerateKey)
 		r.Post("/key/extend", ui.ExtendKey)
 		r.Post("/key/delete", ui.DeleteKey)

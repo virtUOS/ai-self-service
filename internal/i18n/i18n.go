@@ -30,7 +30,7 @@ const (
 	CookieName = "lang"
 )
 
-// Supported lists the languages in the order the switcher shows them.
+// Supported lists the languages in the order the account settings offer them.
 var Supported = []Lang{DE, EN}
 
 // Valid reports whether l is a language the portal actually has messages for.
@@ -43,7 +43,8 @@ func Valid(l Lang) bool {
 	return false
 }
 
-// Name is the language's own endonym, for the switcher.
+// Name is the language's own endonym, for the account settings and the
+// privacy notice's tabs.
 func (l Lang) Name() string {
 	switch l {
 	case EN:

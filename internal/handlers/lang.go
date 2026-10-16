@@ -3,8 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"html/template"
-	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"unicode"
@@ -66,61 +64,19 @@ func langFuncs() template.FuncMap {
 		// fmtPct renders a window's percentage, "<1%" for a touched window
 		// that rounds to zero.
 		"fmtPct": FormatPct,
+		// initial is the letter in the account menu's avatar.
+		"initial": initial,
 	}
 }
 
-// SetLanguage handles POST /lang, recording an explicit choice and returning
-// the user to where they came from.
-//
-// A form post rather than a link so it is covered by CSRF like every other
-// state change, and so the choice cannot be set by a crafted URL.
-func SetLanguage(secure bool) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// The switcher always sends the current page, so a missing value
-		// just returns home, but one that is not a path on this site only
-		// comes from a crafted request and is refused before anything is set.
-		dest := r.FormValue("return_to")
-		if dest == "" {
-			dest = "/"
-		} else if !isLocalPath(dest) {
-			http.Error(w, "invalid return_to", http.StatusBadRequest)
-			return
+// initial is the first letter of name, upper-cased, for the avatar that
+// stands in for the username on a narrow screen. It skips leading spaces and
+// punctuation, and falls back to "?" for a name with no letter or digit.
+func initial(name string) string {
+	for _, r := range name {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return string(unicode.ToUpper(r))
 		}
-
-		lang := i18n.Lang(r.FormValue("lang"))
-		if !i18n.Valid(lang) {
-			lang = i18n.Default
-		}
-		http.SetCookie(w, &http.Cookie{
-			Name:     i18n.CookieName,
-			Value:    string(lang),
-			Path:     "/",
-			MaxAge:   365 * 24 * 60 * 60,
-			HttpOnly: false, // read by nothing, but harmless and survives JS-less use
-			Secure:   secure,
-			SameSite: http.SameSiteLaxMode,
-		})
-
-		http.Redirect(w, r, dest, http.StatusFound)
 	}
-}
-
-// isLocalPath reports whether dest is a path on this site, so the language
-// switch cannot become an open redirect.
-//
-// Checking for a leading "/" alone is not enough: browsers read "\" as "/"
-// and drop tabs and newlines, so "/\evil.example" and "/\t/evil.example"
-// both reach "//evil.example". Those characters never occur in a path the
-// switcher sends, so any value carrying them is refused outright.
-func isLocalPath(dest string) bool {
-	if strings.ContainsFunc(dest, func(r rune) bool {
-		return r == '\\' || unicode.IsControl(r)
-	}) {
-		return false
-	}
-	if !strings.HasPrefix(dest, "/") || strings.HasPrefix(dest, "//") {
-		return false
-	}
-	u, err := url.Parse(dest)
-	return err == nil && u.Scheme == "" && u.Host == ""
+	return "?"
 }

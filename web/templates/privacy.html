@@ -1,18 +1,27 @@
 <!DOCTYPE html>
-<html lang="{{.Lang}}">
+<html lang="{{.Lang}}"{{with .Theme}} data-theme="{{.}}"{{end}}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{T .Lang "privacy.title"}} · {{T .Lang "app.title"}}</title>
-{{template "head-assets"}}
+{{template "head-assets" .}}
 </head>
 <body>
 
 {{template "header" .}}
 
 <main>
-  <div class="card notice">
-    {{.Notice}}
+  <div class="card">
+    {{if .Tabs}}
+    <nav class="tabs" aria-label="{{T .Lang "lang.label"}}">
+      {{- $cur := .NoticeLang}}{{range .Tabs}}
+      <a class="tab-btn{{if eq . $cur}} active{{end}}" href="/privacy?lang={{.}}" lang="{{.}}"{{if eq . $cur}} aria-current="page"{{end}}>{{.Name}}</a>
+      {{- end}}
+    </nav>
+    {{end}}
+    <div class="notice" lang="{{.NoticeLang}}">
+      {{.Notice}}
+    </div>
   </div>
 </main>
 

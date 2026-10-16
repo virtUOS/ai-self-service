@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="{{.Lang}}"{{with .Theme}} data-theme="{{.}}"{{end}}>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{T .Lang "account.title"}} · {{T .Lang "app.title"}}</title>
+{{template "head-assets" .}}
+</head>
+<body>
+
+{{template "header" .}}
+
+<main>
+
+  {{if .Saved}}
+  <div class="alert alert-success" role="status">{{T .Lang "account.saved"}}</div>
+  {{end}}
+
+  <div class="card">
+    <h2>{{T .Lang "nav.account"}}</h2>
+    <dl class="info-grid">
+      <dt>{{T .Lang "account.username"}}</dt> <dd>{{.User.Name}}</dd>
+      <dt>{{T .Lang "dash.email"}}</dt>       <dd>{{.User.Email}}</dd>
+      <dt>{{T .Lang "account.id"}}</dt>       <dd class="mono">{{.User.ID}}</dd>
+      <dt>{{T .Lang "account.subject"}}</dt>  <dd class="mono">{{.User.OIDCSub}}</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2>{{T .Lang "account.appearance"}}</h2>
+    {{/* A plain form post: the choice is rendered by the server, so the
+         page needs no script to apply it. */}}
+    <form method="POST" action="/account">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="setting-lang">{{T .Lang "lang.label"}}</label>
+          <select id="setting-lang" name="lang">
+            <option value=""{{if not .LangPref}} selected{{end}}>{{T .Lang "account.system"}}</option>
+            {{- $pref := .LangPref}}{{range .Langs}}
+            <option value="{{.}}" lang="{{.}}"{{if eq . $pref}} selected{{end}}>{{.Name}}</option>
+            {{- end}}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="setting-theme">{{T .Lang "account.theme"}}</label>
+          <select id="setting-theme" name="theme">
+            <option value=""{{if not .Theme}} selected{{end}}>{{T .Lang "account.system"}}</option>
+            {{- $theme := .Theme}}{{range .Themes}}
+            <option value="{{.}}"{{if eq . $theme}} selected{{end}}>{{if eq . "light"}}{{T $.Lang "account.light"}}{{else}}{{T $.Lang "account.dark"}}{{end}}</option>
+            {{- end}}
+          </select>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button type="submit" class="btn btn-primary">{{T .Lang "account.save"}}</button>
+      </div>
+    </form>
+  </div>
+
+</main>
+
+{{template "footer" .}}
+
+</body>
+</html>

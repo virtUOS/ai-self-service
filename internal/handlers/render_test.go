@@ -30,9 +30,9 @@ func TestDashboardTemplateRenders(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 	out := buf.String()
-	// language switcher + logout + extend + regenerate + delete.
-	if n := strings.Count(out, `name="csrf_token" value="TOK123"`); n != 5 {
-		t.Errorf("csrf fields rendered = %d, want 5", n)
+	// logout + extend + regenerate + delete.
+	if n := strings.Count(out, `name="csrf_token" value="TOK123"`); n != 4 {
+		t.Errorf("csrf fields rendered = %d, want 4", n)
 	}
 	if !strings.Contains(out, "sk-brand-new") {
 		t.Error("new key not rendered")
@@ -141,9 +141,9 @@ func TestDashboardTemplateNoKeyBranch(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 	out := buf.String()
-	// language switcher + logout + generate
-	if n := strings.Count(out, `name="csrf_token" value="TOK789"`); n != 3 {
-		t.Errorf("csrf fields rendered = %d, want 3", n)
+	// logout + generate
+	if n := strings.Count(out, `name="csrf_token" value="TOK789"`); n != 2 {
+		t.Errorf("csrf fields rendered = %d, want 2", n)
 	}
 	if forms, toks := strings.Count(out, "<form"), strings.Count(out, `name="csrf_token"`); forms != toks {
 		t.Errorf("%d forms but %d csrf fields", forms, toks)
@@ -169,10 +169,10 @@ func TestAdminTemplateRenders(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 	out := buf.String()
-	// language switcher + create form + user profile form + one delete form
-	// (the default profile hides its own delete) + the Admins tab's grant form
-	if n := strings.Count(out, `name="csrf_token" value="TOK456"`); n != 5 {
-		t.Errorf("csrf fields rendered = %d, want 5", n)
+	// create form + user profile form + one delete form (the default profile
+	// hides its own delete) + the Admins tab's grant form
+	if n := strings.Count(out, `name="csrf_token" value="TOK456"`); n != 4 {
+		t.Errorf("csrf fields rendered = %d, want 4", n)
 	}
 	// Quotas must render as spend in the deployment's own unit.
 	// Several windows must all appear, not just the first.
@@ -405,7 +405,6 @@ func TestAdminPageFullyGerman(t *testing.T) {
 	var buf bytes.Buffer
 	err := parseAdminTemplate().Execute(&buf, adminData{
 		Lang:            i18n.DE,
-		Langs:           i18n.Supported,
 		DefaultKeyDays:  90,
 		AvailableModels: []string{"Qwen/Qwen3.8-27B-FP8"},
 		Profiles:        []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
@@ -452,9 +451,8 @@ func TestAdminPageFullyGerman(t *testing.T) {
 func TestDashboardPageFullyGerman(t *testing.T) {
 	var buf bytes.Buffer
 	err := parseDashboardTemplate().Execute(&buf, dashboardData{
-		Lang:  i18n.DE,
-		Langs: i18n.Supported,
-		User:  &database.User{Name: "T", Email: "t@x.de"},
+		Lang: i18n.DE,
+		User: &database.User{Name: "T", Email: "t@x.de"},
 		APIKey: &database.APIKey{
 			KeyPrefix: "sk-a", ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
 		},
@@ -534,13 +532,19 @@ func TestAdminTableCanScroll(t *testing.T) {
 
 // The browser draws its own controls (date picker, spinners, checkboxes) in
 // the scheme the page declares. Without the declaration they stay light on
-// the dark theme.
+// the dark theme. The page follows the system unless a theme was chosen in
+// the account settings, which pins the scheme, and the palette's
+// light-dark() pairs, with it.
 func TestStyleDeclaresColorScheme(t *testing.T) {
 	css, err := fs.ReadFile(web.StaticFS, "style.css")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"color-scheme: light;", "color-scheme: dark;"} {
+	for _, want := range []string{
+		"color-scheme: light dark;",
+		":root[data-theme=light] { color-scheme: light; }",
+		":root[data-theme=dark] { color-scheme: dark; }",
+	} {
 		if !strings.Contains(string(css), want) {
 			t.Errorf("style.css does not declare %q", want)
 		}
@@ -774,7 +778,6 @@ func TestDashboardDrawsABarPerWindow(t *testing.T) {
 	var buf bytes.Buffer
 	err := parseDashboardTemplate().Execute(&buf, dashboardData{
 		Lang:       i18n.EN,
-		Langs:      i18n.Supported,
 		User:       &database.User{Email: "a@b.c"},
 		APIKey:     &database.APIKey{KeyPrefix: "sk-x", ExpiresAt: time.Now().Add(24 * time.Hour)},
 		BudgetUnit: "$",
@@ -813,7 +816,6 @@ func TestDashboardFallsBackToOneBar(t *testing.T) {
 	var buf bytes.Buffer
 	err := parseDashboardTemplate().Execute(&buf, dashboardData{
 		Lang:       i18n.EN,
-		Langs:      i18n.Supported,
 		User:       &database.User{Email: "a@b.c"},
 		APIKey:     &database.APIKey{KeyPrefix: "sk-x", ExpiresAt: time.Now().Add(24 * time.Hour)},
 		BudgetUnit: "$",

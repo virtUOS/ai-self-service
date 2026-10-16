@@ -18,8 +18,9 @@ func stylesheet(t *testing.T) string {
 }
 
 // The dashboard is long enough — account, key, usage, models — that the header
-// scrolls out of reach. It holds the language switch, the admin link and
-// logout, so it follows the page down rather than making users scroll back up.
+// scrolls out of reach. It holds the account menu, with the admin link, the
+// settings and logout, so it follows the page down rather than making users
+// scroll back up.
 func TestHeaderSticksToTheTop(t *testing.T) {
 	css := stylesheet(t)
 
@@ -38,9 +39,9 @@ func TestHeaderSticksToTheTop(t *testing.T) {
 	}
 }
 
-// The header used to wrap onto two or three lines on a phone. Everything but
-// the language switch now lives in the account menu, so it keeps one row of
-// fixed height, and a long username is cut instead of forcing a wrap.
+// The header used to wrap onto two or three lines on a phone. Everything now
+// lives in the account menu, so it keeps one row of fixed height: a long
+// username is cut, and on a phone only the avatar is left.
 func TestHeaderStaysOneRowOnNarrowScreens(t *testing.T) {
 	css := stylesheet(t)
 
@@ -66,6 +67,19 @@ func TestHeaderStaysOneRowOnNarrowScreens(t *testing.T) {
 	}
 	if name := css[k : k+strings.Index(css[k:], "}")]; !strings.Contains(name, "text-overflow: ellipsis") {
 		t.Error("a long username is not truncated")
+	}
+	// On a phone the avatar stands in for the name.
+	if !strings.Contains(mobile, ".account-name, .account-caret { display: none; }") {
+		t.Error("the username still takes room in the header on a phone")
+	}
+	// The admin label cuts itself rather than running under the account menu.
+	b := strings.Index(css, ".brand-page {")
+	if b < 0 {
+		t.Fatal("no .brand-page rule")
+	}
+	if label := css[b : b+strings.Index(css[b:], "}")]; !strings.Contains(label, "text-overflow: ellipsis") ||
+		!strings.Contains(label, "min-width: 0") {
+		t.Error("the admin label cannot shrink, so it overlaps the account menu")
 	}
 }
 
