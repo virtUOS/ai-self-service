@@ -116,10 +116,6 @@ within one sync run and the monitoring dashboard shows it (see
 the next run unmarks them all. The same run asks the gateway about every marked key, one request
 each, so this costs as many requests as there are keys.
 
-**After upgrading** to the version that introduced the sync, every existing
-key counts as out of date once, so the first run updates all keys. With many
-users this takes a while; the admin panel shows the progress.
-
 **Changes made directly in the gateway** are invisible to Keyosk. To undo
 them, mark every key as out of date:
 
