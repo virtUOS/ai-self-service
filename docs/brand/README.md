@@ -7,11 +7,11 @@ Keyosk is written in lowercase, **keyosk**, when it is set as the wordmark, and
 
 | File | Use |
 | --- | --- |
-| `web/static/brand/keyosk-logo-{light,dark}.svg` | Mark and wordmark, transparent background |
-| `web/static/brand/keyosk-mark-{light,dark}.svg` | Mark alone |
+| `docs/brand/keyosk-logo-{light,dark}.svg` | Mark and wordmark, transparent background |
+| `docs/brand/keyosk-mark-{light,dark}.svg` | Mark alone |
 | `web/static/favicon.svg`, `favicon.ico`, `apple-touch-icon.png` | Browser and home-screen icons. The SVG follows the OS colour scheme |
 | `docs/brand/readme-banner-{light,dark}.svg` | Banner at the top of the README |
-| `website/` | The website and documentation (Zensical). Its theme is `website/docs/stylesheets/extra.css`; the logo, favicon and fonts are copied in from `web/static` by `make website-assets`, so change them there |
+| `docs/` | The website and documentation (Zensical). Its theme is `docs/content/stylesheets/extra.css`, and the header draws the mark inline (`docs/overrides/partials/logo.html`). The favicon and fonts are copied in from `web/static` by `make website-assets`, so change them there |
 | `docs/brand/social-preview.{svg,png}` | GitHub social preview (1280×640). Upload the PNG under *Settings → Social preview*; it is not picked up from the repository |
 
 The wordmark in the SVG files is converted to outlines, so they need no font.

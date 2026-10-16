@@ -55,7 +55,7 @@ Everything else is in the documentation:
 - [Operating Keyosk](https://virtuos.github.io/keyosk/operations/): usage reporting, expiry emails, metrics, routes
 - [Upgrading from ai-self-service](https://virtuos.github.io/keyosk/upgrading/)
 
-The website is built from [`website/`](website/) with
+The website is built from [`docs/`](docs/) with
 [Zensical](https://zensical.org/); `make website-serve` previews it locally.
 
 ## Technology stack

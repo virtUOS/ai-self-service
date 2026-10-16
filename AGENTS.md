@@ -15,14 +15,13 @@ instructions or scripts that assume only one of them.
 
 ## The website
 
-The website and documentation live in `website/` (Zensical, config in
-`website/zensical.toml`, pages in `website/docs/`) and are published on GitHub
-Pages by `.github/workflows/website.yaml`. `make website` builds them with
-`--strict`, so a broken link fails; `make website-serve` previews them. Neither
-is part of `make check`, which needs no Python. Edit the pages in
-`website/docs/`; the logo, favicon and fonts are copied in from `web/static`
-and are not committed under `website/`. Don't point the site at `docs/`, which
-holds internal plans.
+The website and documentation live in `docs/` (Zensical, config in
+`docs/zensical.toml`, pages in `docs/content/`) and are published on GitHub
+Pages by `.github/workflows/website.yaml`. Only `docs/content/` is published;
+`docs/brand/` holds the brand files and their guide. `make website` builds the
+site with `--strict`, so a broken link fails; `make website-serve` previews it.
+Neither is part of `make check`, which needs no Python. The fonts and icons are
+copied in from `web/static` and are not committed under `docs/content/`.
 
 ## Running the app
 
