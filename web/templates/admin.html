@@ -10,7 +10,7 @@
 
 {{template "header" .}}
 
-<main>
+<main class="main-wide">
 
   {{if .Flash}}
   <div class="alert alert-info">{{.Flash}}</div>
@@ -25,9 +25,7 @@
     <details style="margin-top:.5rem">
       <summary>{{T $.Lang "admin.sync.failures"}}</summary>
       <div class="table-wrap">
-        {{/* Unlike the other tables this one may wrap: the error text is long, and
-             max-content would push it off the side. */}}
-        <table style="min-width:0">
+        <table>
           <thead>
             <tr>
               <th>{{T $.Lang "admin.col.email"}}</th>
@@ -39,10 +37,10 @@
           <tbody>
             {{range .Failures}}
             <tr>
-              <td style="white-space:nowrap">{{.Email}}</td>
-              <td style="white-space:nowrap"><code>{{.KeyPrefix}}…</code></td>
-              <td style="white-space:normal;word-break:break-word;min-width:16rem">{{.Error}}</td>
-              <td style="white-space:nowrap">{{.FailedAt}}</td>
+              <td class="nowrap">{{.Email}}</td>
+              <td class="nowrap"><code>{{.KeyPrefix}}…</code></td>
+              <td class="cell-prose">{{.Error}}</td>
+              <td class="nowrap">{{.FailedAt}}</td>
             </tr>
             {{end}}
           </tbody>
@@ -65,20 +63,22 @@
     <!-- ── Profiles tab ─────────────────────────────────── -->
     <div id="tab-profiles" class="tab-panel active">
 
-      <h2 style="margin-bottom:1.25rem">{{T .Lang "admin.profiles"}}</h2>
+      <div class="section-head">
+        <h2>{{T .Lang "admin.profiles"}}</h2>
+        <button type="button" class="btn btn-sm btn-primary" onclick="openNewProfile()">+ {{T .Lang "admin.form.new"}}</button>
+      </div>
 
-      <div class="table-wrap" style="margin-bottom:2rem">
-        <table>
+      <div class="table-wrap">
+        <table class="stack-lg">
           <thead>
             <tr>
               <th>{{T .Lang "admin.col.name"}}</th>
               <th>{{T .Lang "admin.col.description"}}</th>
               <th>{{T .Lang "admin.col.models"}}</th>
-              <th>TPM <button type="button" class="help" data-help="{{T $.Lang "help.tpm"}}">?</button></th>
-              <th>RPM <button type="button" class="help" data-help="{{T $.Lang "help.rpm"}}">?</button></th>
+              <th>TPM <button type="button" class="help" data-help="{{T $.Lang "help.tpm"}}">?</button>
+                / RPM <button type="button" class="help" data-help="{{T $.Lang "help.rpm"}}">?</button></th>
               <th>{{T .Lang "admin.col.expiry"}} <button type="button" class="help" data-help="{{T $.Lang "help.expiry"}}">?</button></th>
               <th>{{T .Lang "admin.col.quota"}} <button type="button" class="help" data-help="{{T $.Lang "help.quota"}}">?</button></th>
-              <th>{{T .Lang "admin.col.default"}}</th>
               <th></th>
             </tr>
           </thead>
@@ -87,26 +87,34 @@
             <tr>
               <td>
                 <strong>{{.Name}}</strong>
+                {{if .IsDefault}}<span class="badge badge-ok">{{T $.Lang "admin.default"}}</span>{{end}}
                 {{with index $.LimitSync.PendingByProfile .ID}}<br><span class="badge badge-warn" title="{{T $.Lang "admin.sync.badge.help"}}">{{.}} {{T $.Lang "admin.sync.badge"}}</span>{{end}}
               </td>
-              <td>{{.Description}}</td>
-              <td>
+              <td class="cell-prose" data-label="{{T $.Lang "admin.col.description"}}">{{.Description}}</td>
+              <td data-label="{{T $.Lang "admin.col.models"}}">
                 {{if .Models}}
                   {{range $i, $m := .Models}}{{if $i}}, {{end}}{{$m}}{{end}}
                 {{else}}
                   <em class="text-faint">{{T $.Lang "admin.all"}}</em>
                 {{end}}
               </td>
-              <td>{{if .TPMLimit}}{{.TPMLimit}}{{else}}<em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>{{end}}</td>
-              <td>{{if .RPMLimit}}{{.RPMLimit}}{{else}}<em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>{{end}}</td>
-              <td>{{if .KeyDurationDays}}{{.KeyDurationDays}} days{{else}}<em class="text-faint">{{$.DefaultKeyDays}} days (server default)</em>{{end}}</td>
-              <td>
+              <td class="nowrap" data-label="TPM / RPM">
+                {{if or .TPMLimit .RPMLimit}}
+                  {{if .TPMLimit}}{{.TPMLimit}}{{else}}<em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>{{end}} <span class="text-muted">TPM</span><br>
+                  {{if .RPMLimit}}{{.RPMLimit}}{{else}}<em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>{{end}} <span class="text-muted">RPM</span>
+                {{else}}
+                  <em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>
+                {{end}}
+              </td>
+              <td class="nowrap" data-label="{{T $.Lang "admin.col.expiry"}}">{{if .KeyDurationDays}}{{.KeyDurationDays}} days{{else}}<em class="text-faint">{{$.DefaultKeyDays}} days (server default)</em>{{end}}</td>
+              <td class="nowrap" data-label="{{T $.Lang "admin.col.quota"}}">
                 {{if .Quotas}}{{range $i, $q := .Quotas}}{{if $i}}<br>{{end}}{{fmtBudget $q.Budget $.BudgetUnit}} {{fmtPeriod $q.Period}}{{end}}{{else}}<em class="text-faint">{{T $.Lang "admin.form.unlimited"}}</em>{{end}}
               </td>
-              <td>{{if .IsDefault}}✓{{end}}</td>
-              <td>
-                <div style="display:flex;gap:.4rem">
-                  <button class="btn btn-sm btn-secondary"
+              <td class="cell-menu">
+                <button type="button" class="row-menu-btn" popovertarget="profile-menu-{{.ID}}"
+                        aria-label="{{T $.Lang "admin.actions"}}: {{.Name}}">⋮</button>
+                <div id="profile-menu-{{.ID}}" class="row-menu" popover>
+                  <button type="button"
                           onclick="openEditProfile({{.ID}}, {{.Name}}, {{.Description}},
                             '{{range $i,$m := .Models}}{{if $i}},{{end}}{{$m}}{{end}}',
                             '{{if .TPMLimit}}{{.TPMLimit}}{{end}}',
@@ -114,96 +122,104 @@
                             '{{if .KeyDurationDays}}{{.KeyDurationDays}}{{end}}',
                             {{quotaJSON .Quotas}},
                             {{.IsDefault}})">{{T $.Lang "admin.edit"}}</button>
-                  {{if not .IsDefault}}
+                  <hr>
+                  {{if .IsDefault}}
+                  <button type="button" class="menu-danger" disabled>
+                    {{T $.Lang "admin.delete"}}<span class="row-menu-note">{{T $.Lang "admin.delete.default"}}</span>
+                  </button>
+                  {{else}}
                   <form method="POST" action="/admin/profiles/{{.ID}}/delete"
                         onsubmit="return confirm('Delete profile {{.Name}}?')">
                     <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                    <button class="btn btn-sm btn-danger">{{T $.Lang "admin.delete"}}</button>
+                    <button class="menu-danger">{{T $.Lang "admin.delete"}}</button>
                   </form>
                   {{end}}
                 </div>
               </td>
             </tr>
             {{else}}
-            <tr><td colspan="9" class="text-faint" style="text-align:center">{{T .Lang "admin.noprofiles"}}</td></tr>
+            <tr><td colspan="7" class="text-faint" style="text-align:center">{{T .Lang "admin.noprofiles"}}</td></tr>
             {{end}}
           </tbody>
         </table>
       </div>
 
-      <!-- Create / Edit form -->
-      <h3 id="profile-form-title">{{T .Lang "admin.form.new"}}</h3>
-      <form id="profile-form" method="POST" action="/admin/profiles" style="max-width:540px">
-        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-        <input type="hidden" name="_id" id="pf-id" value="">
+      {{/* One dialog for creating and editing: "New profile" opens it empty,
+           a row's Edit button fills it with that profile. */}}
+      <dialog id="profile-dialog" class="dialog" aria-labelledby="profile-form-title">
+        <h3 id="profile-form-title">{{T .Lang "admin.form.new"}}</h3>
+        <form id="profile-form" method="POST" action="/admin/profiles">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <input type="hidden" name="_id" id="pf-id" value="">
 
-        <div class="form-group">
-          <label for="pf-name">{{T .Lang "admin.col.name"}} *</label>
-          <input type="text" id="pf-name" name="name" required>
-        </div>
-        <div class="form-group">
-          <label for="pf-desc">{{T .Lang "admin.col.description"}}</label>
-          <textarea id="pf-desc" name="description" rows="2"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="pf-models">{{T .Lang "admin.form.models"}} <button type="button" class="help" data-help="{{T $.Lang "help.models"}}">?</button></label>
-          {{if .AvailableModels}}
-          <div class="model-picker" id="pf-model-picker">
-            {{range .AvailableModels}}
-            <label class="model-option">
-              <input type="checkbox" name="model" value="{{.}}"> <span>{{.}}</span>
-            </label>
+          <div class="form-group">
+            <label for="pf-name">{{T .Lang "admin.col.name"}} *</label>
+            <input type="text" id="pf-name" name="name" required>
+          </div>
+          <div class="form-group">
+            <label for="pf-desc">{{T .Lang "admin.col.description"}}</label>
+            <textarea id="pf-desc" name="description" rows="2"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="pf-models">{{T .Lang "admin.form.models"}} <button type="button" class="help" data-help="{{T $.Lang "help.models"}}">?</button></label>
+            {{if .AvailableModels}}
+            <div class="model-picker" id="pf-model-picker">
+              {{range .AvailableModels}}
+              <label class="model-option">
+                <input type="checkbox" name="model" value="{{.}}"> <span>{{.}}</span>
+              </label>
+              {{end}}
+            </div>
+            <div class="form-hint">
+              Nothing selected = all models allowed. Only models the gateway
+              actually serves are listed, so a typo cannot produce a key that
+              works for nothing.
+            </div>
+            {{else}}
+            <input type="text" id="pf-models" name="models" placeholder="Qwen/Qwen3.8-27B-FP8, …">
+            <div class="form-hint">
+              Comma-separated model IDs. Leave blank to allow all models.
+              (The gateway's model list could not be loaded.)
+            </div>
             {{end}}
           </div>
-          <div class="form-hint">
-            Nothing selected = all models allowed. Only models the gateway
-            actually serves are listed, so a typo cannot produce a key that
-            works for nothing.
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="pf-tpm">{{T .Lang "admin.form.tpm"}} <button type="button" class="help" data-help="{{T .Lang "help.tpm"}}">?</button></label>
+              <input type="number" id="pf-tpm" name="tpm_limit" min="0" placeholder="unlimited">
+            </div>
+            <div class="form-group">
+              <label for="pf-rpm">{{T .Lang "admin.form.rpm"}} <button type="button" class="help" data-help="{{T .Lang "help.rpm"}}">?</button></label>
+              <input type="number" id="pf-rpm" name="rpm_limit" min="0" placeholder="unlimited">
+            </div>
+            <div class="form-group">
+              <label for="pf-expiry">{{T .Lang "admin.form.validity"}} <button type="button" class="help" data-help="{{T $.Lang "help.validity"}}">?</button></label>
+              <input type="number" id="pf-expiry" name="key_duration_days" min="0" placeholder="server default">
+              <div class="form-hint">{{T .Lang "admin.form.validity.hint"}}</div>
+            </div>
+            <div class="form-group span-all">
+              <label>{{T .Lang "admin.form.quota"}} <button type="button" class="help" data-help="{{T $.Lang "help.usagelimit"}}">?</button></label>
+              <div id="pf-quotas"></div>
+              <button type="button" class="btn btn-sm btn-secondary" onclick="addQuotaRow()">
+                + {{T .Lang "admin.form.quota.add"}}
+              </button>
+              <div class="form-hint">{{T .Lang "admin.form.quota.hint"}} {{T .Lang "admin.form.quota.unit"}} {{.BudgetUnit}}</div>
+            </div>
           </div>
-          {{else}}
-          <input type="text" id="pf-models" name="models" placeholder="Qwen/Qwen3.8-27B-FP8, …">
-          <div class="form-hint">
-            Comma-separated model IDs. Leave blank to allow all models.
-            (The gateway's model list could not be loaded.)
-          </div>
-          {{end}}
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
           <div class="form-group">
-            <label for="pf-tpm">{{T .Lang "admin.form.tpm"}} <button type="button" class="help" data-help="{{T .Lang "help.tpm"}}">?</button></label>
-            <input type="number" id="pf-tpm" name="tpm_limit" min="0" placeholder="unlimited">
+            <div class="checkbox-row">
+              <input type="checkbox" id="pf-default" name="is_default">
+              <input type="hidden" id="pf-default-keep" name="is_default" value="on" disabled>
+              <label for="pf-default" style="margin:0">{{T .Lang "admin.form.default"}} <button type="button" class="help" data-help="{{T $.Lang "help.defaultprofile"}}">?</button></label>
+            </div>
+            <div class="form-hint" id="pf-default-hint" hidden>{{T .Lang "admin.form.default.hint"}}</div>
           </div>
-          <div class="form-group">
-            <label for="pf-rpm">{{T .Lang "admin.form.rpm"}} <button type="button" class="help" data-help="{{T .Lang "help.rpm"}}">?</button></label>
-            <input type="number" id="pf-rpm" name="rpm_limit" min="0" placeholder="unlimited">
+          <div class="btn-row">
+            <button type="submit" class="btn btn-primary" id="profile-submit-btn">{{T .Lang "admin.form.create"}}</button>
+            <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close()">{{T .Lang "admin.cancel"}}</button>
           </div>
-          <div class="form-group">
-            <label for="pf-expiry">{{T .Lang "admin.form.validity"}} <button type="button" class="help" data-help="{{T $.Lang "help.validity"}}">?</button></label>
-            <input type="number" id="pf-expiry" name="key_duration_days" min="0" placeholder="server default">
-            <div class="form-hint">{{T .Lang "admin.form.validity.hint"}}</div>
-          </div>
-          <div class="form-group" style="grid-column:1/-1">
-            <label>{{T .Lang "admin.form.quota"}} <button type="button" class="help" data-help="{{T $.Lang "help.usagelimit"}}">?</button></label>
-            <div id="pf-quotas"></div>
-            <button type="button" class="btn btn-sm btn-secondary" onclick="addQuotaRow()">
-              + {{T .Lang "admin.form.quota.add"}}
-            </button>
-            <div class="form-hint">{{T .Lang "admin.form.quota.hint"}} {{T .Lang "admin.form.quota.unit"}} {{.BudgetUnit}}</div>
-          </div>
-        </div>
-        <div class="form-group">
-          <div class="checkbox-row">
-            <input type="checkbox" id="pf-default" name="is_default">
-            <input type="hidden" id="pf-default-keep" name="is_default" value="on" disabled>
-            <label for="pf-default" style="margin:0">{{T .Lang "admin.form.default"}} <button type="button" class="help" data-help="{{T $.Lang "help.defaultprofile"}}">?</button></label>
-          </div>
-          <div class="form-hint" id="pf-default-hint" hidden>{{T .Lang "admin.form.default.hint"}}</div>
-        </div>
-        <div class="btn-row">
-          <button type="submit" class="btn btn-primary" id="profile-submit-btn">{{T .Lang "admin.form.create"}}</button>
-          <button type="button" class="btn btn-secondary" onclick="resetProfileForm()">{{T .Lang "admin.reset"}}</button>
-        </div>
-      </form>
+        </form>
+      </dialog>
     </div>
 
     <!-- ── Users tab ──────────────────────────────────────── -->
@@ -212,7 +228,7 @@
       <h2 style="margin-bottom:1.25rem">{{T .Lang "admin.users"}}</h2>
 
       <div class="table-wrap">
-        <table>
+        <table class="stack-md">
           <thead>
             <tr>
               <th>{{T .Lang "admin.col.name"}}</th>
@@ -220,89 +236,133 @@
               <th>{{T .Lang "admin.col.oidcsub"}}</th>
               <th>{{T .Lang "admin.col.profile"}}</th>
               <th>{{T .Lang "admin.col.apikey"}}</th>
-              <th>{{T .Lang "admin.col.changeprofile"}}</th>
-              <th>{{T .Lang "admin.col.until"}}</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
+            {{/* A user without a profile of their own follows whichever
+                 profile is the default, now and after it changes. That is
+                 not the same as being pinned to the profile that is the
+                 default today, so the two are labelled apart. */}}
+            {{$defaultName := ""}}
+            {{range .Profiles}}{{if .IsDefault}}{{$defaultName = .Name}}{{end}}{{end}}
             {{range .Users}}
-            {{$pid := .ProfileIDVal}}
             {{$after := .AfterExpiryID}}
             <tr>
               <td>{{.Name}}</td>
-              <td>{{.Email}}</td>
+              <td class="nowrap" data-label="{{T $.Lang "admin.col.email"}}">{{.Email}}</td>
               {{/* The subject identifies the person durably, where an address
                    can be reassigned. Shown so an operator can tell accounts
                    apart without querying the database. */}}
-              <td><button type="button" class="model-copy" data-model="{{.OIDCSub}}"
-                          onclick="copyModel(this)" title="{{T $.Lang "admin.col.oidcsub.help"}}"><code>{{.OIDCSub}}</code></button></td>
-              <td>
-                {{if .Profile}}{{.Profile.Name}}{{else}}<em class="text-faint">{{T $.Lang "admin.default"}}</em>{{end}}
+              <td data-label="{{T $.Lang "admin.col.oidcsub"}}">{{.OIDCSub}}</td>
+              <td data-label="{{T $.Lang "admin.col.profile"}}">
+                {{if .Profile}}{{.Profile.Name}}
+                {{else}}{{$defaultName}}<span class="cell-note">{{T $.Lang "admin.default.follows"}}</span>{{end}}
+                {{/* A deadline and what follows it, so the row says the whole
+                     assignment without opening the dialog. */}}
+                {{if .ExpiresAt}}
+                {{$afterName := ""}}
+                {{range $.Profiles}}{{if eq .ID $after}}{{$afterName = .Name}}{{end}}{{end}}
+                <span class="cell-note">
+                  {{printf (T $.Lang "admin.user.until") .ExpiresAt}},
+                  {{if .RevokeAtExpiry}}{{T $.Lang "admin.user.thenrevoke"}}
+                  {{else if $afterName}}{{printf (T $.Lang "admin.user.then") $afterName}}
+                  {{else}}{{T $.Lang "admin.user.thendefault"}}{{end}}
+                </span>
+                {{end}}
               </td>
-              <td>
+              <td data-label="{{T $.Lang "admin.col.apikey"}}">
                 {{if .HasKey}}
-                  <code>{{.KeyPrefix}}…</code>
+                  <code class="nowrap">{{.KeyPrefix}}…</code>
                   <span class="badge {{if .KeyExpired}}badge-expired{{else}}badge-ok{{end}}">
                     {{if .KeyExpired}}expired{{else}}{{.KeyExpires}}{{end}}
                   </span>
                   {{if .KeyMissingSince}}
                   <span class="badge badge-warn" title="{{T $.Lang "admin.key.missing.help"}}">{{T $.Lang "admin.key.missing"}} {{.KeyMissingSince}}</span>
                   {{end}}
-                  <form method="POST" action="/admin/users/{{.ID}}/key/revoke"
-                        style="display:inline"
-                        onsubmit="return confirm('Revoke the API key for {{.Email}}? They lose access immediately.')">
-                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                    <button class="btn btn-sm btn-danger">{{T $.Lang "admin.revoke"}}</button>
-                  </form>
                 {{else}}
                   <em class="text-faint">{{T $.Lang "admin.none"}}</em>
                 {{end}}
               </td>
-              <td>
-                <form method="POST" action="/admin/users/{{.ID}}/profile"
-                      style="display:flex;gap:.5rem;align-items:center">
-                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                  <select name="profile_id" style="width:auto">
-                    <option value="0"{{if eq $pid 0}} selected{{end}}>(default)</option>
-                    {{range $.Profiles}}
-                    <option value="{{.ID}}"{{if eq .ID $pid}} selected{{end}}>{{.Name}}</option>
-                    {{end}}
-                  </select>
-                  <input type="date" name="expires_at" value="{{.ExpiresAt}}"
-                         title="{{T $.Lang "admin.until.help"}}" style="width:auto"
-                         oninput="toggleExpiryOptions(this)">
-                  {{/* What happens at the deadline only means anything once
-                       there is one, so these stay hidden until a date is set.
-                       Hidden, not absent: the server decides what they mean —
-                       an empty date nulls both — and this is only about not
-                       putting two dead controls on every row. */}}
-                  <span class="expiry-options"{{if not .ExpiresAt}} hidden{{end}}
-                        style="display:flex;gap:.5rem;align-items:center">
-                    <select name="after_expiry" style="width:auto"
-                            title="{{T $.Lang "admin.thenswitch"}}">
-                      <option value="0">{{T $.Lang "admin.default"}}</option>
-                      {{range $.Profiles}}
-                      <option value="{{.ID}}"{{if eq .ID $after}} selected{{end}}>{{.Name}}</option>
-                      {{end}}
-                    </select>
-                    <label style="display:flex;gap:.25rem;align-items:center;font-size:.85rem">
-                      <input type="checkbox" name="revoke_at_expiry"{{if .RevokeAtExpiry}} checked{{end}}>
-                      {{T $.Lang "admin.thenrevoke"}}
-                    </label>
-                  </span>
-                  <button type="submit" class="btn btn-sm btn-primary">{{T $.Lang "admin.save"}}</button>
-                </form>
-              </td>
-              <td>
-                {{if .ExpiresAt}}{{.ExpiresAt}}{{else}}<em class="text-faint">{{T $.Lang "admin.permanent"}}</em>{{end}}
+              <td class="cell-menu">
+                <button type="button" class="row-menu-btn" popovertarget="user-menu-{{.ID}}"
+                        aria-label="{{T $.Lang "admin.actions"}}: {{.Email}}">⋮</button>
+                <div id="user-menu-{{.ID}}" class="row-menu" popover>
+                  <button type="button"
+                          onclick="document.getElementById('user-dialog-{{.ID}}').showModal()">{{T $.Lang "admin.edit"}}</button>
+                  <hr>
+                  {{if .HasKey}}
+                  <form method="POST" action="/admin/users/{{.ID}}/key/revoke"
+                        onsubmit="return confirm('Revoke the API key for {{.Email}}? They lose access immediately.')">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <button class="menu-danger">{{T $.Lang "admin.revoke.key"}}</button>
+                  </form>
+                  {{else}}
+                  <button type="button" class="menu-danger" disabled>
+                    {{T $.Lang "admin.revoke.key"}}<span class="row-menu-note">{{T $.Lang "admin.revoke.nokey"}}</span>
+                  </button>
+                  {{end}}
+                </div>
               </td>
             </tr>
             {{else}}
-            <tr><td colspan="7" class="text-faint" style="text-align:center">{{T .Lang "admin.nousers"}}</td></tr>
+            <tr><td colspan="6" class="text-faint" style="text-align:center">{{T .Lang "admin.nousers"}}</td></tr>
             {{end}}
           </tbody>
         </table>
       </div>
+
+      {{/* One dialog per user, rendered with that user's current values, so
+           opening one needs no script beyond showModal. */}}
+      {{range .Users}}
+      {{$pid := .ProfileIDVal}}
+      {{$after := .AfterExpiryID}}
+      <dialog id="user-dialog-{{.ID}}" class="dialog" aria-labelledby="user-dialog-{{.ID}}-title">
+        <h3 id="user-dialog-{{.ID}}-title">{{T $.Lang "admin.col.changeprofile"}}</h3>
+        <p class="dialog-sub">{{.Name}} · {{.Email}}</p>
+        <form method="POST" action="/admin/users/{{.ID}}/profile">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+          <div class="form-group">
+            <label for="user-{{.ID}}-profile">{{T $.Lang "admin.col.profile"}}</label>
+            <select id="user-{{.ID}}-profile" name="profile_id">
+              <option value="0"{{if eq $pid 0}} selected{{end}}>{{T $.Lang "admin.default.follow"}}{{with $defaultName}} {{printf (T $.Lang "admin.default.current") .}}{{end}}</option>
+              {{range $.Profiles}}
+              <option value="{{.ID}}"{{if eq .ID $pid}} selected{{end}}>{{.Name}}</option>
+              {{end}}
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="user-{{.ID}}-until">{{T $.Lang "admin.until"}}</label>
+            <input type="date" id="user-{{.ID}}-until" name="expires_at" value="{{.ExpiresAt}}"
+                   oninput="toggleExpiryOptions(this)">
+            <div class="form-hint">{{T $.Lang "admin.until.help"}}</div>
+          </div>
+          {{/* What happens at the deadline only means anything once there is
+               one, so these stay hidden until a date is set. Hidden, not
+               absent: the server decides what they mean — an empty date nulls
+               both — and this is only about not showing dead controls. */}}
+          <div class="expiry-options"{{if not .ExpiresAt}} hidden{{end}}>
+            <div class="form-group">
+              <label for="user-{{.ID}}-after">{{T $.Lang "admin.thenswitch"}}</label>
+              <select id="user-{{.ID}}-after" name="after_expiry">
+                <option value="0">{{T $.Lang "admin.default.follow"}}{{with $defaultName}} {{printf (T $.Lang "admin.default.current") .}}{{end}}</option>
+                {{range $.Profiles}}
+                <option value="{{.ID}}"{{if eq .ID $after}} selected{{end}}>{{.Name}}</option>
+                {{end}}
+              </select>
+            </div>
+            <div class="form-group checkbox-row">
+              <input type="checkbox" id="user-{{.ID}}-revoke" name="revoke_at_expiry"{{if .RevokeAtExpiry}} checked{{end}}>
+              <label for="user-{{.ID}}-revoke" style="margin:0">{{T $.Lang "admin.thenrevoke"}}</label>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button type="submit" class="btn btn-primary">{{T $.Lang "admin.save"}}</button>
+            <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close()">{{T $.Lang "admin.cancel"}}</button>
+          </div>
+        </form>
+      </dialog>
+      {{end}}
     </div>
 
     <!-- ── Admins tab ─────────────────────────────────────── -->
@@ -314,33 +374,44 @@
       </p>
 
       <div class="table-wrap">
-        <table>
+        <table class="stack-md">
           <thead>
             <tr>
               <th>{{T .Lang "admin.col.name"}}</th>
               <th>{{T .Lang "admin.col.email"}}</th>
               <th>{{T .Lang "admin.col.oidcsub"}}</th>
-              <th></th>
+              {{if not .AdminGroup}}<th></th>{{end}}
             </tr>
           </thead>
           <tbody>
             {{range .Admins}}
             <tr>
               <td>{{.Name}}{{if .IsSelf}} <span class="badge">{{T $.Lang "admin.admins.self"}}</span>{{end}}</td>
-              <td>{{.Email}}</td>
-              <td><code>{{.OIDCSub}}</code></td>
-              <td>
-                {{/* The acting admin's own row has no button: nobody can
-                     remove their own rights, so the panel is never left with
-                     nobody in charge by accident. */}}
-                {{if and .Removable (not $.AdminGroup)}}
-                <form method="POST" action="/admin/admins/revoke" style="display:inline">
-                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                  <input type="hidden" name="user_id" value="{{.ID}}">
-                  <button class="btn btn-sm btn-danger">{{T $.Lang "admin.admins.revoke"}}</button>
-                </form>
-                {{end}}
+              <td class="nowrap" data-label="{{T $.Lang "admin.col.email"}}">{{.Email}}</td>
+              <td data-label="{{T $.Lang "admin.col.oidcsub"}}">{{.OIDCSub}}</td>
+              {{/* With the login system deciding there is nothing to do on a
+                   row, so there is no menu at all. */}}
+              {{if not $.AdminGroup}}
+              <td class="cell-menu">
+                <button type="button" class="row-menu-btn" popovertarget="admin-menu-{{.ID}}"
+                        aria-label="{{T $.Lang "admin.actions"}}: {{.Email}}">⋮</button>
+                <div id="admin-menu-{{.ID}}" class="row-menu" popover>
+                  {{/* The acting admin cannot remove their own rights, so the
+                       panel is never left with nobody in charge by accident. */}}
+                  {{if .Removable}}
+                  <form method="POST" action="/admin/admins/revoke">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <input type="hidden" name="user_id" value="{{.ID}}">
+                    <button class="menu-danger">{{T $.Lang "admin.admins.revoke"}}</button>
+                  </form>
+                  {{else}}
+                  <button type="button" class="menu-danger" disabled>
+                    {{T $.Lang "admin.admins.revoke"}}<span class="row-menu-note">{{T $.Lang "admin.admins.revoke.self"}}</span>
+                  </button>
+                  {{end}}
+                </div>
               </td>
+              {{end}}
             </tr>
             {{else}}
             <tr><td colspan="4" class="text-faint" style="text-align:center">
@@ -361,19 +432,19 @@
       {{/* The form names an account, never an address: the right is recorded
            on the person, so only people who have logged in can be chosen. The
            filter narrows the list client-side; the id is what is posted. */}}
-      <form method="POST" action="/admin/admins"
-            style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+      <form method="POST" action="/admin/admins" class="inline-form">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <input type="search" id="admin-filter" autocomplete="off"
-               placeholder="{{T .Lang "admin.admins.filter"}}" style="width:auto"
+               placeholder="{{T .Lang "admin.admins.filter"}}"
+               aria-label="{{T .Lang "admin.admins.filter"}}"
                oninput="filterCandidates(this.value)">
-        <select name="user_id" id="admin-candidates" required style="width:auto">
+        <select name="user_id" id="admin-candidates" required aria-label="{{T .Lang "admin.admins.choose"}}">
           <option value="">{{T .Lang "admin.admins.choose"}}</option>
           {{range .Candidates}}
           <option value="{{.ID}}">{{.Name}} &lt;{{.Email}}&gt;</option>
           {{end}}
         </select>
-        <button type="submit" class="btn btn-sm btn-primary">{{T .Lang "admin.admins.grant"}}</button>
+        <button type="submit" class="btn btn-primary">{{T .Lang "admin.admins.grant"}}</button>
       </form>
       {{end}}
     </div>
@@ -385,7 +456,7 @@
         {{T .Lang "admin.audit.note"}}
       </p>
       <div class="table-wrap">
-        <table>
+        <table class="stack-lg">
           <thead>
             <tr>
               <th>{{T .Lang "admin.col.when"}}</th>
@@ -398,11 +469,11 @@
           <tbody>
             {{range .Audit}}
             <tr>
-              <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
-              <td><code>{{.Action}}</code></td>
-              <td>{{.ActorEmail}}</td>
-              <td>{{.SubjectEmail}}</td>
-              <td class="text-faint">{{.Detail}}</td>
+              <td class="nowrap">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+              <td class="nowrap" data-label="{{T $.Lang "admin.col.action"}}"><code>{{.Action}}</code></td>
+              <td class="nowrap" data-label="{{T $.Lang "admin.col.actor"}}">{{.ActorEmail}}</td>
+              <td class="nowrap" data-label="{{T $.Lang "admin.col.subject"}}">{{.SubjectEmail}}</td>
+              <td class="cell-prose text-muted" data-label="{{T $.Lang "admin.col.detail"}}">{{.Detail}}</td>
             </tr>
             {{else}}
             <tr><td colspan="5" class="text-faint" style="text-align:center">{{T $.Lang "admin.noevents"}}</td></tr>
@@ -458,6 +529,20 @@ document.querySelector('.tabs').addEventListener('click', e => {
 
 window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
 
+const profileDialog = document.getElementById('profile-dialog');
+const PROFILE_TEXT = {
+  newTitle: {{T .Lang "admin.form.new"}},
+  editTitle: {{T .Lang "admin.form.edit"}},
+  create: {{T .Lang "admin.form.create"}},
+  update: {{T .Lang "admin.form.update"}},
+};
+
+function openNewProfile() {
+  resetProfileForm();
+  profileDialog.showModal();
+  document.getElementById('pf-name').focus();
+}
+
 function openEditProfile(id, name, desc, models, tpm, rpm, expiry, quotas, isDefault) {
   document.getElementById('pf-id').value = id;
   document.getElementById('pf-name').value = name;
@@ -468,11 +553,11 @@ function openEditProfile(id, name, desc, models, tpm, rpm, expiry, quotas, isDef
   document.getElementById('pf-expiry').value = expiry;
   setQuotaRows(quotas);
   setDefaultLocked(isDefault);
-  document.getElementById('profile-form-title').textContent = 'Edit profile: ' + name;
-  document.getElementById('profile-submit-btn').textContent = 'Update profile';
+  document.getElementById('profile-form-title').textContent = PROFILE_TEXT.editTitle + ' ' + name;
+  document.getElementById('profile-submit-btn').textContent = PROFILE_TEXT.update;
   document.getElementById('profile-form').action = '/admin/profiles/' + id;
+  profileDialog.showModal();
   document.getElementById('pf-name').focus();
-  document.getElementById('pf-name').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 // Quota windows are a repeating group: a profile can hold several allowances
@@ -510,8 +595,9 @@ function quotaRow(budget, period) {
 
   const del = document.createElement('button');
   del.type = 'button';
-  del.className = 'btn btn-sm btn-danger';
+  del.className = 'btn btn-danger-quiet';
   del.textContent = '×';
+  del.setAttribute('aria-label', {{T .Lang "admin.delete"}});
   del.onclick = () => row.remove();
 
   row.append(n, sel, del);
@@ -561,9 +647,41 @@ function resetProfileForm() {
   setSelectedModels('');
   setQuotaRows([]);
   document.getElementById('profile-form').action = '/admin/profiles';
-  document.getElementById('profile-form-title').textContent = 'New profile';
-  document.getElementById('profile-submit-btn').textContent = 'Create profile';
+  document.getElementById('profile-form-title').textContent = PROFILE_TEXT.newTitle;
+  document.getElementById('profile-submit-btn').textContent = PROFILE_TEXT.create;
 }
+
+// Row menus are popovers, which the browser centres on the screen; this hangs
+// each one under the right edge of its ⋮ button instead, and flips it above
+// the button when there is no room below. It is placed before it shows, so
+// it never flashes in the middle, and corrected once it can be measured.
+document.querySelectorAll('.row-menu').forEach(menu => {
+  const btn = document.querySelector(`[popovertarget="${menu.id}"]`);
+  menu.addEventListener('beforetoggle', e => {
+    if (e.newState !== 'open') return;
+    const b = btn.getBoundingClientRect();
+    menu.style.top = (b.bottom + 4) + 'px';
+    menu.style.right = Math.max(8, innerWidth - b.right) + 'px';
+  });
+  menu.addEventListener('toggle', e => {
+    if (e.newState !== 'open') return;
+    const b = btn.getBoundingClientRect();
+    const m = menu.getBoundingClientRect();
+    if (m.bottom > innerHeight - 8) {
+      menu.style.top = Math.max(8, b.top - m.height - 4) + 'px';
+    }
+  });
+  // Close before an entry opens a dialog. In the capture phase, so it runs
+  // ahead of the entry's own handler: closing afterwards would hand focus
+  // back to the ⋮ button behind the dialog.
+  menu.addEventListener('click', e => {
+    if (e.target.closest('button[type=button]')) menu.hidePopover();
+  }, true);
+});
+// A menu placed on the screen does not follow the page, so it closes instead.
+addEventListener('scroll', () => {
+  document.querySelectorAll('.row-menu:popover-open').forEach(m => m.hidePopover());
+}, true);
 
 // Restore tab from hash
 showTab(location.hash.slice(1));
