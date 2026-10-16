@@ -43,6 +43,9 @@ var readOnlyPaths = map[string]bool{
 	"/favicon.ico": true,
 }
 
+// metricsToken is the bearer token the test router's /metrics requires.
+const metricsToken = "metrics-token"
+
 // csrfExempt are the routes that change state without a CSRF token.
 // /backchannel-logout is called server to server by the identity provider and
 // is authenticated by the signed logout token it carries.
@@ -104,6 +107,7 @@ func newRouteTest(t *testing.T) *routeTest {
 		FrontendURL:      "http://localhost:8080",
 		KeyDurationDays:  90,
 		BudgetUnit:       "$",
+		MetricsToken:     metricsToken,
 	}
 	provider, err := oidcpkg.NewProvider(ctx, cfg, store)
 	if err != nil {
@@ -205,6 +209,39 @@ func TestEveryRouteRequiresALogin(t *testing.T) {
 	for r := range publicRoutes {
 		if !seen[r] {
 			t.Errorf("public route %s is not served; remove it from the list", r)
+		}
+	}
+}
+
+// /metrics answers the configured bearer token and nothing else.
+func TestMetricsRequireTheToken(t *testing.T) {
+	rt := newRouteTest(t)
+	for _, tc := range []struct {
+		auth string
+		user int64
+		want int
+	}{
+		{"", 0, http.StatusUnauthorized},
+		// A session is no substitute: an admin is not a scraper.
+		{"", rt.admin, http.StatusUnauthorized},
+		{"Bearer wrong", 0, http.StatusUnauthorized},
+		{"Bearer " + metricsToken, 0, http.StatusOK},
+	} {
+		req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/metrics", nil)
+		if tc.auth != "" {
+			req.Header.Set("Authorization", tc.auth)
+		}
+		if tc.user != 0 {
+			token, err := rt.sessions.Create(context.Background(), tc.user, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.AddCookie(&http.Cookie{Name: "session_token", Value: token})
+		}
+		rec := httptest.NewRecorder()
+		rt.router.ServeHTTP(rec, req)
+		if rec.Code != tc.want {
+			t.Errorf("Authorization %q, user %d: %d, want %d", tc.auth, tc.user, rec.Code, tc.want)
 		}
 	}
 }

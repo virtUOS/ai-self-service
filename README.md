@@ -76,6 +76,7 @@ in:
 | `SMTP_FROM`          | no       | `noreply@example.com` | Sender address for expiry emails                   |
 | `SMTP_USERNAME`      | no       | —           | Only if the relay requires authentication                          |
 | `SMTP_PASSWORD`      | no       | —           | Only if the relay requires authentication                          |
+| `METRICS_TOKEN`      | no       | —           | Bearer token `/metrics` requires. Without it the endpoint is open. See [Metrics](#metrics) |
 | `LOG_LEVEL`          | no       | `info`      | `debug`, `info`, `warn` or `error`                                 |
 | `LIMIT_SYNC_WORKERS` | no       | `1`         | How many limit updates Keyosk sends to the gateway at once. One is gentle on the gateway but slow for large changes: about 25 minutes for 5,000 keys |
 | `LIMIT_SYNC_INTERVAL` | no      | `5m`        | How often the limit sync retries keys whose update failed. Admin changes start a run straight away and do not wait for it |
@@ -504,8 +505,23 @@ back to English rather than rendering the key.
 Prometheus metrics are served on `/metrics`, labelled by route template so a
 per-user path does not create a time series per user. Scrapers that send an
 OpenMetrics `Accept` header (Prometheus does by default) get the OpenMetrics
-format; other clients get the classic Prometheus text format. In the deployment Caddy
-restricts the endpoint to the monitoring host.
+format; other clients get the classic Prometheus text format.
+
+Set `METRICS_TOKEN` to require a bearer token, for example one made with
+`openssl rand -hex 32`. Requests without it get `401`. Without the setting the
+endpoint answers anyone who can reach it, and Keyosk warns about that at
+startup. In Prometheus, put the token in a file and point the scrape job at it:
+
+```yaml
+scrape_configs:
+  - job_name: keyosk
+    scheme: https
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/keyosk-metrics-token
+```
+
+For a quick look, `curl -H "Authorization: Bearer $METRICS_TOKEN" https://…/metrics`.
 
 | Metric | Meaning |
 | ------ | ------- |
@@ -548,7 +564,7 @@ correct the cause without losing anything.
 | `POST` | `/lang`                       | Record an explicit language choice                        |
 | `GET`  | `/healthz`                    | Liveness probe                                            |
 | `GET`  | `/readyz`                     | Readiness probe (checks the database)                     |
-| `GET`  | `/metrics`                    | Prometheus metrics                                        |
+| `GET`  | `/metrics`                    | Prometheus metrics (bearer token with `METRICS_TOKEN`)    |
 
 ## OIDC client registration
 

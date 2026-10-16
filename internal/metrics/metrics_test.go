@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -122,5 +123,49 @@ func TestHandlerNegotiatesOpenMetrics(t *testing.T) {
 		if tc.accept != "" && !strings.HasSuffix(rec.Body.String(), "# EOF\n") {
 			t.Errorf("OpenMetrics body missing # EOF terminator")
 		}
+	}
+}
+
+// With a token, only a request carrying it as a bearer token gets the metrics.
+func TestRequireToken(t *testing.T) {
+	h := RequireToken("s3cret")(Handler())
+	for _, tc := range []struct {
+		auth string
+		want int
+	}{
+		{"", http.StatusUnauthorized},
+		{"Bearer wrong", http.StatusUnauthorized},
+		{"Bearer s3cret-and-more", http.StatusUnauthorized},
+		{"Bearer ", http.StatusUnauthorized},
+		{"Basic czNjcmV0", http.StatusUnauthorized},
+		{"s3cret", http.StatusUnauthorized},
+		{"Bearer s3cret", http.StatusOK},
+		{"bearer s3cret", http.StatusOK},
+	} {
+		req := httptest.NewRequest("GET", "/metrics", nil)
+		if tc.auth != "" {
+			req.Header.Set("Authorization", tc.auth)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != tc.want {
+			t.Errorf("Authorization %q: %d, want %d", tc.auth, rec.Code, tc.want)
+		}
+		if rec.Code == http.StatusUnauthorized && !strings.HasPrefix(rec.Header().Get("WWW-Authenticate"), "Bearer") {
+			t.Errorf("Authorization %q: WWW-Authenticate = %q, want a Bearer challenge",
+				tc.auth, rec.Header().Get("WWW-Authenticate"))
+		}
+		if rec.Code == http.StatusUnauthorized && strings.Contains(rec.Body.String(), "keyosk_") {
+			t.Errorf("Authorization %q: refused response carries metrics", tc.auth)
+		}
+	}
+}
+
+// Without a token the endpoint stays open, as it was before there was one.
+func TestRequireTokenEmptyLetsEveryoneThrough(t *testing.T) {
+	rec := httptest.NewRecorder()
+	RequireToken("")(Handler()).ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
+	if rec.Code != http.StatusOK {
+		t.Errorf("no token configured: %d, want 200", rec.Code)
 	}
 }

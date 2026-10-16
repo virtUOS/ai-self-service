@@ -1,14 +1,17 @@
 // Package metrics exposes Prometheus instrumentation for Keyosk.
 //
-// Scraped by the central monitoring host over HTTPS; Caddy restricts /metrics
-// to that host's IPs, so the endpoint itself is unauthenticated.
+// Scraped by the central monitoring host over HTTPS. With METRICS_TOKEN set,
+// /metrics answers only requests that carry the token; see RequireToken.
 package metrics
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -104,6 +107,31 @@ func Handler() http.Handler {
 		promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{
 			EnableOpenMetrics: true,
 		}))
+}
+
+// RequireToken lets a request through only when it carries
+// "Authorization: Bearer <token>", the way Prometheus sends a credential set
+// with authorization.credentials_file. An empty token lets every request
+// through, which keeps the endpoint as open as it was without one.
+func RequireToken(token string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		if token == "" {
+			return next
+		}
+		// Comparing hashes keeps the compare constant-time in the length too.
+		want := sha256.Sum256([]byte(token))
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			scheme, got, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+			sum := sha256.Sum256([]byte(got))
+			if !ok || !strings.EqualFold(scheme, "Bearer") ||
+				subtle.ConstantTimeCompare(sum[:], want[:]) != 1 {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="metrics"`)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // SetKeyGauges publishes the current key counts.
