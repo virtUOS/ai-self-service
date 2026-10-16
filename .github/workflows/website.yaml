@@ -1,6 +1,6 @@
 name: Website
 
-# The website and documentation (website/, built with Zensical) are published
+# The website and documentation (docs/, built with Zensical) are published
 # on GitHub Pages from main. A pull request only builds them, so a broken link
 # or template shows up before the merge. Settings -> Pages -> Source must be
 # "GitHub Actions".
@@ -9,22 +9,18 @@ on:
     branches:
       - main
     paths:
-      - website/**
-      - web/static/brand/**
+      - docs/**
       - web/static/fonts/**
       - web/static/favicon.*
       - web/static/apple-touch-icon.png
-      - docs/brand/social-preview.png
       - .github/workflows/website.yaml
       - Makefile
   pull_request:
     paths:
-      - website/**
-      - web/static/brand/**
+      - docs/**
       - web/static/fonts/**
       - web/static/favicon.*
       - web/static/apple-touch-icon.png
-      - docs/brand/social-preview.png
       - .github/workflows/website.yaml
       - Makefile
   workflow_dispatch:
@@ -50,8 +46,8 @@ jobs:
         with:
           python-version: 3.x
 
-      # The Makefile installs the pinned Zensical from website/requirements.txt
-      # into website/.venv, copies in the brand files and builds with --strict,
+      # The Makefile installs the pinned Zensical from docs/requirements.txt
+      # into docs/.venv, copies in the brand files and builds with --strict,
       # so a broken link fails the job. No pip cache: Zensical advises against
       # caching on CI for now.
       - name: Build the site
@@ -61,7 +57,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v5
         with:
-          path: website/site
+          path: docs/site
 
   deploy:
     if: github.event_name != 'pull_request'

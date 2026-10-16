@@ -32,8 +32,9 @@
 # working files, not documentation.
 /docs/superpowers/
 
-# The website: build output, the virtualenv, and the brand files that the
-# Makefile copies in from web/static and docs/brand.
-/website/site/
-/website/.venv/
-/website/docs/assets/
+# The website: build output, Zensical's cache, the virtualenv, and the files
+# that the Makefile copies in from web/static and docs/brand.
+/docs/site/
+/docs/.cache/
+/docs/.venv/
+/docs/content/assets/

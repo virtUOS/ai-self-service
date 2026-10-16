@@ -1,11 +1,13 @@
 # The Keyosk website and documentation, built with Zensical:
-#   make website         build into website/site
+#   make website         build into docs/site
 #   make website-serve   build and serve with live reload
-# The brand files (fonts, logos, favicon) are copied from web/static and
-# docs/brand into docs/assets by `make website-assets`; they are not committed
-# here.
+# The pages are in content/. Only that folder is published, so the rest of
+# docs/ (brand/, this file, overrides/) never reaches the site. The fonts,
+# icons and social preview are copied into content/assets by
+# `make website-assets`; they are not committed there.
 
 [project]
+docs_dir = "content"
 site_name = "Keyosk"
 site_description = "Keyosk is your self-service counter for local AI: log in and get your LiteLLM API key in seconds."
 site_url = "https://virtuos.github.io/keyosk/"

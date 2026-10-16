@@ -52,30 +52,30 @@ up:
 down:
 	$(COMPOSE) -f $(COMPOSE_FILE) down
 
-# The website and documentation (website/, built with Zensical). Not part of
-# `make check`, which needs no Python; CI builds the site in its own workflow.
-# The brand files are copied in from web/static and docs/brand, so there is
-# one copy of each in the repository.
-WEBSITE_VENV := website/.venv
+# The website and documentation (docs/, built with Zensical; the pages are in
+# docs/content). Not part of `make check`, which needs no Python; CI builds
+# the site in its own workflow. The fonts and icons the app serves are copied
+# in from web/static, and the social preview from docs/brand, so there is one
+# copy of each in the repository.
+WEBSITE_VENV := docs/.venv
 ZENSICAL := $(WEBSITE_VENV)/bin/zensical
-WEBSITE_ASSETS := website/docs/assets
+WEBSITE_ASSETS := docs/content/assets
 
-$(ZENSICAL): website/requirements.txt
+$(ZENSICAL): docs/requirements.txt
 	python3 -m venv $(WEBSITE_VENV)
-	$(WEBSITE_VENV)/bin/pip install -q -r website/requirements.txt
+	$(WEBSITE_VENV)/bin/pip install -q -r docs/requirements.txt
 	@touch $@
 
 website-assets:
 	rm -rf $(WEBSITE_ASSETS)
-	mkdir -p $(WEBSITE_ASSETS)/fonts $(WEBSITE_ASSETS)/brand
+	mkdir -p $(WEBSITE_ASSETS)/fonts
 	cp web/static/fonts/* $(WEBSITE_ASSETS)/fonts/
-	cp web/static/brand/*.svg $(WEBSITE_ASSETS)/brand/
 	cp web/static/favicon.svg web/static/favicon.ico web/static/apple-touch-icon.png $(WEBSITE_ASSETS)/
 	cp docs/brand/social-preview.png $(WEBSITE_ASSETS)/
 
 # --strict fails the build on a broken link or a missing file.
 website: $(ZENSICAL) website-assets
-	cd website && ../$(ZENSICAL) build --clean --strict
+	cd docs && ../$(ZENSICAL) build --clean --strict
 
 website-serve: $(ZENSICAL) website-assets
-	cd website && ../$(ZENSICAL) serve
+	cd docs && ../$(ZENSICAL) serve
