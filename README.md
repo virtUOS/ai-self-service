@@ -151,7 +151,10 @@ with nothing to promote or remove.
   their next login, not straight away. To cut someone off at once, end their
   session in the IdP as well; Keyosk honours back-channel logout.
 - **Exact match.** The group name is matched exactly. A token without the
-  claim, or with a claim of another shape, makes nobody an admin.
+  claim, or with a claim of another shape, makes nobody an admin. When such a
+  token demotes an admin, the login logs a warning and the audit entry says
+  the claim was absent rather than that they left the group, since the usual
+  cause is a missing mapper in the IdP, not a changed membership.
 - **Keycloak.** Add a *Group Membership* mapper with the claim name `groups`,
   "Add to ID token" on, and "Full group path" off; with the full path on, the
   claim lists `/name`, so set `ADMIN_GROUP=/name` instead. Realm roles work

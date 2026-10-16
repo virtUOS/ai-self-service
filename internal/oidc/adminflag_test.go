@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/uptrace/bun"
@@ -74,6 +75,37 @@ func TestLoginFollowsTheAdminGroup(t *testing.T) {
 	}
 	if len(admins) != 0 {
 		t.Errorf("admins = %+v after leaving the group, want none", admins)
+	}
+}
+
+// An admin whose token carries no group claim at all is still demoted, since
+// a token that says nothing grants nothing, but the audit row must say that
+// the claim was absent rather than that they left the group: the usual cause
+// is a missing mapper in the IdP, and "left group" would send whoever reads
+// the log to the group's membership instead.
+func TestLoginWithoutTheClaimSaysSoInTheAudit(t *testing.T) {
+	p, store := newFlagProvider(t, "flag3", "ai-admin")
+	login(t, p, ptr(true))
+
+	u, err := p.GetOrCreateUser(context.Background(),
+		&UserInfo{Subject: "sub-1", Email: "a@uni-osnabrueck.de", Name: "A", IsAdmin: ptr(false), AdminClaimAbsent: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.IsAdmin {
+		t.Error("an account stayed admin on a token without the claim")
+	}
+
+	events, err := store.ListAuditEvents(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 || events[0].Action != database.AuditAdminRevoked {
+		t.Fatalf("audit = %+v, want a revoke first", events)
+	}
+	detail := events[0].Detail
+	if !strings.Contains(detail, "claim groups absent") || strings.Contains(detail, "left group") {
+		t.Errorf("detail = %q, want it to say the groups claim was absent, not that they left the group", detail)
 	}
 }
 

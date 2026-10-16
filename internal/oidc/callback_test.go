@@ -151,11 +151,14 @@ func TestCallbackReportsAdminGroup(t *testing.T) {
 		group  string
 		groups []any
 		want   *bool
+		// absent is whether the callback reports the claim as missing from
+		// the token, which the login records as the reason for a demotion.
+		absent bool
 	}{
-		{"member", "ai-admin", []any{"staff", "ai-admin"}, ptr(true)},
-		{"not a member", "ai-admin", []any{"staff"}, ptr(false)},
-		{"no claim", "ai-admin", nil, ptr(false)},
-		{"panel manages admins", "", []any{"ai-admin"}, nil},
+		{"member", "ai-admin", []any{"staff", "ai-admin"}, ptr(true), false},
+		{"not a member", "ai-admin", []any{"staff"}, ptr(false), false},
+		{"no claim", "ai-admin", nil, ptr(false), true},
+		{"panel manages admins", "", []any{"ai-admin"}, nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := oidctest.NewServer(t)
@@ -175,6 +178,9 @@ func TestCallbackReportsAdminGroup(t *testing.T) {
 			got := res.UserInfo.IsAdmin
 			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
 				t.Errorf("IsAdmin = %v, want %v", fmtBool(got), fmtBool(tc.want))
+			}
+			if res.UserInfo.AdminClaimAbsent != tc.absent {
+				t.Errorf("AdminClaimAbsent = %v, want %v", res.UserInfo.AdminClaimAbsent, tc.absent)
 			}
 		})
 	}
