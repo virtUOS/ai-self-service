@@ -36,9 +36,21 @@ Profile fields:
 | TPM limit        | Maximum tokens per minute — burst control, complements the usage limit    |
 | RPM limit        | Maximum requests per minute                                               |
 
+![The profile dialog: name, description, a checkbox for each model the gateway serves, TPM and RPM limits, key validity in days, a daily and a monthly usage limit, and whether it is the default profile](../images/screenshots/profile-form-light.png#only-light){ .screenshot width="576" }
+![The profile dialog: name, description, a checkbox for each model the gateway serves, TPM and RPM limits, key validity in days, a daily and a monthly usage limit, and whether it is the default profile](../images/screenshots/profile-form-dark.png#only-dark){ .screenshot width="576" }
+
 Different groups get different profiles: a pilot group might get 30-day keys
 with a $1.00 daily allowance, a team that builds on the gateway 365-day keys
-with no quota.
+with no quota. The Users tab shows who has which, and until when:
+
+![The Users tab: each person's name, email, OIDC subject, profile and key; some follow the default profile, others are assigned one until a date, after which they go back to the default or their key is deleted](../images/screenshots/users-light.png#only-light){ .screenshot width="1072" }
+![The Users tab: each person's name, email, OIDC subject, profile and key; some follow the default profile, others are assigned one until a date, after which they go back to the default or their key is deleted](../images/screenshots/users-dark.png#only-dark){ .screenshot width="1072" }
+
+A row's Edit opens the assignment, with the deadline and what happens when it
+passes:
+
+![The assignment dialog: a profile, an end date, the profile to switch to afterwards, and a checkbox to delete the key instead](../images/screenshots/user-assignment-light.png#only-light){ .screenshot width="576" }
+![The assignment dialog: a profile, an end date, the profile to switch to afterwards, and a checkbox to delete the key instead](../images/screenshots/user-assignment-dark.png#only-dark){ .screenshot width="576" }
 
 ## How profile changes reach existing keys
 
