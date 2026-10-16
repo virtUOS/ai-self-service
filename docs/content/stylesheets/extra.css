@@ -100,12 +100,23 @@
   --md-code-bg-color--lighter:       #efebe14d;
   --md-code-hl-color:                #1e7a6e;
   --md-code-hl-color--light:         #1e7a6e1a;
-  --md-code-hl-keyword-color:        #1e7a6e;
-  --md-code-hl-string-color:         #2e7d4f;
+  /* Keywords and strings a shade darker than the accent and the ok green, so
+     both reach 4.5:1 on the code background. */
+  --md-code-hl-keyword-color:        #1a6f64;
+  --md-code-hl-string-color:         #287045;
   --md-code-hl-number-color:         #a8520a;
   --md-code-hl-function-color:       #6b4e9b;
   --md-code-hl-constant-color:       #8a5a00;
   --md-code-hl-special-color:        #b02a2a;
+  /* The theme defines these six as var() references on :root, where they
+     resolve against its own default colours, not against this scheme. They
+     must be set here, or they keep the default light theme's near-black. */
+  --md-code-hl-name-color:           #1f2a2a;
+  --md-code-hl-variable-color:       #1f2a2a;
+  --md-code-hl-operator-color:       #4a5654;
+  --md-code-hl-punctuation-color:    #4a5654;
+  --md-code-hl-comment-color:        #4a5654;
+  --md-code-hl-generic-color:        #4a5654;
 
   --md-footer-fg-color:              #1f2a2a;
   --md-footer-fg-color--light:       #4a5654;
@@ -175,6 +186,14 @@
   --md-code-hl-function-color:       #c9a7f0;
   --md-code-hl-constant-color:       #e3b866;
   --md-code-hl-special-color:        #ef9a9a;
+  /* See the light scheme: without these, names, variables, operators and
+     comments stay near-black on the dark code background. */
+  --md-code-hl-name-color:           #e4dfd4;
+  --md-code-hl-variable-color:       #e4dfd4;
+  --md-code-hl-operator-color:       #a9b3b0;
+  --md-code-hl-punctuation-color:    #a9b3b0;
+  --md-code-hl-comment-color:        #a9b3b0;
+  --md-code-hl-generic-color:        #a9b3b0;
 
   --md-footer-fg-color:              #f2eee6;
   --md-footer-fg-color--light:       #a9b3b0;
@@ -213,6 +232,16 @@
   font-weight: 700;
   letter-spacing: -.04em;
   text-transform: lowercase;
+}
+
+/* ── Code ────────────────────────────────────────────────── */
+/* Comments share the muted colour with operators; italics set them apart. */
+.md-typeset .highlight .c,
+.md-typeset .highlight .c1,
+.md-typeset .highlight .ch,
+.md-typeset .highlight .cm,
+.md-typeset .highlight .cs {
+  font-style: italic;
 }
 
 /* ── Layout and tables ───────────────────────────────────── */
