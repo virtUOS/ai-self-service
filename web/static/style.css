@@ -55,6 +55,11 @@
 /* ── Design tokens ───────────────────────────────────────── */
 /* The Keyosk palette: warm paper, dark teal-black ink, one teal accent. */
 :root {
+  /* Tells the browser which scheme its own controls follow: without it the
+     date picker, number spinners, checkboxes and scrollbars stay light on the
+     dark theme. */
+  color-scheme: light;
+
   --bg:               #f6f3ec;
   --surface:          #ffffff;
   --text:             #1f2a2a;
@@ -84,7 +89,10 @@
   --alert-danger-bg:  #fbeaea; --alert-danger-border: #e8aaaa; --alert-danger-text: #a32424;
 
   --btn-sec-bg:       #e9e4d8; --btn-sec-text:  #2b3837;
+  --danger:           #c62828; --on-danger:     #ffffff;
   --input-bg:         #ffffff; --input-border:  #cfc9ba;
+  --focus-ring:       rgba(30,122,110,.22);
+  --backdrop:         rgba(31,42,42,.4);
   --hint:             #6f7977;
   --label:            #3a4644;
 
@@ -100,6 +108,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
+
     --bg:               #121817;
     --surface:          #1a2120;
     --text:             #f2eee6;
@@ -125,7 +135,10 @@
     --alert-danger-bg:  #2a0d0d; --alert-danger-border: #6b1a1a; --alert-danger-text: #ef9a9a;
 
     --btn-sec-bg:       #2c3836; --btn-sec-text:  #d9d4c8;
+    --danger:           #ef7070; --on-danger:     #1a0d0d;
     --input-bg:         #1f2827; --input-border:  #3a4846;
+    --focus-ring:       rgba(82,181,166,.3);
+    --backdrop:         rgba(0,0,0,.6);
     --hint:             #7c8886;
     --label:            #b7c0bc;
 
@@ -152,6 +165,10 @@ body {
 /* ── Utility ─────────────────────────────────────────────── */
 .text-muted { color: var(--text-muted); }
 .text-faint  { color: var(--text-faint); }
+.nowrap      { white-space: nowrap; }
+/* `hidden` is only a browser default, which any display rule on the element
+   beats; this keeps it meaning hidden. */
+[hidden] { display: none !important; }
 
 /* ── Header ─────────────────────────────────────────────── */
 header {
@@ -297,6 +314,19 @@ main {
   flex-direction: column;
   gap: 1.5rem;
 }
+/* The dashboard is prose and keeps a reading width; the admin panel is tables
+   with many columns and needs the room. */
+main.main-wide { max-width: 1280px; }
+
+/* A heading with an action beside it, such as "Profiles" and "New profile". */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.card .section-head h2 { margin-bottom: 0; }
 
 /* ── Cards ───────────────────────────────────────────────── */
 .card {
@@ -372,7 +402,10 @@ button, .btn {
   border-radius: 6px;
   font-size: .875rem;
   font-weight: 500;
-  border: none;
+  line-height: 1.5;
+  /* Transparent rather than none, so a button is as tall as the bordered
+     input or select beside it. */
+  border: 1px solid transparent;
   cursor: pointer;
   text-decoration: none;
   transition: filter .15s;
@@ -381,41 +414,95 @@ button:hover, .btn:hover { filter: brightness(.93); }
 
 .btn-primary   { background: var(--primary); color: var(--on-primary); }
 .btn-secondary { background: var(--btn-sec-bg); color: var(--btn-sec-text); }
-.btn-danger    { background: #e53935; color: #fff; }
-.btn-sm        { padding: .3rem .75rem; font-size: .8rem; }
+.btn-danger    { background: var(--danger); color: var(--on-danger); }
+/* For a small destructive action repeated down a list, such as removing a
+   quota window: a column of solid red buttons shouts over the form. */
+.btn-danger-quiet {
+  background: none;
+  border-color: var(--alert-danger-border);
+  color: var(--alert-danger-text);
+}
+.btn-danger-quiet:hover { background: var(--alert-danger-bg); filter: none; }
+.btn-sm        { padding: .2rem .7rem; font-size: .8rem; }
 
 /* ── Forms ───────────────────────────────────────────────── */
+/* Form controls do not inherit the page font: a textarea would be set in the
+   browser's monospace and inputs in the system face. */
+button, input, select, textarea { font-family: inherit; }
 .form-group { margin-bottom: 1rem; }
 label { display: block; font-size: .85rem; font-weight: 500; margin-bottom: .3rem; color: var(--label); }
-input[type=text], input[type=number], textarea, select {
+/* :where keeps this as weak as a bare `input`, so a class can still set the
+   width. */
+input:where(:not([type=checkbox], [type=radio], [type=hidden])), textarea, select {
   width: 100%;
   padding: .45rem .75rem;
   border: 1px solid var(--input-border);
   border-radius: 6px;
   font-size: .875rem;
+  line-height: 1.5;
+  /* A select ignores line-height; this makes it as tall as an input. */
+  min-height: 2.3rem;
   background: var(--input-bg);
   color: var(--text);
   transition: border-color .15s;
 }
+input[type=checkbox], input[type=radio] { accent-color: var(--primary); }
 input:focus, textarea:focus, select:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(45,106,224,.15);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 textarea { resize: vertical; min-height: 72px; }
 .form-hint { font-size: .78rem; color: var(--hint); margin-top: .25rem; }
 .checkbox-row { display: flex; align-items: center; gap: .5rem; margin-top: .25rem; }
 .checkbox-row input[type=checkbox] { width: auto; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
+.form-grid .span-all { grid-column: 1 / -1; }
+
+/* Controls in a row, such as the promotion form: they keep their own width
+   instead of each taking the whole line. */
+.inline-form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.inline-form input, .inline-form select { width: auto; }
+.inline-form input[type=search] { min-width: 16rem; }
+
+/* One allowance window in the profile form: amount, period, remove. */
+.quota-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: .5rem;
+  align-items: center;
+  margin-bottom: .5rem;
+}
+
+/* ── Dialogs ────────────────────────────────────────────── */
+/* The edit forms open over the table, so editing a row does not scroll the
+   page away from it. The reset at the top removes the browser's own centring
+   margin, hence margin:auto. */
+.dialog {
+  width: min(36rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  margin: auto;
+  padding: 1.5rem 1.75rem;
+  overflow-y: auto;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--card-shadow);
+}
+.dialog::backdrop { background: var(--backdrop); }
+.dialog h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 1rem; }
+.dialog-sub { color: var(--text-muted); font-size: .85rem; margin: -.6rem 0 1rem; }
 
 /* ── Tables ─────────────────────────────────────────────── */
-/* The profiles table has nine columns and quota windows stack inside their
-   cell, so it does not fit a narrow viewport. min-width lets it overflow and
-   scroll rather than compressing until the last columns are unreadable —
-   width:100% alone squeezed them off the edge. */
+/* Cells wrap, so a description or a model list takes a few lines instead of
+   one very long one; what must stay whole (dates, keys, addresses, buttons)
+   is marked .nowrap. On a narrow screen the table keeps a usable width and
+   the wrapper scrolls, rather than squeezing every column down to a word. */
 .table-wrap { overflow-x: auto; }
 table {
   width: 100%;
-  min-width: max-content;
+  min-width: 40rem;
   border-collapse: collapse;
   font-size: .875rem;
 }
@@ -428,17 +515,137 @@ th {
   color: var(--th-text);
   white-space: nowrap;
 }
-td { padding: .55rem .9rem; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
+td {
+  padding: .55rem .9rem;
+  border-bottom: 1px solid var(--border-light);
+  vertical-align: middle;
+  overflow-wrap: break-word;
+}
 tr:last-child td { border-bottom: none; }
 tr:hover td { background: var(--tr-hover); }
+/* Prose columns get a floor, or the browser hands their width to the
+   unwrappable columns and leaves them a word per line. */
+td.cell-prose { min-width: 14rem; }
+/* A second, quieter line under a cell's value. */
+.cell-note { display: block; font-size: .8rem; color: var(--text-muted); }
+td.cell-menu { width: 1%; text-align: right; }
+
+/* ── Row menus ──────────────────────────────────────────── */
+/* Every row's actions sit behind one ⋮ button, so the column is the same on
+   every row whatever the row allows. The menu is a popover: it lives in the
+   top layer, out of reach of the table's scroll container, and the browser
+   closes it on Esc or a click elsewhere. The script in admin.html places it
+   under its button. */
+.row-menu-btn {
+  justify-content: center;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0 .4rem;
+  font-size: 1.15rem;
+  line-height: 1;
+  color: var(--text-muted);
+  background: none;
+}
+.row-menu-btn:hover, .row-menu-btn:focus-visible {
+  color: var(--text);
+  background: var(--header-hover);
+  filter: none;
+}
+.row-menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  min-width: 12rem;
+  max-width: min(18rem, calc(100vw - 1rem));
+  padding: .35rem 0;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: .5rem;
+  box-shadow: var(--card-shadow);
+  font-size: .875rem;
+  text-align: left;
+  white-space: normal;
+}
+.row-menu button {
+  display: block;
+  width: 100%;
+  padding: .5rem 1rem;
+  text-align: left;
+  font-weight: 400;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+.row-menu button:hover:not(:disabled) { background: var(--tr-hover); filter: none; }
+.row-menu .menu-danger { color: var(--alert-danger-text); }
+/* A greyed-out entry says why, so the menu keeps its shape on every row. */
+.row-menu button:disabled { color: var(--text-faint); cursor: default; }
+.row-menu-note { display: block; font-size: .75rem; }
+.row-menu hr { border: none; border-top: 1px solid var(--border-light); margin: .35rem 0; }
+
+/* ── Stacked tables ─────────────────────────────────────── */
+/* Where a table no longer fits its card, each row becomes a block: the first
+   cell is its heading with the ⋮ menu beside it, the rest follow as label and
+   value, the label taken from the cell's data-label. It is the card's width
+   that decides, not the screen's, so a narrow window stacks too. The class
+   on the table says how wide it needs to be. */
+.table-wrap { container-type: inline-size; }
+@container (max-width: 64rem) {
+  .stack-lg { min-width: 0; }
+  .stack-lg thead { display: none; }
+  .stack-lg, .stack-lg tbody, .stack-lg tr, .stack-lg td { display: block; }
+  .stack-lg tr { position: relative; padding: .7rem 0; border-bottom: 1px solid var(--border-light); }
+  .stack-lg tr:last-child { border-bottom: none; }
+  .stack-lg td { padding: .15rem 0; border: none; min-width: 0; }
+  .stack-lg tr:hover td { background: none; }
+  .stack-lg td:first-child { padding-right: 2.5rem; font-weight: 600; }
+  .stack-lg td[data-label] { position: relative; padding-left: 9.75rem; }
+  .stack-lg td[data-label]::before { content: attr(data-label); position: absolute; left: 0; width: 9rem; color: var(--text-muted); font-size: .8rem; padding-top: .1rem; }
+  .stack-lg td.nowrap { white-space: normal; }
+  .stack-lg td.cell-menu { position: absolute; top: .45rem; right: 0; width: auto; padding: 0; }
+}
+@container (max-width: 48rem) {
+  .stack-md { min-width: 0; }
+  .stack-md thead { display: none; }
+  .stack-md, .stack-md tbody, .stack-md tr, .stack-md td { display: block; }
+  .stack-md tr { position: relative; padding: .7rem 0; border-bottom: 1px solid var(--border-light); }
+  .stack-md tr:last-child { border-bottom: none; }
+  .stack-md td { padding: .15rem 0; border: none; min-width: 0; }
+  .stack-md tr:hover td { background: none; }
+  .stack-md td:first-child { padding-right: 2.5rem; font-weight: 600; }
+  .stack-md td[data-label] { position: relative; padding-left: 9.75rem; }
+  .stack-md td[data-label]::before { content: attr(data-label); position: absolute; left: 0; width: 9rem; color: var(--text-muted); font-size: .8rem; padding-top: .1rem; }
+  .stack-md td.nowrap { white-space: normal; }
+  .stack-md td.cell-menu { position: absolute; top: .45rem; right: 0; width: auto; padding: 0; }
+}
+/* On a phone the label goes above its value: beside it, a 9rem label column
+   leaves the value a handful of characters. */
+@container (max-width: 26rem) {
+  :is(.stack-lg, .stack-md) td[data-label] { padding-left: 0; }
+  :is(.stack-lg, .stack-md) td[data-label]::before { position: static; display: block; width: auto; padding-top: .35rem; }
+}
 
 /* ── Tabs ────────────────────────────────────────────────── */
-.tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem; }
+/* When the tabs do not fit they scroll sideways inside the card rather than
+   widening the page. The line under them is an inset shadow, not a border:
+   a scroll container clips at its border, which would cut off the active
+   tab's underline where it overlaps the line. */
+.tabs {
+  display: flex;
+  gap: 0;
+  box-shadow: inset 0 -2px 0 var(--border);
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
 .tab-btn {
+  flex: none;
+  white-space: nowrap;
   background: none;
   border: none;
   border-bottom: 3px solid transparent;
-  margin-bottom: -2px;
   padding: .55rem 1.25rem;
   font-size: .9rem;
   font-weight: 500;
@@ -457,15 +664,37 @@ tr:hover td { background: var(--tr-hover); }
   border-radius: 999px;
   font-size: .75rem;
   font-weight: 600;
+  white-space: nowrap;
+  background: var(--btn-sec-bg);
+  color: var(--btn-sec-text);
 }
-.badge-ok      { background: var(--badge-ok-bg);   color: var(--badge-ok-text); }
+.badge-ok     { background: var(--badge-ok-bg);   color: var(--badge-ok-text); }
 .badge-warn    { background: var(--badge-warn-bg);  color: var(--badge-warn-text); }
 .badge-expired { background: var(--badge-exp-bg);   color: var(--badge-exp-text); }
 
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 600px) {
-  main { margin: 1rem auto; }
-  .card { padding: 1.25rem; }
+  main { margin: 1rem auto; padding: 0 .75rem; }
+  .card { padding: 1.25rem 1rem; }
+  .tab-btn { padding: .55rem .8rem; }
+  .form-grid { grid-template-columns: 1fr; }
+
+  /* Dialogs become a sheet along the bottom edge, as wide as the screen:
+     the profile form's quota rows need every pixel. */
+  .dialog {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - 1rem);
+    margin: auto 0 0;
+    padding: 1.25rem 1rem;
+    border-width: 1px 0 0;
+    border-radius: 12px 12px 0 0;
+  }
+
+  /* The promotion form stacks; its dropdown would otherwise be as wide as
+     its longest "Name <address>". */
+  .inline-form { flex-direction: column; align-items: stretch; }
+  .inline-form input, .inline-form input[type=search], .inline-form select { width: 100%; min-width: 0; }
 
   /* The header keeps its single row: everything but the language switch
      lives in the account menu, so only the gutters shrink. */
@@ -526,7 +755,7 @@ tr:hover td { background: var(--tr-hover); }
   text-align: center;
   font-size: .7rem;
   font-weight: 600;
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   background: none;
   border: 1px solid currentColor;
   border-radius: 50%;
@@ -539,7 +768,7 @@ tr:hover td { background: var(--tr-hover); }
 
 .help:hover,
 .help:focus-visible {
-  color: var(--accent, #818cf8);
+  color: var(--primary);
   outline: none;
 }
 
@@ -549,11 +778,11 @@ tr:hover td { background: var(--tr-hover); }
   margin: 0;
   max-width: 22rem;
   padding: .65rem .8rem;
-  background: #0f172a;
-  color: #e2e8f0;
-  border: 1px solid #475569;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: .375rem;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, .55);
+  box-shadow: var(--card-shadow);
   font-size: .8rem;
   font-weight: 400;
   line-height: 1.45;
@@ -575,9 +804,9 @@ tr:hover td { background: var(--tr-hover); }
   max-height: 12rem;
   overflow-y: auto;
   padding: .6rem .75rem;
-  border: 1px solid var(--border, #334155);
-  border-radius: .375rem;
-  background: var(--input-bg, #0f172a);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  background: var(--input-bg);
 }
 
 .model-option {

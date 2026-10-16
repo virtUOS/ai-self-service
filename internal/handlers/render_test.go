@@ -506,10 +506,14 @@ func TestAdminEditButtonPassesBareValues(t *testing.T) {
 	}
 }
 
-// The profiles table has more columns than fit a narrow viewport, and quota
-// windows stack inside their own cell. It must be allowed to overflow and
-// scroll: compressing it clipped the quota column off the right edge, so an
+// The admin tables have more columns than fit a phone, and quota windows
+// stack inside their own cell. On a narrow screen they must overflow and
+// scroll: compressing them clipped the quota column off the right edge, so an
 // admin could not see the windows they had just saved.
+//
+// The floor is a fixed width, not max-content: max-content kept every cell on
+// one line, which made the tables several times wider than the page on a
+// desktop too.
 func TestAdminTableCanScroll(t *testing.T) {
 	css, err := fs.ReadFile(web.StaticFS, "style.css")
 	if err != nil {
@@ -520,10 +524,202 @@ func TestAdminTableCanScroll(t *testing.T) {
 	if !strings.Contains(style, ".table-wrap { overflow-x: auto; }") {
 		t.Error("table wrapper does not scroll horizontally")
 	}
-	// Without a min-width the table compresses to the wrapper instead of
-	// overflowing it, so the scrollbar never appears and columns are clipped.
-	if !strings.Contains(style, "min-width: max-content") {
+	if !strings.Contains(style, "min-width: 40rem;") {
 		t.Error("table has no min-width, so it compresses rather than scrolling")
+	}
+	if strings.Contains(style, "min-width: max-content") {
+		t.Error("table cells may not wrap, so the tables outgrow a desktop screen")
+	}
+}
+
+// The browser draws its own controls (date picker, spinners, checkboxes) in
+// the scheme the page declares. Without the declaration they stay light on
+// the dark theme.
+func TestStyleDeclaresColorScheme(t *testing.T) {
+	css, err := fs.ReadFile(web.StaticFS, "style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"color-scheme: light;", "color-scheme: dark;"} {
+		if !strings.Contains(string(css), want) {
+			t.Errorf("style.css does not declare %q", want)
+		}
+	}
+}
+
+// The edit forms open as dialogs over the tables rather than sitting in every
+// row (users) or below the table (profiles), which made the users table
+// wider than any screen and scrolled the page away from the profile being
+// edited.
+func TestAdminEditFormsAreDialogs(t *testing.T) {
+	var buf bytes.Buffer
+	err := parseAdminTemplate().Execute(&buf, adminData{
+		Lang:      i18n.EN,
+		Profiles:  []database.Profile{{ID: 1, Name: "default", IsDefault: true}},
+		Users:     []userRow{{User: database.User{ID: 7, Name: "U", Email: "u@uni-osnabrueck.de"}}},
+		CSRFToken: "TOK",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		`<dialog id="profile-dialog"`,
+		`<dialog id="user-dialog-7"`,
+		`document.getElementById('user-dialog-7').showModal()`,
+		`<main class="main-wide">`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("admin page is missing %q", want)
+		}
+	}
+	// The user's form must be inside its dialog, not left in the table row.
+	dialog := out[strings.Index(out, `<dialog id="user-dialog-7"`):]
+	dialog = dialog[:strings.Index(dialog, "</dialog>")]
+	if !strings.Contains(dialog, `action="/admin/users/7/profile"`) {
+		t.Error("the user's profile form is not inside its dialog")
+	}
+}
+
+// Every row's actions sit in a ⋮ menu of the same shape. An action the row
+// does not allow stays in the menu, greyed out with the reason, rather than
+// disappearing and leaving the admin to guess why.
+func TestAdminRowMenusExplainDisabledActions(t *testing.T) {
+	var buf bytes.Buffer
+	err := parseAdminTemplate().Execute(&buf, adminData{
+		Lang: i18n.EN,
+		Profiles: []database.Profile{
+			{ID: 1, Name: "default", IsDefault: true},
+			{ID: 2, Name: "teaching"},
+		},
+		Users: []userRow{
+			{User: database.User{ID: 7, Email: "nokey@uni-osnabrueck.de"}},
+			{User: database.User{ID: 8, Email: "key@uni-osnabrueck.de"}, HasKey: true, KeyPrefix: "sk-a"},
+		},
+		Admins: []adminRow{
+			{User: database.User{ID: 1, Email: "self@uni-osnabrueck.de"}, IsSelf: true},
+			{User: database.User{ID: 2, Email: "other@uni-osnabrueck.de"}, Removable: true},
+		},
+		CSRFToken: "TOK",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := html.UnescapeString(buf.String())
+
+	for _, id := range []string{"profile-menu-1", "profile-menu-2", "user-menu-7", "user-menu-8", "admin-menu-1", "admin-menu-2"} {
+		if !strings.Contains(out, `popovertarget="`+id+`"`) || !strings.Contains(out, `id="`+id+`" class="row-menu" popover`) {
+			t.Errorf("row menu %s is missing its button or its popover", id)
+		}
+	}
+	for _, reason := range []string{
+		"The default profile cannot be deleted.",
+		"There is no key.",
+		"Nobody can remove their own rights.",
+	} {
+		if !strings.Contains(out, reason) {
+			t.Errorf("a greyed-out entry does not say %q", reason)
+		}
+	}
+	// The allowed actions are still real forms.
+	for _, action := range []string{`action="/admin/profiles/2/delete"`, `action="/admin/users/8/key/revoke"`, `action="/admin/admins/revoke"`} {
+		if !strings.Contains(out, action) {
+			t.Errorf("menu is missing the form %s", action)
+		}
+	}
+	if strings.Contains(out, `action="/admin/profiles/1/delete"`) || strings.Contains(out, `action="/admin/users/7/key/revoke"`) {
+		t.Error("a disabled action still renders a form that would post")
+	}
+}
+
+// With a deadline set, the users table says what happens at it, so the admin
+// sees the whole assignment without opening the dialog.
+func TestAdminUserRowSummarisesDeadline(t *testing.T) {
+	render := func(row userRow) string {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := parseAdminTemplate().Execute(&buf, adminData{
+			Lang: i18n.EN,
+			Profiles: []database.Profile{
+				{ID: 1, Name: "default", IsDefault: true},
+				{ID: 2, Name: "teaching"},
+			},
+			Users: []userRow{row},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		// Collapse the template's line breaks to compare the sentence.
+		return strings.Join(strings.Fields(html.UnescapeString(buf.String())), " ")
+	}
+
+	out := render(userRow{
+		User:          database.User{ID: 1, Email: "a@uni-osnabrueck.de"},
+		ExpiresAt:     "2026-12-31",
+		AfterExpiryID: 2,
+	})
+	if !strings.Contains(out, "until 2026-12-31, then teaching") {
+		t.Error("the row does not name the deadline and the profile that follows")
+	}
+
+	out = render(userRow{
+		User:           database.User{ID: 1, Email: "a@uni-osnabrueck.de"},
+		ExpiresAt:      "2026-12-31",
+		RevokeAtExpiry: true,
+	})
+	if !strings.Contains(out, "until 2026-12-31, then the key is deleted") {
+		t.Error("the row does not say the key is deleted at the deadline")
+	}
+
+	out = render(userRow{User: database.User{ID: 1, Email: "a@uni-osnabrueck.de"}})
+	if strings.Contains(out, "until 2026") {
+		t.Error("a permanent assignment shows a deadline")
+	}
+
+	// Without a profile to switch to, the user goes back to following the
+	// default; naming the profile that is the default today would be wrong
+	// once another one becomes the default.
+	out = render(userRow{
+		User:      database.User{ID: 1, Email: "a@uni-osnabrueck.de"},
+		ExpiresAt: "2026-12-31",
+	})
+	if !strings.Contains(out, "until 2026-12-31, then back to the default") {
+		t.Error("the row does not say the user returns to the default")
+	}
+}
+
+// "Follow the default" and the profile that is the default today are two
+// different choices: the first moves with the default, the second stays put.
+// Both read "default" otherwise, so the first says what it does.
+func TestAdminFollowDefaultIsLabelledApart(t *testing.T) {
+	var buf bytes.Buffer
+	err := parseAdminTemplate().Execute(&buf, adminData{
+		Lang: i18n.EN,
+		Profiles: []database.Profile{
+			{ID: 1, Name: "basic", IsDefault: true},
+			{ID: 2, Name: "teaching"},
+		},
+		Users:     []userRow{{User: database.User{ID: 7, Email: "a@uni-osnabrueck.de", OIDCSub: "sub-7"}}},
+		CSRFToken: "TOK",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := html.UnescapeString(buf.String())
+
+	// Once for the profile, once for what follows a deadline.
+	if n := strings.Count(out, `<option value="0" selected>Follow the default (currently: basic)</option>`); n != 1 {
+		t.Errorf("profile dropdown labels the follow option %d times, want once", n)
+	}
+	if !strings.Contains(out, `<option value="0">Follow the default (currently: basic)</option>`) {
+		t.Error("the after-deadline dropdown does not label the follow option")
+	}
+	if !strings.Contains(out, "follows the default") {
+		t.Error("the table does not say the user follows the default")
+	}
+	// The subject is a value to read, not a control: no button, no copy.
+	if strings.Contains(out, `data-model="sub-7"`) || strings.Contains(out, "copyModel") {
+		t.Error("the OIDC subject is still rendered as a copy button")
 	}
 }
 
