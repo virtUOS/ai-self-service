@@ -28,7 +28,16 @@ import (
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "check /healthz of the running server and exit")
 	resync := flag.Bool("resync-limits", false, "mark every key for a limit resync by the running server and exit")
+	makeAdminID := flag.Int64("make-admin", 0, "give the account with this ID the admin panel and exit")
 	flag.Parse()
+	// The ID has no "not given" value: -make-admin 0 must fail, not start a
+	// server, so whether the flag was given is asked of the flag package.
+	makeAdminSet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "make-admin" {
+			makeAdminSet = true
+		}
+	})
 
 	_ = godotenv.Load()
 
@@ -53,6 +62,16 @@ func main() {
 	if *resync {
 		if err := resyncLimits(context.Background(), config.DBPath(), os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "resync failed: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	// Mark the first admin, or get back in after every admin is lost. Needs
+	// only DB_PATH and ADMIN_GROUP, like -resync-limits.
+	if makeAdminSet {
+		if err := makeAdmin(context.Background(), config.DBPath(), config.AdminGroupSet(), *makeAdminID, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "make admin failed: %v\n", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
@@ -110,7 +129,7 @@ func main() {
 	} else if n, err := store.CountAdmins(ctx); err != nil {
 		slog.Error("count admins", "err", err)
 	} else if n == 0 {
-		slog.Warn("no account holds the admin panel: mark one with the command in https://virtuos.github.io/keyosk/administrators/#the-first-admin")
+		slog.Warn("no account holds the admin panel: mark one with keyosk -make-admin <id>, see https://virtuos.github.io/keyosk/administrators/#the-first-admin")
 	}
 
 	// ── Dependencies ──────────────────────────────────────────────────────────

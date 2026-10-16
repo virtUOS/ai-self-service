@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/virtuos/keyosk/internal/database"
 )
@@ -18,12 +17,7 @@ import (
 // LIMIT_SYNC_WORKERS allows and with progress in the admin panel, so the
 // gateway is never hit from two places at once.
 func resyncLimits(ctx context.Context, dbPath string, out io.Writer) error {
-	// Opening a path that does not exist would create an empty database
-	// there, and the command would cheerfully report zero keys.
-	if _, err := os.Stat(dbPath); err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("no database at %s; set DB_PATH to the server's database", dbPath)
-		}
+	if err := requireDatabase(dbPath); err != nil {
 		return err
 	}
 

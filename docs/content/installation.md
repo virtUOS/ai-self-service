@@ -89,24 +89,17 @@ from their first login, and there is nothing else to do. See
 [Administrators](administrators.md) for what the identity provider has to send.
 
 Without it, admins are managed in the admin panel, and the first one is marked
-in the database. The image has no shell or `sqlite3`, so run the command in a
-throwaway container that mounts the same volume. The person has to log in
-once first, so that Keyosk has their account:
+with a command. The person logs in once, so that Keyosk has their account, and
+looks up their user ID on the **Account settings** page, which opens from the
+account menu. Then mark that account in the running container:
 
 ```sh
-docker run --rm -v keyosk-data:/data alpine:3.22 sh -c '
-  apk add -q sqlite su-exec &&
-  su-exec 10001:10001 sqlite3 /data/data.db "SELECT id, name, email FROM users"'
-
-docker run --rm -v keyosk-data:/data alpine:3.22 sh -c '
-  apk add -q sqlite su-exec &&
-  su-exec 10001:10001 sqlite3 /data/data.db "UPDATE users SET is_admin = 1 WHERE id = 1"'
+docker compose exec keyosk keyosk -make-admin 1
 ```
 
-`su-exec 10001:10001` runs `sqlite3` as the user Keyosk runs as, so the
-database files keep their owner. The change is safe while Keyosk runs and takes
-effect on the person's next request. Further admins are then promoted in the
-panel.
+The command names the account it marked, so a mistyped ID shows. It is safe
+while Keyosk runs and takes effect on the person's next request. Further admins
+are then promoted in the panel.
 
 ## Backups
 
