@@ -103,31 +103,16 @@ when `keyosk_keys_missing` stays above zero for an hour, or when
 fires while the grace period (`KEY_MISSING_GRACE_PERIOD`) still lets you
 correct the cause without losing anything.
 
-## Routes
+## Health checks
 
-| Method | Path                          | Description                                               |
-| ------ | ----------------------------- | --------------------------------------------------------- |
-| `GET`  | `/`                           | User dashboard                                            |
-| `GET`  | `/login`                      | Redirect to OIDC provider                                 |
-| `GET`  | `/callback`                   | OIDC authorization code callback                          |
-| `POST` | `/logout`                     | Clear session and redirect to OIDC logout                 |
-| `POST` | `/backchannel-logout`         | OIDC back-channel logout endpoint                         |
-| `GET`  | `/session/status`             | Returns 200 / 401 (used by client-side polling)           |
-| `POST` | `/key/generate`               | Generate (or replace) the user's API key                  |
-| `POST` | `/key/extend`                 | Move the key expiry to a full period from now             |
-| `POST` | `/key/delete`                 | Delete the user's API key                                 |
-| `GET`  | `/privacy`                    | Privacy notice (only when one is configured)              |
-| `GET`  | `/admin`                      | Admin panel                                               |
-| `POST` | `/admin/profiles`             | Create a profile                                          |
-| `POST` | `/admin/profiles/{id}`        | Update a profile                                          |
-| `POST` | `/admin/profiles/{id}/delete` | Delete a profile                                          |
-| `POST` | `/admin/users/{id}/profile`   | Assign a profile to a user                                |
-| `POST` | `/admin/users/{id}/key/revoke`| Revoke another user's API key                             |
-| `POST` | `/admin/admins`               | Promote an account to admin (not with `ADMIN_GROUP`)      |
-| `POST` | `/admin/admins/revoke`        | Remove an admin (not with `ADMIN_GROUP`)                  |
-| `POST` | `/lang`                       | Record an explicit language choice                        |
-| `GET`  | `/healthz`                    | Liveness probe                                            |
-| `GET`  | `/readyz`                     | Readiness probe (checks the database)                     |
-| `GET`  | `/metrics`                    | Prometheus metrics (bearer token with `METRICS_TOKEN`)    |
-| `GET`  | `/static/*`                   | Stylesheet, scripts, fonts and icons                      |
-| `GET`  | `/favicon.ico`                | Favicon, for browsers that ask at the root                |
+Two endpoints answer without a login, for load balancers and orchestrators:
+
+- `GET /healthz` answers `200 ok` while the server is running. Use it as the
+  liveness probe.
+- `GET /readyz` also checks the database, and answers `503` when it cannot
+  reach it. Use it as the readiness probe.
+
+The container image needs no shell or `curl` for this: its `HEALTHCHECK` runs
+`keyosk -healthcheck`, which probes `/healthz` on `LISTEN_ADDR` and exits
+non-zero when that fails. Kubernetes ignores the image's health check and uses
+its own probes on the two endpoints.

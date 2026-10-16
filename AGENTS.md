@@ -13,6 +13,17 @@ and with Podman, and developers have one or the other. The Makefile uses
 `COMPOSE` to choose, e.g. `make check COMPOSE="podman compose"`. Don't write
 instructions or scripts that assume only one of them.
 
+## Routes
+
+The HTTP routes are defined in one place, `newRouter` in
+`cmd/server/router.go`. `cmd/server/router_test.go` runs every route through
+the real router and expects it to require a login, an admin for `/admin`, a
+CSRF token when it changes state, and `Cache-Control: no-store`. The
+exceptions are listed there (`publicRoutes`, `readOnlyPaths`, `csrfExempt`,
+`storableRoutes`), so a new route that should be an exception needs an entry.
+The routes are internal and are not documented on the website, apart from what
+operators need: the health probes, `/metrics` and the OIDC callbacks.
+
 ## The website
 
 The website and documentation live in `docs/` (Zensical, config in
