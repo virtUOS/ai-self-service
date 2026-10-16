@@ -36,8 +36,9 @@ Profile fields:
 | TPM limit        | Maximum tokens per minute — burst control, complements the usage limit    |
 | RPM limit        | Maximum requests per minute                                               |
 
-Different cohorts get different profiles: students might get 30-day keys with a
-$1.00 daily allowance, lecturers 365-day keys with no quota.
+Different groups get different profiles: a pilot group might get 30-day keys
+with a $1.00 daily allowance, a team that builds on the gateway 365-day keys
+with no quota.
 
 ## How profile changes reach existing keys
 
