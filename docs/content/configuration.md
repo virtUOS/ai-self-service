@@ -7,7 +7,7 @@ in:
 
 | Variable             | Required | Default     | Description                                                        |
 | -------------------- | -------- | ----------- | ------------------------------------------------------------------ |
-| `LITELLM_BASE_URL`   | yes      | —           | Base URL of the LiteLLM proxy                                      |
+| `LITELLM_BASE_URL`   | yes      | —           | Base URL of the LiteLLM proxy. Keyosk manages keys there, and the dashboard shows it, with `/v1`, as the API base URL, so it must be an address users can reach |
 | `LITELLM_MASTER_KEY` | yes      | —           | LiteLLM master key for key management                              |
 | `OIDC_ISSUER_URL`    | yes      | —           | OIDC provider issuer URL                                           |
 | `OIDC_CLIENT_ID`     | yes      | —           | OIDC client ID                                                     |
@@ -16,7 +16,7 @@ in:
 | `OIDC_EXTRA_SCOPES`  | no       | —           | Space-separated scopes requested on top of `openid profile email`, e.g. `groups` for IdPs that send groups only when asked |
 | `ADMIN_GROUP`        | no       | —           | IdP group whose members are the admins; see [Administrators](administrators.md). Unset, admins are managed in the panel |
 | `ADMIN_GROUP_CLAIM`  | no       | `groups`    | Dot path to the ID token claim that lists the groups, e.g. `realm_access.roles` for Keycloak realm roles. Only with `ADMIN_GROUP` |
-| `FRONTEND_URL`       | yes      | —           | Public base URL of this app (shown to users as the API base URL)   |
+| `FRONTEND_URL`       | yes      | —           | Public base URL of this app, used for the link in expiry emails and as the redirect after logout |
 | `LITELLM_USER_ID_PREFIX` | no   |             | Only for several Keyosk instances on one gateway; see [Several Keyosk instances on one gateway](concepts/gateway.md#several-keyosk-instances-on-one-gateway) |
 | `LITELLM_USER_EMAIL` | no       | `false`     | Record people's email addresses on their LiteLLM users, so LiteLLM's user search finds them. Only where addresses are unique across everything connected to the gateway; see [People in LiteLLM](concepts/gateway.md#people-in-litellm) |
 | `DB_PATH`            | no       | `./data.db` | Path to the SQLite database file. It runs in WAL mode, so `-wal` and `-shm` files sit next to it; keep the directory on a local filesystem (not NFS), and back up with `sqlite3 data.db .backup` rather than copying the file |
