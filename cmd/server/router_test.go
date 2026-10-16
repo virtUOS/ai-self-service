@@ -30,7 +30,6 @@ var publicRoutes = map[string]bool{
 	"GET /privacy":             true,
 	"GET /healthz":             true,
 	"GET /readyz":              true,
-	"POST /lang":               true,
 	"POST /logout":             true,
 	"POST /backchannel-logout": true,
 }

@@ -1,13 +1,23 @@
 {{/*
-  Page chrome shared by every page. The data passed in must carry Lang, Langs,
+  Page chrome shared by every page. The data passed in must carry Lang, Theme,
   Path, CSRFToken, TitleKey, User, IsAdmin and PrivacyNotice; User is nil when
   nobody is signed in (the privacy page is public).
+
+  Each page opens with
+    <html lang="{{.Lang}}"{{with .Theme}} data-theme="{{.}}"{{end}}>
+  so a theme chosen in the account settings applies before the first paint.
 */}}
 
 {{/* Everything in <head> that is the same on every page. */}}
 {{define "head-assets"}}
+  {{- if eq .Theme "light"}}
+  <meta name="theme-color" content="#f6f3ec">
+  {{- else if eq .Theme "dark"}}
+  <meta name="theme-color" content="#121817">
+  {{- else}}
   <meta name="theme-color" content="#f6f3ec" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#121817" media="(prefers-color-scheme: dark)">
+  {{- end}}
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="/static/favicon.ico" sizes="32x32">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
@@ -36,17 +46,12 @@
 <header>
   <h1><a href="/">{{template "brand-mark"}}<span class="brand-name">keyosk</span>{{if eq .TitleKey "admin.title"}}<span class="brand-page">{{T .Lang "nav.admin"}}</span>{{end}}</a></h1>
   <nav>
-    <form method="POST" action="/lang" class="lang-switch">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <input type="hidden" name="return_to" value="{{.Path}}">
-      {{$cur := .Lang}}{{range .Langs}}{{if ne . $cur}}
-      <button type="submit" name="lang" value="{{.}}" title="{{.Name}}">{{.}}</button>
-      {{end}}{{end}}
-    </form>
     {{if .User}}
+    {{/* The avatar stays when the screen is too narrow for the name. */}}
     <button type="button" class="account-trigger" popovertarget="account-menu"
             aria-label="{{T .Lang "nav.account"}}: {{.User.Name}}">
-      <span class="account-name">{{.User.Name}}</span><span aria-hidden="true">▾</span>
+      <span class="avatar" aria-hidden="true">{{initial .User.Name}}</span>
+      <span class="account-name">{{.User.Name}}</span><span class="account-caret" aria-hidden="true">▾</span>
     </button>
     {{else}}
     <a href="/">{{T .Lang "nav.dashboard"}}</a>
@@ -57,9 +62,14 @@
        it, and dismisses it on Esc or a click elsewhere. */}}
   {{if .User}}
   <div id="account-menu" class="account-menu" popover>
-    <div class="account-menu-email">{{.User.Email}}</div>
+    <div class="account-menu-who">
+      <div class="account-menu-name">{{.User.Name}}</div>
+      <div class="account-menu-email">{{.User.Email}}</div>
+    </div>
+    <hr>
     {{if ne .Path "/"}}<a href="/">{{T .Lang "nav.dashboard"}}</a>{{end}}
     {{if and .IsAdmin (ne .Path "/admin")}}<a href="/admin">{{T .Lang "nav.admin"}}</a>{{end}}
+    {{if ne .Path "/account"}}<a href="/account">{{T .Lang "nav.settings"}}</a>{{end}}
     <hr>
     <form method="POST" action="/logout">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">

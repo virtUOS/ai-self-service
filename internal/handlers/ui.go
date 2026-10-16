@@ -42,6 +42,8 @@ type UI struct {
 
 	// privacyTmpl renders /privacy, the deployment's privacy notice.
 	privacyTmpl *template.Template
+	// accountTmpl renders /account, the account settings.
+	accountTmpl *template.Template
 }
 
 func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager, oidc *oidcpkg.Provider, keys keyprovider.Provider, csrf *session.CSRF, kickSync func()) *UI {
@@ -55,7 +57,7 @@ func NewUI(cfg *config.Config, store *database.Store, sessions *session.Manager,
 		usage.windowDays = cfg.UsageHistoryDays
 	}
 	return &UI{cfg: cfg, store: store, sessions: sessions, oidc: oidc, keys: keys,
-		tmpl: tmpl, privacyTmpl: parsePrivacyTemplate(), flash: newKeyFlash(), csrf: csrf,
+		tmpl: tmpl, privacyTmpl: parsePrivacyTemplate(), accountTmpl: parseAccountTemplate(), flash: newKeyFlash(), csrf: csrf,
 		models: newModelCache(lister), usage: usage, kickSync: kickSync}
 }
 
@@ -79,7 +81,7 @@ func parseDashboardTemplate() *template.Template {
 // tests cannot drift from the handler's shape.
 type dashboardData struct {
 	Lang          i18n.Lang
-	Langs         []i18n.Lang
+	Theme         Theme
 	Path          string
 	TitleKey      string
 	User          *database.User
@@ -237,13 +239,13 @@ func (u *UI) Dashboard(w http.ResponseWriter, r *http.Request) {
 		Quotas:          profileQuotaLines(profile, lang, u.cfg.BudgetUnit),
 		BudgetUnit:      u.cfg.BudgetUnit,
 		SuccessorURL:    u.cfg.SuccessorURL,
-		PrivacyNotice:   privacyNotice(u.cfg, lang) != "",
+		PrivacyNotice:   hasPrivacyNotice(u.cfg),
 		Models:          models,
 		EmbeddingModels: u.models.Embeddings(r.Context()),
 		Usage:           usage,
 		CSRFToken:       u.csrf.Token(w, r),
 		Lang:            lang,
-		Langs:           i18n.Supported,
+		Theme:           ThemeFromRequest(r),
 		Path:            r.URL.Path,
 		TitleKey:        "app.title",
 		ProfileError:    profileErr,

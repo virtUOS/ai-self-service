@@ -53,105 +53,63 @@
 }
 
 /* ── Design tokens ───────────────────────────────────────── */
-/* The Keyosk palette: warm paper, dark teal-black ink, one teal accent. */
+/* The Keyosk palette: warm paper, dark teal-black ink, one teal accent.
+   Each colour is a light-dark() pair, so the palette follows color-scheme:
+   the system's by default, or the one chosen in the account settings, which
+   the server writes onto <html data-theme>. */
 :root {
-  /* Tells the browser which scheme its own controls follow: without it the
-     date picker, number spinners, checkboxes and scrollbars stay light on the
-     dark theme. */
-  color-scheme: light;
+  /* Also tells the browser which scheme its own controls follow: without it
+     the date picker, number spinners, checkboxes and scrollbars stay light on
+     the dark theme. */
+  color-scheme: light dark;
 
-  --bg:               #f6f3ec;
-  --surface:          #ffffff;
-  --text:             #1f2a2a;
-  --text-muted:       #4a5654;
-  --text-subtle:      #566260;
-  --text-faint:       #8a9390;
-  --border:           #e4dfd4;
-  --border-light:     #efebe1;
-  --primary:          #1e7a6e;
-  --on-primary:       #ffffff;
-  --card-shadow:      0 1px 4px rgba(31,42,42,.07), 0 4px 16px rgba(31,42,42,.04);
-  --header-hover:     rgba(31,42,42,.08);
+  --bg: light-dark(#f6f3ec, #121817);
+  --surface: light-dark(#ffffff, #1a2120);
+  --text: light-dark(#1f2a2a, #f2eee6);
+  --text-muted: light-dark(#4a5654, #a9b3b0);
+  --text-subtle: light-dark(#566260, #a9b3b0);
+  --text-faint: light-dark(#8a9390, #7c8886);
+  --border: light-dark(#e4dfd4, #2c3836);
+  --border-light: light-dark(#efebe1, #232c2a);
+  --primary: light-dark(#1e7a6e, #52b5a6);
+  --on-primary: light-dark(#ffffff, #0e1413);
+  --card-shadow: 0 1px 4px light-dark(rgba(31,42,42,.07), rgba(0,0,0,.4)), 0 4px 16px light-dark(rgba(31,42,42,.04), rgba(0,0,0,.25));
+  --header-hover: light-dark(rgba(31,42,42,.08), rgba(242,238,230,.1));
 
-  --key-bg:           #eaf3f0;
-  --key-border:       #b9d9d2;
-  --key-new-bg:       #e9f4ec;
-  --key-new-border:   #8cc49e;
-  --code-bg:          #ffffff;
+  --key-bg: light-dark(#eaf3f0, #172725);
+  --key-border: light-dark(#b9d9d2, #2a524c);
+  --key-new-bg: light-dark(#e9f4ec, #15261a);
+  --key-new-border: light-dark(#8cc49e, #2e5c3a);
+  --code-bg: light-dark(#ffffff, #0e1413);
 
   /* One monospace for everything copied verbatim: key, URL, model names,
      example code. A thin typewriter face is too faint to tell apart from prose. */
   --font-mono:        'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;
 
-  --alert-info-bg:    #e6f1ef; --alert-info-border:   #a9d1ca; --alert-info-text:   #14574e;
-  --alert-warn-bg:    #fff6dd; --alert-warn-border:   #ebd38a; --alert-warn-text:   #6f5300;
-  --alert-ok-bg:      #e9f4ec; --alert-ok-border:     #a9d2b5; --alert-ok-text:     #1f5c36;
-  --alert-danger-bg:  #fbeaea; --alert-danger-border: #e8aaaa; --alert-danger-text: #a32424;
+  --alert-info-bg: light-dark(#e6f1ef, #112a28); --alert-info-border: light-dark(#a9d1ca, #25574f); --alert-info-text: light-dark(#14574e, #8fd3c7);
+  --alert-warn-bg: light-dark(#fff6dd, #251e00); --alert-warn-border: light-dark(#ebd38a, #5c4a00); --alert-warn-text: light-dark(#6f5300, #ffd54f);
+  --alert-ok-bg: light-dark(#e9f4ec, #0f2616); --alert-ok-border: light-dark(#a9d2b5, #1e5c32); --alert-ok-text: light-dark(#1f5c36, #9ad8ae);
+  --alert-danger-bg: light-dark(#fbeaea, #2a0d0d); --alert-danger-border: light-dark(#e8aaaa, #6b1a1a); --alert-danger-text: light-dark(#a32424, #ef9a9a);
 
-  --btn-sec-bg:       #e9e4d8; --btn-sec-text:  #2b3837;
-  --danger:           #c62828; --on-danger:     #ffffff;
-  --input-bg:         #ffffff; --input-border:  #cfc9ba;
-  --focus-ring:       rgba(30,122,110,.22);
-  --backdrop:         rgba(31,42,42,.4);
-  --hint:             #6f7977;
-  --label:            #3a4644;
+  --btn-sec-bg: light-dark(#e9e4d8, #2c3836); --btn-sec-text: light-dark(#2b3837, #d9d4c8);
+  --danger: light-dark(#c62828, #ef7070); --on-danger: light-dark(#ffffff, #1a0d0d);
+  --input-bg: light-dark(#ffffff, #1f2827); --input-border: light-dark(#cfc9ba, #3a4846);
+  --focus-ring: light-dark(rgba(30,122,110,.22), rgba(82,181,166,.3));
+  --backdrop: light-dark(rgba(31,42,42,.4), rgba(0,0,0,.6));
+  --hint: light-dark(#6f7977, #7c8886);
+  --label: light-dark(#3a4644, #b7c0bc);
 
-  --th-bg:            #f1ede3; --th-text: #4a5654;
-  --tr-hover:         #faf7f0;
+  --th-bg: light-dark(#f1ede3, #161d1c); --th-text: light-dark(#4a5654, #a9b3b0);
+  --tr-hover: light-dark(#faf7f0, #1f2827);
 
-  --copy-btn-border:  #a9b3b0; --copy-btn-hover: #ece6d9;
+  --copy-btn-border: light-dark(#a9b3b0, #46544f); --copy-btn-hover: light-dark(#ece6d9, #2c3836);
 
-  --badge-ok-bg:      #e4f1e8; --badge-ok-text:      #2e7d4f;
-  --badge-warn-bg:    #fff3d6; --badge-warn-text:    #8a5a00;
-  --badge-exp-bg:     #fbe9e9; --badge-exp-text:     #b02a2a;
+  --badge-ok-bg: light-dark(#e4f1e8, #0f2616); --badge-ok-text: light-dark(#2e7d4f, #9ad8ae);
+  --badge-warn-bg: light-dark(#fff3d6, #251e00); --badge-warn-text: light-dark(#8a5a00, #ffd54f);
+  --badge-exp-bg: light-dark(#fbe9e9, #2a0d0d); --badge-exp-text: light-dark(#b02a2a, #ef9a9a);
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-
-    --bg:               #121817;
-    --surface:          #1a2120;
-    --text:             #f2eee6;
-    --text-muted:       #a9b3b0;
-    --text-subtle:      #a9b3b0;
-    --text-faint:       #7c8886;
-    --border:           #2c3836;
-    --border-light:     #232c2a;
-    --primary:          #52b5a6;
-    --on-primary:       #0e1413;
-    --card-shadow:      0 1px 4px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.25);
-    --header-hover:     rgba(242,238,230,.1);
-
-    --key-bg:           #172725;
-    --key-border:       #2a524c;
-    --key-new-bg:       #15261a;
-    --key-new-border:   #2e5c3a;
-    --code-bg:          #0e1413;
-
-    --alert-info-bg:    #112a28; --alert-info-border:   #25574f; --alert-info-text:   #8fd3c7;
-    --alert-warn-bg:    #251e00; --alert-warn-border:   #5c4a00; --alert-warn-text:   #ffd54f;
-    --alert-ok-bg:      #0f2616; --alert-ok-border:     #1e5c32; --alert-ok-text:     #9ad8ae;
-    --alert-danger-bg:  #2a0d0d; --alert-danger-border: #6b1a1a; --alert-danger-text: #ef9a9a;
-
-    --btn-sec-bg:       #2c3836; --btn-sec-text:  #d9d4c8;
-    --danger:           #ef7070; --on-danger:     #1a0d0d;
-    --input-bg:         #1f2827; --input-border:  #3a4846;
-    --focus-ring:       rgba(82,181,166,.3);
-    --backdrop:         rgba(0,0,0,.6);
-    --hint:             #7c8886;
-    --label:            #b7c0bc;
-
-    --th-bg:            #161d1c; --th-text: #a9b3b0;
-    --tr-hover:         #1f2827;
-
-    --copy-btn-border:  #46544f; --copy-btn-hover: #2c3836;
-
-    --badge-ok-bg:      #0f2616; --badge-ok-text:      #9ad8ae;
-    --badge-warn-bg:    #251e00; --badge-warn-text:    #ffd54f;
-    --badge-exp-bg:     #2a0d0d; --badge-exp-text:     #ef9a9a;
-  }
-}
+:root[data-theme=light] { color-scheme: light; }
+:root[data-theme=dark] { color-scheme: dark; }
 
 body {
   font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
@@ -174,7 +132,8 @@ body {
 header {
   /* The awning along the top edge is the logo's stripe pattern, drawn in the
      accent colour. A data: URI cannot read custom properties, so the dark
-     scheme has its own copy below. */
+     scheme has its own copy below, for a system in dark mode and for dark
+     chosen in the account settings. */
   background:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 42'%3E%3Cg fill='%231e7a6e'%3E%3Crect width='80' height='26'/%3E%3Cpath d='M0 26a20 16 0 0 0 40 0ZM40 26a20 16 0 0 0 40 0Z'/%3E%3C/g%3E%3Cpath d='M40 0H80V26a20 16 0 0 1-40 0Z' fill='%23fff' fill-opacity='.45'/%3E%3C/svg%3E") repeat-x left top / 15.24px 8px,
     var(--bg);
@@ -193,14 +152,19 @@ header {
   z-index: 20;
 }
 @media (prefers-color-scheme: dark) {
-  header {
+  :root:not([data-theme=light]) header {
     background:
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 42'%3E%3Cg fill='%2352b5a6'%3E%3Crect width='80' height='26'/%3E%3Cpath d='M0 26a20 16 0 0 0 40 0ZM40 26a20 16 0 0 0 40 0Z'/%3E%3C/g%3E%3Cpath d='M40 0H80V26a20 16 0 0 1-40 0Z' fill='%23fff' fill-opacity='.3'/%3E%3C/svg%3E") repeat-x left top / 15.24px 8px,
       var(--bg);
   }
 }
-/* The title gives way first when space runs out; the language switch and
-   account menu must stay reachable. */
+:root[data-theme=dark] header {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 42'%3E%3Cg fill='%2352b5a6'%3E%3Crect width='80' height='26'/%3E%3Cpath d='M0 26a20 16 0 0 0 40 0ZM40 26a20 16 0 0 0 40 0Z'/%3E%3C/g%3E%3Cpath d='M40 0H80V26a20 16 0 0 1-40 0Z' fill='%23fff' fill-opacity='.3'/%3E%3C/svg%3E") repeat-x left top / 15.24px 8px,
+    var(--bg);
+}
+/* The title gives way first when space runs out; the account menu must stay
+   reachable. */
 header h1 {
   font-size: 1.1rem;
   font-weight: 600;
@@ -210,7 +174,7 @@ header h1 {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-header h1 a { color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: .5em; }
+header h1 a { color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: .5em; max-width: 100%; }
 .brand-mark { height: 2em; width: 2em; flex: none; }
 .brand-awning { fill: var(--primary); }
 .brand-body { fill: var(--text); }
@@ -226,6 +190,11 @@ header h1 a { color: inherit; text-decoration: none; display: inline-flex; align
   border-left: 1px solid var(--border);
   padding-left: .7em;
   margin-left: .2em;
+  /* The h1's own ellipsis cannot reach into the inline-flex link, so the
+     label cuts itself. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 header nav { display: flex; gap: 1rem; align-items: center; flex-shrink: 0; }
 header nav a, header nav button {
@@ -241,13 +210,29 @@ header nav a, header nav button {
 }
 header nav a:hover, header nav button:hover { background: var(--header-hover); color: var(--text); }
 
-/* The username opens the account menu. Long names are cut rather than
-   allowed to push the header onto a second line. */
+/* The avatar and username open the account menu. Long names are cut rather
+   than allowed to push the header onto a second line; on a phone only the
+   avatar is left. */
 .account-trigger {
   display: inline-flex;
   align-items: center;
-  gap: .3rem;
+  gap: .45rem;
   min-height: 24px;
+}
+header nav .account-trigger { padding: .25rem .4rem .25rem .25rem; border-radius: 999px; }
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: .95rem;
+  font-weight: 700;
+  line-height: 1;
 }
 .account-name {
   max-width: 12ch;
@@ -274,14 +259,16 @@ header nav a:hover, header nav button:hover { background: var(--header-hover); c
   box-shadow: var(--card-shadow);
   font-size: .9rem;
 }
-.account-menu-email {
-  padding: .4rem 1rem;
-  color: var(--text-muted);
-  font-size: .8rem;
+/* Who is signed in, at the top of the menu: on a phone the header shows only
+   the avatar. */
+.account-menu-who { padding: .4rem 1rem; }
+.account-menu-name, .account-menu-email {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.account-menu-name { font-weight: 600; }
+.account-menu-email { color: var(--text-muted); font-size: .8rem; }
 .account-menu a, .account-menu button {
   display: block;
   width: 100%;
@@ -349,6 +336,7 @@ main.main-wide { max-width: 1280px; }
 .info-grid { display: grid; grid-template-columns: max-content 1fr; gap: .4rem 1.25rem; }
 .info-grid dt { color: var(--text-subtle); font-size: .85rem; padding-top: .05rem; }
 .info-grid dd { font-weight: 500; word-break: break-all; }
+.info-grid dd.mono { font-family: var(--font-mono); font-size: .85rem; font-weight: 400; }
 
 /* ── Key display ─────────────────────────────────────────── */
 .key-box {
@@ -654,6 +642,10 @@ td.cell-menu { width: 1%; text-align: right; }
   border-radius: 0;
 }
 .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+/* The privacy notice's language tabs are links: each language has its own URL. */
+a.tab-btn { text-decoration: none; }
+a.tab-btn:hover { color: var(--text); }
+a.tab-btn.active:hover { color: var(--primary); }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
@@ -696,11 +688,14 @@ td.cell-menu { width: 1%; text-align: right; }
   .inline-form { flex-direction: column; align-items: stretch; }
   .inline-form input, .inline-form input[type=search], .inline-form select { width: 100%; min-width: 0; }
 
-  /* The header keeps its single row: everything but the language switch
-     lives in the account menu, so only the gutters shrink. */
+  /* The header keeps its single row: everything lives in the account menu,
+     and the trigger shrinks to the avatar, which is a large enough target on
+     its own. */
   header { padding: 0 1rem; gap: .75rem; }
   header h1 { font-size: 1rem; }
   header nav { gap: .5rem; }
+  .account-name, .account-caret { display: none; }
+  header nav .account-trigger { padding: .25rem; }
 
   /* A max-content label column leaves the value squeezed against the right
      edge on a narrow screen — "Nutzungslimit" alone is most of the width.
@@ -712,10 +707,10 @@ td.cell-menu { width: 1%; text-align: right; }
   /* The copy button drops under the value rather than competing with it. */
   .key-box { flex-wrap: wrap; gap: .5rem; }
 
-  /* Touch targets. The help dot and the language buttons are sized for a
-     mouse; a finger needs the 24px of WCAG 2.5.8. The dot keeps its drawn
-     size — growing the circle would shout on a small screen — and gains the
-     rest as an invisible tap area, so only the hit box changes. */
+  /* Touch targets. The help dot is sized for a mouse; a finger needs the
+     24px of WCAG 2.5.8. The dot keeps its drawn size — growing the circle
+     would shout on a small screen — and gains the rest as an invisible tap
+     area, so only the hit box changes. */
   .help {
     position: relative;
     width: 1.05rem;
@@ -730,7 +725,6 @@ td.cell-menu { width: 1%; text-align: right; }
     height: 24px;
     transform: translate(-50%, -50%);
   }
-  .lang-switch button { min-height: 24px; min-width: 24px; }
 
   /* The checkbox is a 13px browser control with a sibling label, so tapping
      the label works but the box itself is a small target. Grow the control
@@ -739,6 +733,12 @@ td.cell-menu { width: 1%; text-align: right; }
   .checkbox-row { min-height: 24px; }
   .checkbox-row input[type=checkbox] { width: 24px; height: 24px; }
   .copy-btn { min-height: 24px; }
+}
+
+/* The narrowest phones: the admin label goes before it would be cut to a
+   letter or two, the logo and name say where you are on their own. */
+@media (max-width: 360px) {
+  .brand-page { display: none; }
 }
 
 /* ── Help tooltips ──────────────────────────────────────────────────────── */
@@ -829,30 +829,6 @@ td.cell-menu { width: 1%; text-align: right; }
   font-family: var(--font-mono);
   font-size: .8rem;
   word-break: break-all;
-}
-
-/* ── Language switcher ──────────────────────────────────────────────────── */
-/* Shows only the language you are NOT using, so one click swaps. */
-.lang-switch {
-  display: inline;
-  margin-right: .5rem;
-}
-
-.lang-switch button {
-  padding: .15rem .4rem;
-  font-size: .75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .03em;
-  color: inherit;
-  background: var(--header-hover);
-  border: 1px solid var(--border);
-  border-radius: .25rem;
-  cursor: pointer;
-}
-
-.lang-switch button:hover {
-  background: var(--copy-btn-hover);
 }
 
 /* Model list on the dashboard: names must be copyable verbatim, so they are

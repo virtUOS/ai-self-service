@@ -29,7 +29,7 @@ in:
 | `USAGE_HISTORY_DAYS` | no       | `30`        | How far back the usage chart and per-model table reach; see [Usage reporting](concepts/usage-limits.md#usage-reporting) |
 | `SUCCESSOR_URL`      | no       |             | Set on a Keyosk instance being retired: the dashboard shows a banner sending users to this address. Keys can no longer be created or extended here, only deleted; existing keys expire on their own |
 | `PRIVACY_NOTICE_FILE_DE` | no   | —           | Path to an HTML fragment shown at `/privacy` (no login needed) as this deployment's privacy notice, and linked from the dashboard. A named file that is missing or empty stops startup |
-| `PRIVACY_NOTICE_FILE_EN` | no   | —           | The same in English. With only one language set, readers of the other get that one |
+| `PRIVACY_NOTICE_FILE_EN` | no   | —           | The same in English. With only one language set, readers of the other get that one; with both, visitors who are not signed in can switch between them on the page |
 | `SMTP_HOST`          | no       | —           | `host:port` of a mail relay; unset disables expiry emails          |
 | `SMTP_FROM`          | no       | `noreply@example.com` | Sender address for expiry emails                   |
 | `SMTP_USERNAME`      | no       | —           | Only if the relay requires authentication                          |

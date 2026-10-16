@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{.Lang}}"{{with .Theme}} data-theme="{{.}}"{{end}}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{T .Lang "admin.title"}}</title>
-{{template "head-assets"}}
+{{template "head-assets" .}}
 </head>
 <body>
 

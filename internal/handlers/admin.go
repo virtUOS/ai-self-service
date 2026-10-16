@@ -205,7 +205,7 @@ type userRow struct {
 
 type adminData struct {
 	Lang     i18n.Lang
-	Langs    []i18n.Lang
+	Theme    Theme
 	Path     string
 	TitleKey string
 	// User, IsAdmin and PrivacyNotice feed the shared header and footer.
@@ -305,12 +305,12 @@ func (a *Admin) Panel(w http.ResponseWriter, r *http.Request) {
 	lang := i18n.FromRequest(r)
 	if err := a.tmpl.Execute(w, adminData{
 		Lang:            lang,
-		Langs:           i18n.Supported,
+		Theme:           ThemeFromRequest(r),
 		Path:            r.URL.Path,
 		TitleKey:        "admin.title",
 		User:            user,
 		IsAdmin:         true,
-		PrivacyNotice:   privacyNotice(a.cfg, lang) != "",
+		PrivacyNotice:   hasPrivacyNotice(a.cfg),
 		AvailableModels: a.models.Models(r.Context()),
 		DefaultKeyDays:  a.cfg.KeyDurationDays,
 		Profiles:        profiles,

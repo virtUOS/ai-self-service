@@ -41,9 +41,17 @@ func TestDashboardAccountMenu(t *testing.T) {
 		if !strings.Contains(page, `popovertarget="account-menu"`) {
 			t.Fatal("no account menu trigger")
 		}
+		// On a phone the trigger shrinks to the avatar, so the menu says who
+		// is signed in.
+		if !strings.Contains(page, `<span class="avatar" aria-hidden="true">L</span>`) {
+			t.Error("trigger has no avatar with the user's initial")
+		}
 		menu := accountMenu(page)
-		if !strings.Contains(menu, "l@uni-osnabrueck.de") {
-			t.Error("menu does not show the signed-in address")
+		if !strings.Contains(menu, "lkiesow") || !strings.Contains(menu, "l@uni-osnabrueck.de") {
+			t.Error("menu does not show who is signed in")
+		}
+		if !strings.Contains(menu, `href="/account"`) {
+			t.Error("menu does not lead to the account settings")
 		}
 		if !strings.Contains(menu, `action="/logout"`) || !strings.Contains(menu, `value="TOK"`) {
 			t.Error("menu has no CSRF-protected sign-out form")
@@ -54,6 +62,23 @@ func TestDashboardAccountMenu(t *testing.T) {
 		if strings.Contains(menu, `href="/"`) {
 			t.Error("menu links the dashboard from the dashboard")
 		}
+	}
+}
+
+// The language is chosen in the account settings now; the header has no
+// switch left to crowd it on a phone.
+func TestHeaderHasNoLanguageSwitch(t *testing.T) {
+	var buf bytes.Buffer
+	if err := parseDashboardTemplate().Execute(&buf, dashboardData{
+		Lang: i18n.DE, Path: "/", CSRFToken: "TOK",
+		User: &database.User{Name: "lkiesow", Email: "l@uni-osnabrueck.de"},
+	}); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	page := buf.String()
+	header := page[strings.Index(page, "<header>"):strings.Index(page, "</header>")]
+	if strings.Contains(header, `name="lang"`) || strings.Contains(header, `action="/lang"`) {
+		t.Error("header still has a language switch")
 	}
 }
 

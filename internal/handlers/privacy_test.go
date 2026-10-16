@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -125,5 +127,102 @@ func TestDashboardLinksThePrivacyNoticeWhenConfigured(t *testing.T) {
 	}
 	if !strings.Contains(main, `href="/privacy"`) {
 		t.Error("key card does not link the privacy notice")
+	}
+}
+
+// tabs returns the privacy page's language tabs as "lang:active" pairs, in
+// order, or nil when the page has none.
+func tabs(page string) []string {
+	var out []string
+	for _, m := range regexp.MustCompile(`<a class="tab-btn( active)?" href="/privacy\?lang=(\w+)"`).FindAllStringSubmatch(page, -1) {
+		out = append(out, m[2]+":"+strconv.FormatBool(m[1] != ""))
+	}
+	return out
+}
+
+// An anonymous reader can switch the notice between the languages it is
+// written in. The default is their own language, as for the rest of the page.
+func TestPrivacyPageOffersTheNoticesLanguages(t *testing.T) {
+	ui, _, _, _ := newTestUI(t, "priv5")
+	ui.cfg.PrivacyNoticeDE, ui.cfg.PrivacyNoticeEN = "<p>Deutscher Text</p>", "<p>English text</p>"
+
+	get := func(path, acceptLang string) string {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		if acceptLang != "" {
+			req.Header.Set("Accept-Language", acceptLang)
+		}
+		rec := httptest.NewRecorder()
+		ui.Privacy(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s got %d", path, rec.Code)
+		}
+		return rec.Body.String()
+	}
+
+	page := get("/privacy", "en-GB,en;q=0.9")
+	if got := strings.Join(tabs(page), " "); got != "de:false en:true" {
+		t.Errorf("tabs = %q, want both languages with English shown", got)
+	}
+	if !strings.Contains(page, "English text") || strings.Contains(page, "Deutscher Text") {
+		t.Error("English reader does not get the English notice")
+	}
+
+	// A tab shows its language, page and all, and remembers nothing.
+	req := httptest.NewRequest(http.MethodGet, "/privacy?lang=de", nil)
+	req.Header.Set("Accept-Language", "en")
+	rec := httptest.NewRecorder()
+	ui.Privacy(rec, req)
+	page = rec.Body.String()
+	if got := strings.Join(tabs(page), " "); got != "de:true en:false" {
+		t.Errorf("tabs = %q, want German shown", got)
+	}
+	if !strings.Contains(page, "Deutscher Text") || !strings.Contains(page, `<html lang="de"`) {
+		t.Error("?lang=de does not show the German page")
+	}
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == i18n.CookieName {
+			t.Error("a tab stored the language")
+		}
+	}
+
+	// An unknown language is ignored rather than rendering keys.
+	if !strings.Contains(get("/privacy?lang=xx", "en"), "English text") {
+		t.Error("an unknown ?lang changed the notice")
+	}
+}
+
+// One notice needs no tabs, and a signed-in reader has chosen a language in
+// the account settings, so gets that one without tabs.
+func TestPrivacyPageTabsOnlyWhenThereIsAChoice(t *testing.T) {
+	ui, _, _, _ := newTestUI(t, "priv6")
+	ui.cfg.PrivacyNoticeDE = "<p>Deutscher Text</p>"
+	if got := tabs(getPrivacy(t, ui, i18n.EN).Body.String()); got != nil {
+		t.Errorf("tabs %v for a notice in one language", got)
+	}
+
+	ui.cfg.PrivacyNoticeEN = "<p>English text</p>"
+	req := httptest.NewRequest(http.MethodGet, "/privacy?lang=de", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: os.Getenv("SESSION_TOKEN")})
+	req.AddCookie(&http.Cookie{Name: i18n.CookieName, Value: "en"})
+	rec := httptest.NewRecorder()
+	ui.Privacy(rec, req)
+	page := rec.Body.String()
+	if got := tabs(page); got != nil {
+		t.Errorf("signed-in reader got tabs %v", got)
+	}
+	if !strings.Contains(page, "English text") {
+		t.Error("signed-in reader does not get the language they chose")
+	}
+}
+
+// A notice shown in another language than the page says so, for screen
+// readers and hyphenation.
+func TestPrivacyNoticeIsMarkedWithItsLanguage(t *testing.T) {
+	ui, _, _, _ := newTestUI(t, "priv7")
+	ui.cfg.PrivacyNoticeDE = "<p>Deutscher Text</p>"
+	page := getPrivacy(t, ui, i18n.EN).Body.String()
+	if !strings.Contains(page, `<html lang="en"`) || !strings.Contains(page, `<div class="notice" lang="de">`) {
+		t.Error("German notice on an English page is not marked as German")
 	}
 }
