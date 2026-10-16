@@ -215,6 +215,15 @@
   text-transform: lowercase;
 }
 
+/* ── Layout and tables ───────────────────────────────────── */
+/* A little wider than the default, for the configuration tables. */
+.md-grid { max-width: 70rem; }
+/* Setting names and routes in a table's first column must not break mid-word. */
+.md-typeset table td:first-child code,
+.md-typeset table th:first-child code {
+  white-space: nowrap;
+}
+
 /* ── Admonitions ─────────────────────────────────────────── */
 /* The default "note" is blue; make it the accent. Other types keep their
    own colours, which carry meaning (warning, danger). */
@@ -234,7 +243,7 @@
 /* ── Front page ──────────────────────────────────────────── */
 /* The hero from the design drafts. Ported from its inline styles; the colours
    are the scheme's (--kx-* above), so the palette toggle drives it. */
-.kx-home { max-width: 61rem; margin: 0 auto; padding: 0 .8rem; flex: 1 1 100%; }
+.kx-home { max-width: 70rem; margin: 0 auto; padding: 0 .8rem; flex: 1 1 100%; }
 .kx-awn-fill { fill: var(--md-accent-fg-color); }
 .kx-awn-stripe { fill-opacity: var(--kx-stripe); }
 .kx-ink { fill: var(--md-default-fg-color); }
