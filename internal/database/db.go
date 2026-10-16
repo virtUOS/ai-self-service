@@ -798,6 +798,25 @@ func (s *Store) ListAPIKeys(ctx context.Context) ([]APIKey, error) {
 	return keys, err
 }
 
+// CountAPIKeys returns how many keys are stored and how many of them expire
+// within the next withinDays days. Already-expired keys count towards the total
+// only.
+func (s *Store) CountAPIKeys(ctx context.Context, withinDays int) (total, expiring int, err error) {
+	now := time.Now()
+	all, err := s.db.NewSelect().Model((*APIKey)(nil)).Count(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	soon, err := s.db.NewSelect().Model((*APIKey)(nil)).
+		Where("expires_at > ?", now).
+		Where("expires_at <= ?", now.AddDate(0, 0, withinDays)).
+		Count(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	return int(all), int(soon), nil
+}
+
 // --- Expiry notifications ---
 
 // KeysExpiringWithin returns keys expiring in the next window that have not yet

@@ -194,20 +194,12 @@ func main() {
 	// Refresh key gauges alongside the other periodic work. Reading them from
 	// the database keeps them correct across restarts.
 	refreshGauges := func() {
-		ctx := context.Background()
-		keys, err := store.ListAPIKeys(ctx)
+		total, soon, err := store.CountAPIKeys(context.Background(), 7)
 		if err != nil {
-			slog.Error("metrics: list keys", "err", err)
+			slog.Error("metrics: count keys", "err", err)
 			return
 		}
-		soon := 0
-		cutoff := time.Now().AddDate(0, 0, 7)
-		for _, k := range keys {
-			if k.ExpiresAt.Before(cutoff) {
-				soon++
-			}
-		}
-		metrics.SetKeyGauges(len(keys), soon)
+		metrics.SetKeyGauges(total, soon)
 	}
 	refreshGauges()
 
