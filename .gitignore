@@ -27,3 +27,7 @@
 
 # Local Claude Code settings. Per-developer, not shared.
 .claude/
+
+# Specs and plans written by AI planning tools during development. Local
+# working files, not documentation.
+/docs/superpowers/
