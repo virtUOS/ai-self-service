@@ -150,6 +150,23 @@ func (g e2eGateway) keySpend(ctx context.Context, ref string) (float64, error) {
 	return q.Used, err
 }
 
+// waitOutWindowBoundary sleeps past any quota window of the key that is about
+// to roll over. The windows are clock-aligned, so one that resets between the
+// requests and the check reads zero against a key that has spent, which failed
+// a run at the top of the hour. The margin covers how long the check may wait
+// for the spend to land.
+func (g e2eGateway) waitOutWindowBoundary(t *testing.T, ref, owner string) {
+	t.Helper()
+	windows, err := g.Windows(context.Background(), ref, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wait := windowBoundaryWait(windows, time.Now(), flushPatience+30*time.Second); wait > 0 {
+		t.Logf("waiting %v for a quota window to roll over first", wait.Round(time.Second))
+		time.Sleep(wait)
+	}
+}
+
 func TestE2EModels(t *testing.T) {
 	g := newE2EGateway(t)
 	ctx := context.Background()
@@ -337,6 +354,7 @@ func TestE2EWindowsByShape(t *testing.T) {
 			owner := e2eOwner(t)
 
 			k := g.createKey(t, owner, keyprovider.Limits{Quotas: tc.quotas})
+			g.waitOutWindowBoundary(t, k.Ref, owner)
 			g.mustComplete(t, k.Secret, "mock-small")
 			g.mustComplete(t, k.Secret, "mock-small")
 
