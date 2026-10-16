@@ -35,7 +35,7 @@ starts by default, and `.env.example` is preset for it.
 | | Mock | Keycloak |
 | --- | --- | --- |
 | Start | by default | `--profile keycloak` |
-| Issuer | `http://localhost:8081` | `http://localhost:8082/realms/virtuos` |
+| Issuer | `http://localhost:8081` | `http://localhost:8082/realms/keyosk` |
 | Ready in | under a second | ~20s (realm import) |
 | Fidelity | different implementation | same software as production |
 | Back-channel logout | **no** | yes |
@@ -90,7 +90,7 @@ docker compose -f dev/docker-compose.yml --profile keycloak up -d --wait
 
 Admin console: <http://localhost:8082> (`admin` / `admin`).
 
-The `virtuos` realm is imported automatically with a confidential client and
+The `keyosk` realm is imported automatically with a confidential client and
 the same two users as the mock, with passwords:
 
 | User      | Password  | Email                        | Role in the app |
@@ -102,7 +102,7 @@ The client id and secret in `.env.example` (`keyosk` /
 `local-dev-secret`) are the realm's, so only the issuer changes in `.env`:
 
 ```
-OIDC_ISSUER_URL=http://localhost:8082/realms/virtuos
+OIDC_ISSUER_URL=http://localhost:8082/realms/keyosk
 ```
 
 The realm has a `keyosk-admin` group with `admin` as its member, and
