@@ -587,7 +587,7 @@ func (a *Admin) accountFromForm(w http.ResponseWriter, r *http.Request) (*databa
 	}
 	user, err := a.store.GetUserByID(r.Context(), id)
 	if err != nil {
-		http.Redirect(w, r, "/admin?flash=That+account+is+not+known+to+this+portal#admins", http.StatusFound)
+		http.Redirect(w, r, "/admin?flash=That+account+is+not+known+to+Keyosk#admins", http.StatusFound)
 		return nil, false
 	}
 	return user, true
