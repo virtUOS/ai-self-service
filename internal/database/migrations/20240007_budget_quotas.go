@@ -15,9 +15,8 @@ import (
 // Admins now configure the budget directly and the gateway gets it as is.
 //
 // Existing rows convert at the nominal rate every model on this deployment
-// was priced at, 0.0000001 per token (documentation, "How usage limits work",
-// https://virtuos.github.io/keyosk/concepts/usage-limits/), so
-// each enforced cap keeps its size across the upgrade. A deployment that had
+// was priced at, 0.0000001 per token, so each enforced cap keeps its size
+// across the upgrade. A deployment that had
 // changed that rate should check its profile budgets after upgrading.
 func init() {
 	Migrations.MustRegister(inTx(func(ctx context.Context, tx bun.Tx) error {

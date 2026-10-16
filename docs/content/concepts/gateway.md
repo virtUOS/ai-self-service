@@ -6,12 +6,8 @@ Each person with a key has a LiteLLM internal user, which holds their budget.
 Keyosk labels it with the person's username (`user_alias`), so LiteLLM's
 user list shows who is who. Each key is bound to that user, and its alias,
 `<subject>-<username>-<random>`, names the person as well. When someone logs
-in with a new username, the limit sync updates both labels.
-
-Keys carry no email address. Keys issued before this version still have one
-in their metadata, which is left as it is: rewriting a key's metadata would
-also replace settings an admin made there in LiteLLM. It goes when the key is
-regenerated.
+in with a new username, the limit sync updates both labels. Keys themselves
+carry no email address.
 
 With `LITELLM_USER_EMAIL=true` Keyosk also records the person's email
 address on their user. That is what makes them findable: LiteLLM's user
@@ -23,9 +19,6 @@ them. Turning the option on or off changes nothing until each key is pushed
 again; run `keyosk -resync-limits` to do that for all of them.
 Turning it off does not remove addresses already recorded.
 
-After upgrading to the version that added the labels, the first sync updates
-every unexpired key once, so every user and key is labelled.
-
 ## Several Keyosk instances on one gateway
 
 A person's budget, the widest quota window of their profile, is held on a
@@ -36,8 +29,8 @@ budget, and each instance's limit sync overwrites what the other one set.
 
 Give every instance on a shared gateway but at most one its own
 `LITELLM_USER_ID_PREFIX`. Its users are then named `<prefix>:<subject>`, and
-the instances no longer touch each other's budgets. A single instance needs no
-prefix, and existing deployments keep their users and budgets unchanged.
+the instances don't touch each other's budgets. A single instance needs no
+prefix; without one, users are named after the plain OIDC subject.
 
 Set the prefix before Keyosk issues its first key. Changing it later is
 not supported: keys stay bound to the old users, and keep counting against

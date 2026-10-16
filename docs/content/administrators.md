@@ -11,9 +11,6 @@ deployment uses exactly one:
 - **In the panel**, without `ADMIN_GROUP`: admins promote and remove each
   other, and the first one is marked with a command on the server.
 
-The former settings `ADMIN_IDS`, `ADMIN_EMAILS` and `ADMIN_ROLE` are no longer
-read; Keyosk warns at startup if one is still set ([issue #107](https://github.com/virtUOS/keyosk/issues/107)).
-
 ## Admins from the login system
 
 Set `ADMIN_GROUP` to a group in the IdP, and make sure the IdP puts the
