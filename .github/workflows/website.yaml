@@ -1,0 +1,81 @@
+name: Website
+
+# The website and documentation (website/, built with Zensical) are published
+# on GitHub Pages from main. A pull request only builds them, so a broken link
+# or template shows up before the merge. Settings -> Pages -> Source must be
+# "GitHub Actions".
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - website/**
+      - web/static/brand/**
+      - web/static/fonts/**
+      - web/static/favicon.*
+      - web/static/apple-touch-icon.png
+      - docs/brand/social-preview.png
+      - .github/requirements.txt
+      - .github/workflows/website.yaml
+      - Makefile
+  pull_request:
+    paths:
+      - website/**
+      - web/static/brand/**
+      - web/static/fonts/**
+      - web/static/favicon.*
+      - web/static/apple-touch-icon.png
+      - docs/brand/social-preview.png
+      - .github/requirements.txt
+      - .github/workflows/website.yaml
+      - Makefile
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deployment at a time; a newer one waits rather than cancelling a running
+# deployment halfway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: 3.x
+
+      # The Makefile installs the pinned Zensical from .github/requirements.txt
+      # into website/.venv, copies in the brand files and builds with --strict,
+      # so a broken link fails the job. No pip cache: Zensical advises against
+      # caching on CI for now.
+      - name: Build the site
+        run: make website
+
+      - name: Upload the site
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: website/site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
