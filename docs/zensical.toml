@@ -24,7 +24,6 @@ nav = [
     { "The LiteLLM gateway" = "concepts/gateway.md" },
   ] },
   { "Operating Keyosk" = "operations.md" },
-  { "Upgrading" = "upgrading.md" },
 ]
 
 [project.theme]
