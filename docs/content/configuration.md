@@ -12,7 +12,7 @@ in:
 | `OIDC_ISSUER_URL`    | yes      | —           | OIDC provider issuer URL                                           |
 | `OIDC_CLIENT_ID`     | yes      | —           | OIDC client ID                                                     |
 | `OIDC_CLIENT_SECRET` | yes      | —           | OIDC client secret                                                 |
-| `OIDC_REDIRECT_URL`  | yes      | —           | Callback URL (must match OIDC client config)                       |
+| `OIDC_REDIRECT_URL`  | yes      | —           | Callback URL (must match OIDC client config). With `https`, also behind a proxy that ends TLS, the cookies are `Secure` and get the `__Host-` prefix, which no other host under the same domain can set, and responses carry HSTS; the app must then be served at the root of its own host name |
 | `OIDC_EXTRA_SCOPES`  | no       | —           | Space-separated scopes requested on top of `openid profile email`, e.g. `groups` for IdPs that send groups only when asked |
 | `ADMIN_GROUP`        | no       | —           | IdP group whose members are the admins; see [Administrators](administrators.md). Unset, admins are managed in the panel |
 | `ADMIN_GROUP_CLAIM`  | no       | `groups`    | Dot path to the ID token claim that lists the groups, e.g. `realm_access.roles` for Keycloak realm roles. Only with `ADMIN_GROUP` |
@@ -22,7 +22,6 @@ in:
 | `DB_PATH`            | no       | `./data.db` | Path to the SQLite database file. It runs in WAL mode, so `-wal` and `-shm` files sit next to it; keep the directory on a local filesystem (not NFS), and back up with `sqlite3 data.db .backup` rather than copying the file |
 | `LISTEN_ADDR`        | no       | `:8080`     | Address and port to listen on                                      |
 | `TRUSTED_PROXIES`    | no       | private ranges | Comma-separated CIDRs or IPs of reverse proxies whose `X-Forwarded-For` is believed for the client address in the request log. The default is loopback and the private ranges (`127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`); `none` trusts nobody and always logs the connecting address |
-| `COOKIE_SECURE`      | no       | `false`     | Set `true` when serving over HTTPS. Cookies then get the `__Host-` prefix, which no other host under the same domain can set, so the app must be served at the root of its own host name |
 | `SESSION_DURATION`   | no       | `24h`       | How long a login session lasts                                     |
 | `KEY_DURATION_DAYS`  | no       | `90`        | Default key validity; profiles may override it                     |
 | `BUDGET_UNIT`        | no       | `$`         | Unit label for quota amounts; use a word such as `credits` when model prices are nominal |

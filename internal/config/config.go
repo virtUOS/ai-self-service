@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net/netip"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -54,12 +55,9 @@ type Config struct {
 	// roles are realm_access.roles.
 	AdminGroupClaim string
 
-	// ObsoleteSettings names the settings that are set in the environment but
-	// no longer read, so startup can say so. Admin rights used to come from
-	// ADMIN_IDS, ADMIN_EMAILS and ADMIN_ROLE; they are recorded on the account
-	// now (issue #107), and an operator who still sets these would otherwise
-	// find nobody is an admin and not know why.
-	ObsoleteSettings []string
+	// ObsoleteSettings are the settings that are set in the environment but
+	// no longer read, so startup can say so and what replaced them.
+	ObsoleteSettings []ObsoleteSetting
 
 	DBPath string
 
@@ -74,8 +72,11 @@ type Config struct {
 	// leaves the endpoint open to anyone who can reach it.
 	MetricsToken string
 
-	ListenAddr      string
-	CookieSecure    bool
+	ListenAddr string
+	// CookieSecure is true when OIDC_REDIRECT_URL is https. Cookies are then
+	// Secure and __Host- prefixed, and responses carry HSTS.
+	CookieSecure bool
+
 	SessionDuration time.Duration
 	KeyDurationDays int
 
@@ -124,6 +125,26 @@ type Config struct {
 	// front of the portal usually sits. Empty trusts nobody.
 	TrustedProxies []netip.Prefix
 }
+
+// ObsoleteSetting is a setting that is no longer read, with what replaced it.
+type ObsoleteSetting struct {
+	Name   string
+	Reason string
+}
+
+// obsoleteSettings are the settings an operator may still set from an older
+// version. Admin rights used to come from ADMIN_IDS, ADMIN_EMAILS and
+// ADMIN_ROLE; they are recorded on the account now (issue #107), and an
+// operator who still sets these would otherwise find nobody is an admin and
+// not know why.
+var obsoleteSettings = []ObsoleteSetting{
+	{"ADMIN_IDS", adminRecordedOnAccount},
+	{"ADMIN_EMAILS", adminRecordedOnAccount},
+	{"ADMIN_ROLE", adminRecordedOnAccount},
+	{"COOKIE_SECURE", "cookies are secure when OIDC_REDIRECT_URL is https"},
+}
+
+const adminRecordedOnAccount = "admin rights are recorded on the account, see https://virtuos.github.io/keyosk/administrators/"
 
 // defaultTrustedProxies are the loopback and private ranges, IPv4 and IPv6.
 var defaultTrustedProxies = []string{
@@ -185,17 +206,18 @@ func Load() (*Config, error) {
 	}
 	cfg.AdminGroupClaim = claim
 
-	for _, name := range []string{"ADMIN_IDS", "ADMIN_EMAILS", "ADMIN_ROLE"} {
-		if strings.TrimSpace(os.Getenv(name)) != "" {
-			cfg.ObsoleteSettings = append(cfg.ObsoleteSettings, name)
+	for _, s := range obsoleteSettings {
+		if strings.TrimSpace(os.Getenv(s.Name)) != "" {
+			cfg.ObsoleteSettings = append(cfg.ObsoleteSettings, s)
 		}
 	}
 
-	secure, err := strconv.ParseBool(envOr("COOKIE_SECURE", "false"))
-	if err != nil {
-		return nil, fmt.Errorf("COOKIE_SECURE must be true or false: %w", err)
-	}
-	cfg.CookieSecure = secure
+	// The cookies and HSTS depend on what the browser sees, also when a
+	// reverse proxy in front ends TLS. The redirect URL is the one address
+	// whose scheme is known to be right: with a wrong one, nobody could log
+	// in. A URL that does not parse breaks the login as well.
+	redirect, err := url.Parse(cfg.OIDCRedirectURL)
+	cfg.CookieSecure = err == nil && redirect.Scheme == "https"
 
 	dur, err := time.ParseDuration(envOr("SESSION_DURATION", "24h"))
 	if err != nil {

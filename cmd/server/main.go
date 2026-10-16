@@ -95,12 +95,12 @@ func main() {
 		slog.Error("cleanup sessions", "err", err)
 	}
 
-	// Admin rights are recorded on the account (issue #107). An operator who
-	// still sets the old settings, or has not marked a first admin yet, would
-	// otherwise find nobody can reach the panel and not know why.
-	for _, name := range cfg.ObsoleteSettings {
-		slog.Warn("setting is no longer read: admin rights are recorded on the account, see https://virtuos.github.io/keyosk/administrators/",
-			"setting", name)
+	// An operator who still sets a setting an older version read would
+	// otherwise not know it has no effect. Admin rights in particular are
+	// recorded on the account (issue #107): with the old settings, or no first
+	// admin marked yet, nobody can reach the panel.
+	for _, s := range cfg.ObsoleteSettings {
+		slog.Warn("setting is no longer read: "+s.Reason, "setting", s.Name)
 	}
 	if cfg.AdminFromGroups() {
 		// Nobody holds the flag until a member of the group logs in, so a
