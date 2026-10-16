@@ -47,11 +47,11 @@ LITELLM_MASTER_KEY=sk-...
 OIDC_ISSUER_URL=https://login.example.org/realms/example
 OIDC_CLIENT_ID=keyosk
 OIDC_CLIENT_SECRET=...
+# https here makes the cookies secure
 OIDC_REDIRECT_URL=https://keyosk.example.org/callback
 
-# Where people reach Keyosk; served over HTTPS, so the cookies are secure
+# Where people reach Keyosk
 FRONTEND_URL=https://keyosk.example.org
-COOKIE_SECURE=true
 
 # Admins: the members of this group at the identity provider
 ADMIN_GROUP=keyosk-admin

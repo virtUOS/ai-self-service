@@ -34,8 +34,8 @@ const (
 //
 // The second layer is a signed double-submit cookie. The cookie holds a random
 // value; the form carries an HMAC of that value keyed by a server secret. An
-// attacker can force a cookie but cannot forge the matching signature. With
-// COOKIE_SECURE the cookie is a __Host- cookie (see CookieName), so another host
+// attacker can force a cookie but cannot forge the matching signature. Over
+// HTTPS the cookie is a __Host- cookie (see CookieName), so another host
 // cannot plant a cookie and token pair it got by visiting the site itself.
 type CSRF struct {
 	secret []byte
