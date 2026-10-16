@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -140,6 +141,12 @@ func (c *CSRF) Protect(next http.Handler) http.Handler {
 
 		presented := r.Header.Get(csrfHeader)
 		if presented == "" {
+			// FormValue would swallow the error and report a bad token.
+			var tooBig *http.MaxBytesError
+			if err := r.ParseForm(); errors.As(err, &tooBig) {
+				http.Error(w, "Request too large.", http.StatusRequestEntityTooLarge)
+				return
+			}
 			presented = r.FormValue(CSRFFormField)
 		}
 

@@ -29,6 +29,7 @@ func newRouter(cfg *config.Config, ui *handlers.UI, admin *handlers.Admin, csrf 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(handlers.MaxBody(handlers.MaxRequestBody))
 	// The sign-out form redirects to the OIDC provider, so its origin must be a
 	// permitted form-action target.
 	idpOrigin := ""

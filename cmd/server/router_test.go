@@ -301,3 +301,41 @@ func TestEveryUserRouteIsNotStored(t *testing.T) {
 		t.Errorf("static file: Cache-Control %q, want it cacheable", got)
 	}
 }
+
+// A huge body is refused before anything parses it, on every route that
+// takes one, including the CSRF check and the unauthenticated logout hook.
+func TestEveryStateChangingRouteLimitsTheBody(t *testing.T) {
+	rt := newRouteTest(t)
+	big := "x=" + strings.Repeat("a", handlers.MaxRequestBody+1)
+	for _, r := range rt.routes(t) {
+		switch r.method {
+		case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace:
+			continue
+		}
+		if readOnlyPaths[r.pattern] {
+			continue
+		}
+		for _, chunked := range []bool{false, true} {
+			req := httptest.NewRequest(r.method, "http://localhost:8080"+r.path(), strings.NewReader(big))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			if chunked {
+				req.ContentLength = -1
+			}
+			// A valid cookie, but the token is in the oversized body, so the
+			// CSRF check has to read it.
+			warm := httptest.NewRecorder()
+			rt.csrf.Token(warm, httptest.NewRequest(http.MethodGet, "/", nil))
+			req.AddCookie(warm.Result().Cookies()[0])
+			rec := httptest.NewRecorder()
+			rt.router.ServeHTTP(rec, req)
+
+			want := http.StatusRequestEntityTooLarge
+			if chunked && csrfExempt[r.String()] {
+				want = http.StatusBadRequest // the handler's own ParseForm fails
+			}
+			if rec.Code != want {
+				t.Errorf("%s (chunked=%v) with an oversized body: %d, want %d", r, chunked, rec.Code, want)
+			}
+		}
+	}
+}
