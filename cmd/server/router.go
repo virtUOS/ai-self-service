@@ -88,8 +88,8 @@ func newRouter(cfg *config.Config, ui *handlers.UI, admin *handlers.Admin, csrf 
 		r.Post("/admins/revoke", admin.RevokeAdmin)
 	})
 
-	// Scraped by the monitoring host; Caddy restricts it to those IPs.
-	r.Handle("/metrics", metrics.Handler())
+	// Scraped by the monitoring host, with METRICS_TOKEN when one is set.
+	r.With(metrics.RequireToken(cfg.MetricsToken)).Handle("/metrics", metrics.Handler())
 
 	// Liveness/readiness for the reverse proxy and orchestrator.
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {

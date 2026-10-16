@@ -169,6 +169,10 @@ func main() {
 	// what it would have sent; the dashboard warning still reaches anyone who
 	// visits.
 	var notifier notify.Notifier = notify.Discard{}
+	if cfg.MetricsToken == "" {
+		slog.Warn("METRICS_TOKEN unset: /metrics answers anyone who can reach it")
+	}
+
 	if cfg.SMTPHost != "" {
 		notifier = &notify.SMTP{
 			Host: cfg.SMTPHost, From: cfg.SMTPFrom,

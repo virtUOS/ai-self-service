@@ -70,6 +70,10 @@ type Config struct {
 	SMTPUsername string
 	SMTPPassword string
 
+	// MetricsToken, when set, is the bearer token /metrics requires. Empty
+	// leaves the endpoint open to anyone who can reach it.
+	MetricsToken string
+
 	ListenAddr      string
 	CookieSecure    bool
 	SessionDuration time.Duration
@@ -146,6 +150,8 @@ func Load() (*Config, error) {
 		SMTPFrom:     envOr("SMTP_FROM", "noreply@example.com"),
 		SMTPUsername: os.Getenv("SMTP_USERNAME"),
 		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
+
+		MetricsToken: strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
 
 		ListenAddr: ListenAddr(),
 		BudgetUnit: envOr("BUDGET_UNIT", "$"),
