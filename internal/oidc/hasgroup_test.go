@@ -47,3 +47,34 @@ func TestHasGroup(t *testing.T) {
 		})
 	}
 }
+
+// A token without a usable claim at the path is told apart from one that lists
+// other groups: the first usually means the IdP's mapper is missing, which is
+// worth a warning, the second is an ordinary non-member.
+func TestGroupMembershipReportsAnAbsentClaim(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		claims  string
+		path    string
+		present bool
+	}{
+		{"listed", `{"groups":["staff","ai-admin"]}`, "groups", true},
+		{"other groups only", `{"groups":["staff"]}`, "groups", true},
+		{"empty list", `{"groups":[]}`, "groups", true},
+		{"single string", `{"groups":"staff"}`, "groups", true},
+		{"claim missing", `{"email":"a@b.c"}`, "groups", false},
+		{"nested path missing", `{"realm_access":{}}`, "realm_access.roles", false},
+		{"path through a non-object", `{"realm_access":["roles"]}`, "realm_access.roles", false},
+		{"other shape", `{"groups":{"ai-admin":true}}`, "groups", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			member, present := GroupMembership(decodeClaims(t, tc.claims), tc.path, "ai-admin")
+			if present != tc.present {
+				t.Errorf("GroupMembership(%s, %q) present = %v, want %v", tc.claims, tc.path, present, tc.present)
+			}
+			if want := HasGroup(decodeClaims(t, tc.claims), tc.path, "ai-admin"); member != want {
+				t.Errorf("GroupMembership(%s, %q) member = %v, want %v as HasGroup says", tc.claims, tc.path, member, want)
+			}
+		})
+	}
+}

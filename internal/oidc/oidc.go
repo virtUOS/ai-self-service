@@ -36,6 +36,11 @@ type UserInfo struct {
 	// rights come from the login system. It is nil when they do not, so the
 	// login leaves the account's flag to the panel.
 	IsAdmin *bool
+	// AdminClaimAbsent is set when admin rights come from the login system
+	// but the ID token carried no usable claim at AdminGroupClaim. Such a
+	// token grants nothing, like one that lists other groups, but it usually
+	// means the IdP's mapper is missing, so the login says so.
+	AdminClaimAbsent bool
 }
 
 func NewProvider(ctx context.Context, cfg *config.Config, store *database.Store) (*Provider, error) {
@@ -169,8 +174,9 @@ func (p *Provider) HandleCallback(w http.ResponseWriter, r *http.Request) (*Call
 		if err := idToken.Claims(&all); err != nil {
 			return nil, fmt.Errorf("parse claims: %w", err)
 		}
-		admin := HasGroup(all, p.cfg.AdminGroupClaim, p.cfg.AdminGroup)
+		admin, present := GroupMembership(all, p.cfg.AdminGroupClaim, p.cfg.AdminGroup)
 		info.IsAdmin = &admin
+		info.AdminClaimAbsent = !present
 	}
 
 	name := claims.PreferredUsername
@@ -195,27 +201,38 @@ func (p *Provider) HandleCallback(w http.ResponseWriter, r *http.Request) (*Call
 // could match a group the IdP considers distinct. A claim that is missing or
 // has another shape matches nothing, so a token without it grants nothing.
 func HasGroup(claims map[string]any, path, group string) bool {
+	member, _ := GroupMembership(claims, path, group)
+	return member
+}
+
+// GroupMembership is HasGroup that also reports whether the token carried a
+// usable claim at path at all: a list of strings or a single string. A token
+// listing other groups is an ordinary non-member. One with no such claim
+// grants nothing either, but usually means the IdP's mapper is missing, which
+// the caller can say instead of reporting that someone left the group.
+func GroupMembership(claims map[string]any, path, group string) (member, present bool) {
 	var v any = claims
 	for _, key := range strings.Split(path, ".") {
 		obj, ok := v.(map[string]any)
 		if !ok {
-			return false
+			return false, false
 		}
 		if v, ok = obj[key]; !ok {
-			return false
+			return false, false
 		}
 	}
 	switch v := v.(type) {
 	case string:
-		return v == group
+		return v == group, true
 	case []any:
 		for _, item := range v {
 			if s, ok := item.(string); ok && s == group {
-				return true
+				return true, true
 			}
 		}
+		return false, true
 	}
-	return false
+	return false, false
 }
 
 // GetOrCreateUser records the account behind a login. When admin rights come
@@ -241,6 +258,14 @@ func (p *Provider) GetOrCreateUser(ctx context.Context, info *UserInfo) (*databa
 	action, detail := database.AuditAdminRevoked, "left group "+p.cfg.AdminGroup
 	if user.IsAdmin {
 		action, detail = database.AuditAdminGranted, "member of group "+p.cfg.AdminGroup
+	} else if info.AdminClaimAbsent {
+		// The token said nothing about groups, which is what a missing or
+		// misconfigured mapper in the IdP looks like. The demotion stands,
+		// since a token that says nothing grants nothing, but the log must
+		// point at the mapper rather than at the group's membership.
+		detail = "claim " + p.cfg.AdminGroupClaim + " absent from the ID token"
+		slog.Warn("admin rights removed because the ID token carried no group claim; check the IdP mapper",
+			"user", user.Email, "claim", p.cfg.AdminGroupClaim, "group", p.cfg.AdminGroup)
 	}
 	if err := p.store.RecordAudit(ctx, &database.AuditEvent{
 		Action:       action,
