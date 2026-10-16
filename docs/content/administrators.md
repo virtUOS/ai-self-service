@@ -58,9 +58,10 @@ sqlite3 "$DB_PATH" "SELECT id, name, email FROM users"
 sqlite3 "$DB_PATH" "UPDATE users SET is_admin = 1 WHERE id = 7"
 ```
 
-`DB_PATH` is the database file from the configuration. When Keyosk runs in
-a container, run the command on the host against the mounted file. The update
-is safe while Keyosk runs, and takes effect on the person's next request.
+`DB_PATH` is the database file from the configuration. The container image
+has no `sqlite3`; [Installation](installation.md#the-first-admin) shows the
+same commands run in a throwaway container against the volume. The update is
+safe while Keyosk runs, and takes effect on the person's next request.
 
 The same command is the way back in if every admin is ever lost, for example
 because the only admin left. Running the server already means having full

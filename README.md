@@ -49,6 +49,7 @@ stack: an OIDC mock, a LiteLLM gateway with mock models and a mail catcher.
 Everything else is in the documentation:
 
 - [Getting started](https://virtuos.github.io/keyosk/getting-started/): what Keyosk does and how
+- [Installation](https://virtuos.github.io/keyosk/installation/): Docker Compose, the first admin, backups and updates
 - [Configuration](https://virtuos.github.io/keyosk/configuration/): every setting, and the OIDC client registration
 - [Administrators](https://virtuos.github.io/keyosk/administrators/): admins from the login system or the panel, and the first admin
 - [Monitoring](https://virtuos.github.io/keyosk/monitoring/): metrics, the Prometheus scrape job and health checks

@@ -11,4 +11,26 @@
 The interface and the expiry emails are in German and English. The interface
 follows the browser's language, and the switch in the header overrides it.
 
-To work on Keyosk, see [Development](development.md).
+## Try it
+
+Keyosk needs a LiteLLM gateway and an OIDC provider; it brings neither. With
+both at hand, and a client for Keyosk registered at the provider with the
+redirect URI `http://localhost:8080/callback`, one command starts it:
+
+```sh
+docker run --rm -p 8080:8080 \
+  -e LITELLM_BASE_URL=https://litellm.example.org \
+  -e LITELLM_MASTER_KEY=sk-... \
+  -e OIDC_ISSUER_URL=https://login.example.org/realms/example \
+  -e OIDC_CLIENT_ID=keyosk \
+  -e OIDC_CLIENT_SECRET=... \
+  -e OIDC_REDIRECT_URL=http://localhost:8080/callback \
+  -e FRONTEND_URL=http://localhost:8080 \
+  ghcr.io/virtuos/keyosk:main
+```
+
+Open <http://localhost:8080> and log in. The database lives in the container
+and is gone when it stops, and nobody is an admin yet. To keep Keyosk running,
+follow [Installation](installation.md). To work on Keyosk itself, see
+[Development](development.md); its dev stack runs a gateway and an identity
+provider for you.
