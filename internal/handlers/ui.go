@@ -546,7 +546,7 @@ func (u *UI) DeleteKey(w http.ResponseWriter, r *http.Request) {
 	u.audit(r, database.AuditKeyDeleted, su.User, "key "+k.KeyPrefix)
 	if err := u.store.DeleteAPIKey(r.Context(), k.ID); err != nil {
 		metrics.KeyOperations.WithLabelValues("delete", "store_error").Inc()
-		httpError(w, r, http.StatusInternalServerError, "Your key was revoked, but the portal could not update its records", err, "key_id", k.ID)
+		httpError(w, r, http.StatusInternalServerError, "Your key was revoked, but Keyosk could not update its records", err, "key_id", k.ID)
 		return
 	}
 	metrics.KeyOperations.WithLabelValues("delete", "success").Inc()

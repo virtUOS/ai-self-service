@@ -100,7 +100,7 @@
     "realm": [
       {
         "name": "keyosk-admin",
-        "description": "Grants the portal admin panel"
+        "description": "Grants the Keyosk admin panel"
       }
     ]
   }

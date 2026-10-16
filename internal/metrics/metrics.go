@@ -1,4 +1,4 @@
-// Package metrics exposes Prometheus instrumentation for the portal.
+// Package metrics exposes Prometheus instrumentation for Keyosk.
 //
 // Scraped by the central monitoring host over HTTPS; Caddy restricts /metrics
 // to that host's IPs, so the endpoint itself is unauthenticated.
@@ -33,15 +33,15 @@ var (
 		Help: "API key operations by action and outcome.",
 	}, []string{"action", "outcome"})
 
-	// KeysMissing counts keys whose record the portal dropped because the
-	// gateway answered that the key no longer exists, by where the portal
+	// KeysMissing counts keys whose record Keyosk dropped because the
+	// gateway answered that the key no longer exists, by where Keyosk
 	// noticed: the dashboard, an extend, or the limit sync. A key deleted in
-	// the gateway on purpose is rare; a run of them means a portal pointed at
+	// the gateway on purpose is rare; a run of them means an instance pointed at
 	// the wrong gateway or a restored gateway database, which this is the
 	// alarm for (issue #108).
 	KeysMissing = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "keyosk_keys_missing_total",
-		Help: "Keys removed because the gateway no longer had them, by where the portal noticed.",
+		Help: "Keys removed because the gateway no longer had them, by where Keyosk noticed.",
 	}, []string{"source"})
 
 	// Gauges are refreshed from the database rather than incremented, so a
@@ -59,7 +59,7 @@ var (
 
 // init pre-registers the label combinations so each series exists at zero from
 // startup. A CounterVec otherwise emits nothing until first use, which makes a
-// dashboard panel read "no data" whether the portal is idle or broken.
+// dashboard panel read "no data" whether Keyosk is idle or broken.
 func init() {
 	for _, action := range []string{"generate", "extend", "delete", "revoke"} {
 		for _, outcome := range []string{"success", "provider_error", "store_error"} {
