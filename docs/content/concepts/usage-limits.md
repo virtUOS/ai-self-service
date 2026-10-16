@@ -43,6 +43,9 @@ different granularity:
   budget with the amounts beside it. It resets on the budget period, so it
   need not agree with the 30-day chart above it.
 
+![The usage card: a daily and a monthly allowance as percentage bars with the amounts and when they reset, a bar chart of the tokens used on each of the last 30 days, and a table of requests and tokens per model](../images/screenshots/usage-light.png#only-light){ .screenshot width="772" }
+![The usage card: a daily and a monthly allowance as percentage bars with the amounts and when they reset, a bar chart of the tokens used on each of the last 30 days, and a table of requests and tokens per model](../images/screenshots/usage-dark.png#only-dark){ .screenshot width="772" }
+
 The history belongs to the person, across every key they have held, so
 regenerating a key does not start it over.
 

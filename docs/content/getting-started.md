@@ -8,6 +8,9 @@
 4. The key expires after a configurable number of days; users can extend or regenerate it at any time.
 5. Admins can manage profiles and assign users to them via `/admin`.
 
+![The dashboard after login: the person's account with their profile and usage limit, and their API key with its expiry and buttons to extend, regenerate or delete it](images/screenshots/dashboard-light.png#only-light){ .screenshot width="900" }
+![The dashboard after login: the person's account with their profile and usage limit, and their API key with its expiry and buttons to extend, regenerate or delete it](images/screenshots/dashboard-dark.png#only-dark){ .screenshot width="900" }
+
 The interface and the expiry emails are in German and English. The interface
 follows the browser's language, and the switch in the header overrides it.
 
