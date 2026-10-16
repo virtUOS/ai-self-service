@@ -34,10 +34,10 @@ updates:
       dev-stack:
         patterns: ["*"]
 
-  # Zensical, which builds the website (.github/requirements.txt). It is
+  # Zensical, which builds the website (website/requirements.txt). It is
   # alpha software that changes often, so it is pinned and bumped here, where
   # the website workflow builds the site before the pull request is merged.
   - package-ecosystem: pip
-    directory: /.github
+    directory: /website
     schedule:
       interval: monthly

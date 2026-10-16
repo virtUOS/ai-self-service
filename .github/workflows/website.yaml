@@ -15,7 +15,6 @@ on:
       - web/static/favicon.*
       - web/static/apple-touch-icon.png
       - docs/brand/social-preview.png
-      - .github/requirements.txt
       - .github/workflows/website.yaml
       - Makefile
   pull_request:
@@ -26,7 +25,6 @@ on:
       - web/static/favicon.*
       - web/static/apple-touch-icon.png
       - docs/brand/social-preview.png
-      - .github/requirements.txt
       - .github/workflows/website.yaml
       - Makefile
   workflow_dispatch:
@@ -52,7 +50,7 @@ jobs:
         with:
           python-version: 3.x
 
-      # The Makefile installs the pinned Zensical from .github/requirements.txt
+      # The Makefile installs the pinned Zensical from website/requirements.txt
       # into website/.venv, copies in the brand files and builds with --strict,
       # so a broken link fails the job. No pip cache: Zensical advises against
       # caching on CI for now.

@@ -60,9 +60,9 @@ WEBSITE_VENV := website/.venv
 ZENSICAL := $(WEBSITE_VENV)/bin/zensical
 WEBSITE_ASSETS := website/docs/assets
 
-$(ZENSICAL): .github/requirements.txt
+$(ZENSICAL): website/requirements.txt
 	python3 -m venv $(WEBSITE_VENV)
-	$(WEBSITE_VENV)/bin/pip install -q -r .github/requirements.txt
+	$(WEBSITE_VENV)/bin/pip install -q -r website/requirements.txt
 	@touch $@
 
 website-assets:
