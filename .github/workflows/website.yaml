@@ -2,21 +2,13 @@ name: Website
 
 # The website and documentation (docs/, built with Zensical) are published
 # on GitHub Pages from main, and only from main: there is no manual trigger,
-# which could deploy another branch. A pull request only builds them, so a
-# broken link or template shows up before the merge. Settings -> Pages -> Source must be
-# "GitHub Actions".
+# which could deploy another branch. Pull requests are built by
+# website-check.yaml, which has no deploy job that would show up there as
+# skipped. Settings -> Pages -> Source must be "GitHub Actions".
 on:
   push:
     branches:
       - main
-    paths:
-      - docs/**
-      - web/static/fonts/**
-      - web/static/favicon.*
-      - web/static/apple-touch-icon.png
-      - .github/workflows/website.yaml
-      - Makefile
-  pull_request:
     paths:
       - docs/**
       - web/static/fonts/**
@@ -54,13 +46,11 @@ jobs:
         run: make website
 
       - name: Upload the site
-        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v5
         with:
           path: docs/site
 
   deploy:
-    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     permissions:
