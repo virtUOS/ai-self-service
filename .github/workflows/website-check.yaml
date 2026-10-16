@@ -1,0 +1,34 @@
+name: Website check
+
+# Builds the website for a pull request, so a broken link or template shows up
+# before the merge. Deploying is website.yaml's job, on pushes to main; it is
+# a workflow of its own so that a pull request does not list a skipped deploy.
+on:
+  pull_request:
+    paths:
+      - docs/**
+      - web/static/fonts/**
+      - web/static/favicon.*
+      - web/static/apple-touch-icon.png
+      - .github/workflows/website-check.yaml
+      - Makefile
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: 3.x
+
+      # The same build as website.yaml's: the pinned Zensical, the brand
+      # files and --strict, so a broken link fails the job.
+      - name: Build the site
+        run: make website

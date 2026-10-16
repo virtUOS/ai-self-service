@@ -28,9 +28,11 @@ operators need: the health probes, `/metrics` and the OIDC callbacks.
 
 The website and documentation live in `docs/` (Zensical, config in
 `docs/zensical.toml`, pages in `docs/content/`) and are published on GitHub
-Pages by `.github/workflows/website.yaml`. Only `docs/content/` is published;
-`docs/brand/` holds the brand files and their guide. `make website` builds the
-site with `--strict`, so a broken link fails; `make website-serve` previews it.
+Pages by `.github/workflows/website.yaml` on pushes to `main`; pull requests
+are built by `.github/workflows/website-check.yaml`. Only `docs/content/` is
+published; `docs/brand/` holds the brand files and their guide. `make website`
+builds the site with `--strict`, so a broken link fails; `make website-serve`
+previews it.
 Neither is part of `make check`, which needs no Python. The fonts and icons are
 copied in from `web/static` and are not committed under `docs/content/`.
 A new page goes into the `nav` in `docs/zensical.toml` and, with a one-line
