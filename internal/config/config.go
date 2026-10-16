@@ -362,8 +362,8 @@ func requireEnv(key string) string {
 	return v
 }
 
-// DBPath is the SQLite database file. The -resync-limits command reads it
-// without loading the rest of the configuration.
+// DBPath is the SQLite database file. The -resync-limits and -backup commands
+// read it without loading the rest of the configuration.
 func DBPath() string {
 	return envOr("DB_PATH", "./data.db")
 }

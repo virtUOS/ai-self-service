@@ -111,15 +111,20 @@ panel.
 ## Backups
 
 Everything Keyosk keeps is one SQLite database in the volume. Back it up with
-SQLite's own backup, which is consistent while Keyosk runs, rather than by
-copying the file:
+`keyosk -backup`, which writes a consistent copy while Keyosk runs, rather than
+by copying the database file. The copy goes into the volume, from where it can
+be copied out:
 
 ```sh
-docker run --rm -v keyosk-data:/data alpine:3.22 sh -c '
-  apk add -q sqlite su-exec &&
-  su-exec 10001:10001 sqlite3 /data/data.db ".backup /tmp/keyosk.db" &&
-  cat /tmp/keyosk.db' > keyosk-backup.db
+docker compose exec keyosk keyosk -backup /data/keyosk-backup.db
+docker compose cp keyosk:/data/keyosk-backup.db .
 ```
+
+The command replaces an older backup in the same file, and only once the new
+one is complete, so the same two commands can run from cron every night. A
+tool that already backs up the volume should not copy the live database, which
+may be caught mid-write: run `keyosk -backup` before it, and the tool picks up
+the copy.
 
 The database holds no usable API keys: a key is shown to its user once, and
 only its SHA-256 hash is stored, which LiteLLM accepts for revoking, updating

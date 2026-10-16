@@ -28,6 +28,7 @@ import (
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "check /healthz of the running server and exit")
 	resync := flag.Bool("resync-limits", false, "mark every key for a limit resync by the running server and exit")
+	backup := flag.String("backup", "", "write a consistent copy of the database to this file, replacing an older backup there, and exit")
 	flag.Parse()
 
 	_ = godotenv.Load()
@@ -53,6 +54,16 @@ func main() {
 	if *resync {
 		if err := resyncLimits(context.Background(), config.DBPath(), os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "resync failed: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	// Back up the database while the server runs. Needs only DB_PATH, like
+	// -resync-limits, so a cron job can run it with a minimal environment.
+	if *backup != "" {
+		if err := backupDatabase(context.Background(), config.DBPath(), *backup, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "backup failed: %v\n", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
