@@ -116,13 +116,18 @@ correct the cause without losing anything.
 | `POST` | `/key/generate`               | Generate (or replace) the user's API key                  |
 | `POST` | `/key/extend`                 | Move the key expiry to a full period from now             |
 | `POST` | `/key/delete`                 | Delete the user's API key                                 |
+| `GET`  | `/privacy`                    | Privacy notice (only when one is configured)              |
 | `GET`  | `/admin`                      | Admin panel                                               |
 | `POST` | `/admin/profiles`             | Create a profile                                          |
 | `POST` | `/admin/profiles/{id}`        | Update a profile                                          |
 | `POST` | `/admin/profiles/{id}/delete` | Delete a profile                                          |
 | `POST` | `/admin/users/{id}/profile`   | Assign a profile to a user                                |
 | `POST` | `/admin/users/{id}/key/revoke`| Revoke another user's API key                             |
+| `POST` | `/admin/admins`               | Promote an account to admin (not with `ADMIN_GROUP`)      |
+| `POST` | `/admin/admins/revoke`        | Remove an admin (not with `ADMIN_GROUP`)                  |
 | `POST` | `/lang`                       | Record an explicit language choice                        |
 | `GET`  | `/healthz`                    | Liveness probe                                            |
 | `GET`  | `/readyz`                     | Readiness probe (checks the database)                     |
 | `GET`  | `/metrics`                    | Prometheus metrics (bearer token with `METRICS_TOKEN`)    |
+| `GET`  | `/static/*`                   | Stylesheet, scripts, fonts and icons                      |
+| `GET`  | `/favicon.ico`                | Favicon, for browsers that ask at the root                |
