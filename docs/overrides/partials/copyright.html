@@ -1,0 +1,22 @@
+{#- The theme's copyright partial, with the virtUOS logo in front of it. The
+    logo is used as virtUOS publishes it, never recoloured. If a Zensical
+    update changes templates/partials/copyright.html, bring this copy in
+    line. -#}
+<div class="md-copyright">
+  <a class="kx-org" href="https://virtuos.uni-osnabrueck.de/" title="virtUOS, Osnabrück University">
+    <img src="{{ 'images/virtuos-logo.svg' | url }}" alt="virtUOS" width="40" height="40">
+  </a>
+  <div>
+    {% if config.copyright %}
+      <div class="md-copyright__highlight">
+        {{ config.copyright }}
+      </div>
+    {% endif %}
+    {% if not config.extra.generator == false %}
+      Made with
+      <a href="https://zensical.org/" target="_blank" rel="noopener">
+        Zensical
+      </a>
+    {% endif %}
+  </div>
+</div>

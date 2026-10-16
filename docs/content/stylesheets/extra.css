@@ -411,3 +411,10 @@
 .kx-feature:hover, .kx-feature:focus-visible { border-color: var(--md-accent-fg-color); color: var(--md-default-fg-color); }
 .kx-feature h2 { margin: 0 0 .4rem; font-size: .95rem; font-weight: 700; letter-spacing: -.01em; }
 .kx-feature p { margin: 0; font-size: .75rem; line-height: 1.55; color: var(--md-default-fg-color--light); }
+
+/* ── Footer ──────────────────────────────────────────────── */
+/* The virtUOS logo beside the copyright line, as published: no filter or
+   recolouring in either scheme. */
+.md-copyright { display: flex; align-items: center; gap: .8rem; }
+.kx-org { flex: none; }
+.kx-org img { display: block; border-radius: .3rem; }
