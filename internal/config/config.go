@@ -384,10 +384,17 @@ func requireEnv(key string) string {
 	return v
 }
 
-// DBPath is the SQLite database file. The -resync-limits command reads it
-// without loading the rest of the configuration.
+// DBPath is the SQLite database file. The -resync-limits and -make-admin
+// commands read it without loading the rest of the configuration.
 func DBPath() string {
 	return envOr("DB_PATH", "./data.db")
+}
+
+// AdminGroupSet reports whether ADMIN_GROUP hands admin rights to the login
+// system. The -make-admin command reads it without loading the rest of the
+// configuration.
+func AdminGroupSet() bool {
+	return strings.TrimSpace(os.Getenv("ADMIN_GROUP")) != ""
 }
 
 // ListenAddr is the address the server listens on. The -healthcheck mode
