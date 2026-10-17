@@ -12,8 +12,8 @@
 ![The dashboard after login: the person's account with their profile and usage limit, and their API key with its expiry and buttons to extend, regenerate or delete it](images/screenshots/dashboard-dark.png#only-dark){ .screenshot width="900" }
 
 The interface and the expiry emails are in German and English. The interface
-follows the browser's language and the system's light or dark mode; users can
-choose either under *Account settings* in the account menu.
+follows the browser's language and light or dark mode; users can choose either
+under *Account settings* in the account menu.
 
 ## Try it locally
 

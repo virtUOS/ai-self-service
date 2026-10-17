@@ -192,13 +192,17 @@ func TestPrivacyPageOffersTheNoticesLanguages(t *testing.T) {
 	}
 }
 
-// One notice needs no tabs, and a signed-in reader has chosen a language in
-// the account settings, so gets that one without tabs.
+// One notice needs no tabs, and a signed-in reader gets the language of the
+// rest of the interface, with a link to the account settings rather than tabs.
 func TestPrivacyPageTabsOnlyWhenThereIsAChoice(t *testing.T) {
 	ui, _, _, _ := newTestUI(t, "priv6")
 	ui.cfg.PrivacyNoticeDE = "<p>Deutscher Text</p>"
-	if got := tabs(getPrivacy(t, ui, i18n.EN).Body.String()); got != nil {
+	page := getPrivacy(t, ui, i18n.EN).Body.String()
+	if got := tabs(page); got != nil {
 		t.Errorf("tabs %v for a notice in one language", got)
+	}
+	if strings.Contains(page, `class="notice-lang"`) {
+		t.Error("language link for a notice in one language")
 	}
 
 	ui.cfg.PrivacyNoticeEN = "<p>English text</p>"
@@ -207,9 +211,12 @@ func TestPrivacyPageTabsOnlyWhenThereIsAChoice(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: i18n.CookieName, Value: "en"})
 	rec := httptest.NewRecorder()
 	ui.Privacy(rec, req)
-	page := rec.Body.String()
+	page = rec.Body.String()
 	if got := tabs(page); got != nil {
 		t.Errorf("signed-in reader got tabs %v", got)
+	}
+	if !strings.Contains(page, `<p class="notice-lang"><a href="/account">`) {
+		t.Error("signed-in reader gets no link to the account settings")
 	}
 	if !strings.Contains(page, "English text") {
 		t.Error("signed-in reader does not get the language they chose")

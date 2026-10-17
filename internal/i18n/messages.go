@@ -7,15 +7,16 @@ package i18n
 // itself — a visibly wrong label is better than a blank page.
 var messages = map[string]map[Lang]string{
 	// ── Shared ──────────────────────────────────────────────────────────
-	"app.title":     {DE: "Keyosk", EN: "Keyosk"},
-	"nav.admin":     {DE: "Administration", EN: "Admin"},
-	"nav.dashboard": {DE: "Übersicht", EN: "Dashboard"},
-	"nav.signout":   {DE: "Abmelden", EN: "Sign out"},
-	"nav.privacy":   {DE: "Datenschutz", EN: "Privacy"},
-	"nav.account":   {DE: "Konto", EN: "Account"},
-	"privacy.title": {DE: "Datenschutzhinweise", EN: "Privacy notice"},
-	"lang.label":    {DE: "Sprache", EN: "Language"},
-	"nav.settings":  {DE: "Kontoeinstellungen", EN: "Account settings"},
+	"app.title":          {DE: "Keyosk", EN: "Keyosk"},
+	"nav.admin":          {DE: "Administration", EN: "Admin"},
+	"nav.dashboard":      {DE: "Übersicht", EN: "Dashboard"},
+	"nav.signout":        {DE: "Abmelden", EN: "Sign out"},
+	"nav.privacy":        {DE: "Datenschutz", EN: "Privacy"},
+	"nav.account":        {DE: "Konto", EN: "Account"},
+	"privacy.title":      {DE: "Datenschutzhinweise", EN: "Privacy notice"},
+	"privacy.changelang": {DE: "Sprache ändern", EN: "Change language"},
+	"lang.label":         {DE: "Sprache", EN: "Language"},
+	"nav.settings":       {DE: "Kontoeinstellungen", EN: "Account settings"},
 
 	// ── Account settings ────────────────────────────────────────────────
 	"account.title":      {DE: "Kontoeinstellungen", EN: "Account settings"},
@@ -24,7 +25,7 @@ var messages = map[string]map[Lang]string{
 	"account.subject":    {DE: "OIDC-Subject", EN: "OIDC subject"},
 	"account.appearance": {DE: "Darstellung", EN: "Appearance"},
 	"account.theme":      {DE: "Farbschema", EN: "Theme"},
-	"account.system":     {DE: "Wie im System", EN: "System default"},
+	"account.browser":    {DE: "Wie im Browser", EN: "Browser setting"},
 	"account.light":      {DE: "Hell", EN: "Light"},
 	"account.dark":       {DE: "Dunkel", EN: "Dark"},
 	"account.save":       {DE: "Speichern", EN: "Save"},
