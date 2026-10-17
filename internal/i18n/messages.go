@@ -20,7 +20,7 @@ var messages = map[string]map[Lang]string{
 	"dash.intro.title":     {DE: "Worum geht es?", EN: "What is this?"},
 	"dash.intro.body":      {DE: "Über Keyosk erhalten Sie Ihren persönlichen API-Schlüssel für das KI-Gateway. Damit können Sie große Sprachmodelle (LLMs) direkt aus eigenen Skripten, Programmen und Werkzeugen nutzen, etwa aus einem Python-Skript, einer Chat-Anwendung wie Open WebUI oder einem Coding-Assistenten im Editor, statt nur über eine Chat-Webseite.", EN: "Keyosk issues your personal API key for the AI gateway. With it you can use large language models (LLMs) directly from your own scripts, programs and tools (for example a Python script, a chat app such as Open WebUI, or a coding assistant in your editor) rather than only through a chat website."},
 	"dash.intro.usage":     {DE: "Das Gateway ist OpenAI-kompatibel, die meisten KI-Werkzeuge funktionieren also damit: Tragen Sie die Basis-URL und Ihren Schlüssel ein. Welche Modelle Sie nutzen können und in welchem Umfang, hängt von Ihrem Profil ab. Ihr Schlüssel ist persönlich; bitte geben Sie ihn nicht weiter.", EN: "The gateway speaks the OpenAI API, so most AI tools work with it: enter the base URL and your key. Which models you can use, and how much, depends on your profile. Your key is personal; please do not share it."},
-	"dash.successor.title": {DE: "Dieses Portal ist nur zum Testen.", EN: "This portal is only for testing."},
+	"dash.successor.title": {DE: "Dieses Portal wird eingestellt.", EN: "This portal is being retired."},
 	"dash.successor.body":  {DE: "Bitte erzeugen Sie Ihren Schlüssel im neuen Portal:", EN: "Please create your key on the new portal:"},
 	"dash.account":         {DE: "Ihr Konto", EN: "Your account"},
 

@@ -67,7 +67,7 @@ func TestDashboardShowsSuccessorBanner(t *testing.T) {
 	}
 
 	out := render(base)
-	if strings.Contains(out, "only for testing") {
+	if strings.Contains(out, "being retired") {
 		t.Error("banner shown with no successor configured")
 	}
 
@@ -75,7 +75,7 @@ func TestDashboardShowsSuccessorBanner(t *testing.T) {
 	with.SuccessorURL = "https://ai-keys.example.edu"
 	out = render(with)
 	for _, want := range []string{
-		`href="https://ai-keys.example.edu"`, "only for testing", "create your key on the new portal",
+		`href="https://ai-keys.example.edu"`, "being retired", "create your key on the new portal",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("banner is missing %q", want)
