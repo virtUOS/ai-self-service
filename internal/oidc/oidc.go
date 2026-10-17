@@ -53,7 +53,7 @@ func NewProvider(ctx context.Context, cfg *config.Config, store *database.Store)
 		ClientID:     cfg.OIDCClientID,
 		ClientSecret: cfg.OIDCClientSecret,
 		Endpoint:     provider.Endpoint(),
-		RedirectURL:  cfg.OIDCRedirectURL,
+		RedirectURL:  cfg.OIDCRedirectURL(),
 		Scopes:       append([]string{gooidc.ScopeOpenID, "profile", "email"}, cfg.OIDCExtraScopes...),
 	}
 
@@ -87,16 +87,16 @@ func NewProvider(ctx context.Context, cfg *config.Config, store *database.Store)
 }
 
 // canonicalHop marks a login request this handler already moved to the
-// redirect URL's host, so a proxy that rewrites Host cannot make it loop.
+// FRONTEND_URL's host, so a proxy that rewrites Host cannot make it loop.
 const canonicalHop = "canonical"
 
 func (p *Provider) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	// The state cookie is bound to the host /login is served on, but the
-	// provider returns the browser to OIDC_REDIRECT_URL. Reached under another
-	// name — 127.0.0.1 for localhost, say — the callback arrives without the
-	// cookie and fails with "invalid state", so start the login on the
-	// redirect URL's host instead.
-	if canonical, err := url.Parse(p.cfg.OIDCRedirectURL); err == nil && canonical.Host != "" &&
+	// provider returns the browser to the callback under FRONTEND_URL. Reached
+	// under another name — 127.0.0.1 for localhost, say — the callback arrives
+	// without the cookie and fails with "invalid state", so start the login on
+	// FRONTEND_URL's host instead.
+	if canonical, err := url.Parse(p.cfg.FrontendURL); err == nil && canonical.Host != "" &&
 		!strings.EqualFold(r.Host, canonical.Host) {
 		if r.URL.Query().Get(canonicalHop) == "" {
 			target := *canonical
@@ -107,8 +107,8 @@ func (p *Provider) LoginHandler(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, target.String(), http.StatusFound)
 			return
 		}
-		slog.Warn("login: request host still differs from OIDC_REDIRECT_URL after redirect; is the proxy rewriting Host?",
-			"host", r.Host, "redirect_host", canonical.Host)
+		slog.Warn("login: request host still differs from FRONTEND_URL after redirect; is the proxy rewriting Host?",
+			"host", r.Host, "frontend_host", canonical.Host)
 	}
 
 	state := generateState()

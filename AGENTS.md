@@ -57,8 +57,7 @@ when it is missing from them, it is just not listed.
   stack.
 - **Port 8080 may already be taken** by the developer's own server. Check
   before starting one, and never stop a server you did not start. On another
-  port, set `LISTEN_ADDR`, `FRONTEND_URL` and `OIDC_REDIRECT_URL` to match. The
-  OIDC mock accepts any redirect URI; the Keycloak realm only allows
+  port, set `LISTEN_ADDR` and `FRONTEND_URL` to match. The OIDC mock accepts any redirect URI; the Keycloak realm only allows
   `http://localhost:8080/callback`.
 
 ## Checking usage on the dashboard

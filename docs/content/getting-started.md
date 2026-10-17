@@ -45,7 +45,6 @@ docker run --rm -p 8080:8080 \
   -e OIDC_ISSUER_URL=https://login.example.org/realms/example \
   -e OIDC_CLIENT_ID=keyosk \
   -e OIDC_CLIENT_SECRET=... \
-  -e OIDC_REDIRECT_URL=http://localhost:8080/callback \
   -e FRONTEND_URL=http://localhost:8080 \
   ghcr.io/virtuos/keyosk:main
 ```

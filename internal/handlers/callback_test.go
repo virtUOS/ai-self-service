@@ -31,7 +31,6 @@ func newLoginTest(t *testing.T, name string) *loginTest {
 		OIDCIssuerURL:    lt.idp.Issuer(),
 		OIDCClientID:     "keyosk",
 		OIDCClientSecret: "secret",
-		OIDCRedirectURL:  "http://localhost:8080/callback",
 		FrontendURL:      "http://localhost:8080",
 		KeyDurationDays:  90,
 	}

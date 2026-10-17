@@ -13,7 +13,6 @@ func setRequiredEnv(t *testing.T) {
 	t.Setenv("OIDC_ISSUER_URL", "https://example.invalid")
 	t.Setenv("OIDC_CLIENT_ID", "id")
 	t.Setenv("OIDC_CLIENT_SECRET", "secret")
-	t.Setenv("OIDC_REDIRECT_URL", "https://example.invalid/cb")
 	t.Setenv("LITELLM_BASE_URL", "https://example.invalid")
 	t.Setenv("LITELLM_MASTER_KEY", "sk-x")
 	t.Setenv("FRONTEND_URL", "https://example.invalid")
