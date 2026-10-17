@@ -68,12 +68,19 @@ func newTestUI(t *testing.T, name string) (*UI, *keyprovider.Fake, *database.Sto
 // post issues an authenticated, CSRF-valid POST to h.
 func post(t *testing.T, ui *UI, h http.HandlerFunc, path string) *httptest.ResponseRecorder {
 	t.Helper()
+	return postCtx(t, context.Background(), ui, h, path)
+}
+
+// postCtx is post with the request carrying ctx, so a test can cancel it the
+// way the server does when the client disconnects.
+func postCtx(t *testing.T, ctx context.Context, ui *UI, h http.HandlerFunc, path string) *httptest.ResponseRecorder {
+	t.Helper()
 	// Mint a CSRF cookie/token pair the way a rendered page would.
 	warm := httptest.NewRecorder()
 	tok := ui.csrf.Token(warm, httptest.NewRequest(http.MethodGet, "/", nil))
 	csrfCookie := warm.Result().Cookies()[0]
 
-	req := httptest.NewRequest(http.MethodPost, path,
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, path,
 		strings.NewReader(session.CSRFFormField+"="+tok))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(csrfCookie)
@@ -441,6 +448,77 @@ func TestRetiredPortalRefusesGenerateAndExtend(t *testing.T) {
 	}
 	if fake.LiveCount() != 0 {
 		t.Errorf("delete left %d keys live", fake.LiveCount())
+	}
+}
+
+// A client that disconnects once the new key exists upstream must not leave
+// it there unrecorded: the handler still stores it and revokes the old one.
+func TestGenerateKeyFinishesAfterDisconnect(t *testing.T) {
+	ui, fake, store, user := newTestUI(t, "kf-generate-disconnect")
+	post(t, ui, ui.GenerateKey, "/key/generate")
+	old, _ := store.GetAPIKeyByUser(context.Background(), user.ID)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fake.OnCreate = cancel
+	postCtx(t, ctx, ui, ui.GenerateKey, "/key/generate")
+
+	if fake.LiveCount() != 1 {
+		t.Fatalf("provider holds %d live keys, want 1", fake.LiveCount())
+	}
+	k, err := store.GetAPIKeyByUser(context.Background(), user.ID)
+	if err != nil || k == nil {
+		t.Fatalf("key not stored: %v", err)
+	}
+	if k.KeyRef == old.KeyRef {
+		t.Fatal("the new key was not stored")
+	}
+	if _, ok := fake.Keys[k.KeyRef]; !ok {
+		t.Errorf("the stored key %q is not the live one", k.KeyRef)
+	}
+}
+
+// A client that disconnects once the gateway has extended the key must still
+// get the new expiry recorded, or the dashboard and the expiry jobs go by the
+// old one.
+func TestExtendKeyFinishesAfterDisconnect(t *testing.T) {
+	ui, fake, store, user := newTestUI(t, "kf-extend-disconnect")
+	post(t, ui, ui.GenerateKey, "/key/generate")
+	k, _ := store.GetAPIKeyByUser(context.Background(), user.ID)
+	if err := store.UpdateAPIKeyExpiry(context.Background(), k.ID, time.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fake.OnExpiry = cancel
+	postCtx(t, ctx, ui, ui.ExtendKey, "/key/extend")
+
+	if len(fake.Extended) != 1 {
+		t.Fatalf("provider not asked to extend: %v", fake.Extended)
+	}
+	k, _ = store.GetAPIKeyByUser(context.Background(), user.ID)
+	if !k.ExpiresAt.After(time.Now()) {
+		t.Errorf("stored expiry %v was not moved", k.ExpiresAt)
+	}
+}
+
+// A client that disconnects once the key is revoked upstream must still have
+// the row removed, rather than keep a record of a key that is gone.
+func TestDeleteKeyFinishesAfterDisconnect(t *testing.T) {
+	ui, fake, store, user := newTestUI(t, "kf-delete-disconnect")
+	post(t, ui, ui.GenerateKey, "/key/generate")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fake.OnDelete = cancel
+	postCtx(t, ctx, ui, ui.DeleteKey, "/key/delete")
+
+	if fake.LiveCount() != 0 {
+		t.Errorf("provider still holds %d keys after delete", fake.LiveCount())
+	}
+	if k, _ := store.GetAPIKeyByUser(context.Background(), user.ID); k != nil {
+		t.Error("key row still present after delete")
 	}
 }
 

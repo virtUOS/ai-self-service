@@ -355,6 +355,20 @@ func (u *UI) lockKeys(w http.ResponseWriter, r *http.Request, userID int64) (unl
 	return unlock, true
 }
 
+// finishTimeout bounds the work a key request does after it has started to
+// change the key upstream.
+const finishTimeout = 30 * time.Second
+
+// detach returns r with a context that is no longer cancelled when the client
+// goes away. A handler switches to it before it changes a key upstream: once
+// the gateway has acted, the local record and any rollback must follow, or a
+// disconnect leaves a live key nothing points to, or a record that no longer
+// matches the gateway.
+func detach(r *http.Request) (*http.Request, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), finishTimeout)
+	return r.WithContext(ctx), cancel
+}
+
 // GenerateKey creates a new LiteLLM key for the user, replacing any existing one.
 func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 	su, err := u.requireSession(r)
@@ -395,6 +409,9 @@ func (u *UI) GenerateKey(w http.ResponseWriter, r *http.Request) {
 		httpError(w, r, http.StatusInternalServerError, "Failed to create key", err)
 		return
 	}
+
+	r, cancel := detach(r)
+	defer cancel()
 
 	// Create the replacement BEFORE revoking the old one. The reverse order
 	// leaves the user with no working key whenever creation fails.
@@ -498,6 +515,8 @@ func (u *UI) ExtendKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newExpiry := time.Now().AddDate(0, 0, u.keyDuration(profile))
+	r, cancel := detach(r)
+	defer cancel()
 	if err := u.keys.UpdateExpiry(r.Context(), k.KeyRef, newExpiry); err != nil {
 		if errors.Is(err, keyprovider.ErrKeyNotFound) {
 			u.markMissingKey(r.Context(), su.User, k, metrics.SourceExtend)
@@ -547,6 +566,8 @@ func (u *UI) DeleteKey(w http.ResponseWriter, r *http.Request) {
 
 	// Revoke upstream first: if that fails the key is still live, so the local
 	// row must stay to keep it revocable.
+	r, cancel := detach(r)
+	defer cancel()
 	if err := u.keys.DeleteKey(r.Context(), k.KeyRef); err != nil {
 		metrics.KeyOperations.WithLabelValues("delete", "provider_error").Inc()
 		httpError(w, r, http.StatusInternalServerError, "Failed to delete your key; it is still active. Please try again.", err, "key_prefix", k.KeyPrefix)

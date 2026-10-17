@@ -64,7 +64,12 @@ type Fake struct {
 
 	// OnCreate, when set, runs at the start of CreateKey before it takes the
 	// fake's lock, so a test can hold a request there and force overlap.
+	// OnDelete and OnExpiry do the same for DeleteKey and UpdateExpiry. Each
+	// call then fails if its context is done, as a real request would, so a
+	// hook can cancel the context to stand in for a client that went away.
 	OnCreate func()
+	OnDelete func()
+	OnExpiry func()
 
 	// CreateErr, DeleteErr and ExpiryErr force the respective call to fail.
 	CreateErr error
@@ -162,9 +167,12 @@ func (f *Fake) EmbeddingModels(context.Context) (map[string]bool, error) {
 	return f.EmbeddingByModel, nil
 }
 
-func (f *Fake) CreateKey(_ context.Context, req KeyRequest) (KeyResult, error) {
+func (f *Fake) CreateKey(ctx context.Context, req KeyRequest) (KeyResult, error) {
 	if f.OnCreate != nil {
 		f.OnCreate()
+	}
+	if err := ctx.Err(); err != nil {
+		return KeyResult{}, err
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -190,7 +198,13 @@ func (f *Fake) CreateKey(_ context.Context, req KeyRequest) (KeyResult, error) {
 	return KeyResult{Secret: secret, Ref: ref}, nil
 }
 
-func (f *Fake) DeleteKey(_ context.Context, ref string) error {
+func (f *Fake) DeleteKey(ctx context.Context, ref string) error {
+	if f.OnDelete != nil {
+		f.OnDelete()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.DeleteErr != nil {
@@ -232,7 +246,13 @@ func (f *Fake) UpdateAlias(_ context.Context, ref, alias string) error {
 	return nil
 }
 
-func (f *Fake) UpdateExpiry(_ context.Context, ref string, expiresAt time.Time) error {
+func (f *Fake) UpdateExpiry(ctx context.Context, ref string, expiresAt time.Time) error {
+	if f.OnExpiry != nil {
+		f.OnExpiry()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.ExpiryErr != nil {
