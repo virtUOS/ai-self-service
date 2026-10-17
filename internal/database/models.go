@@ -27,6 +27,9 @@ type Profile struct {
 	// Quotas are the fair-use allowances, each reset on its own period. Empty
 	// means unlimited. Several windows apply at once, so the tightest one
 	// binds — LiteLLM enforces each independently.
+	//
+	// Bun loads it only when a query asks with Relation("Quotas"). Without
+	// that, it scans empty with no error, and the profile looks unlimited.
 	Quotas []ProfileQuota `bun:"rel:has-many,join:id=profile_id"`
 
 	IsDefault bool `bun:"is_default,notnull"`

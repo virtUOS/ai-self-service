@@ -13,6 +13,15 @@ and with Podman, and developers have one or the other. The Makefile uses
 `COMPOSE` to choose, e.g. `make check COMPOSE="podman compose"`. Don't write
 instructions or scripts that assume only one of them.
 
+## File names
+
+Never end a Go file name in a GOOS or GOARCH, such as `_windows.go`, `_linux.go`
+or `_amd64.go`, even before `_test.go`. Go reads the part after the last
+underscore as a build constraint and silently leaves the file out on every
+other platform. "Windows" is easy to hit here, since quotas have them: a
+migration named so once never ran, and its tests reported "no tests to run",
+with no error anywhere.
+
 ## Routes
 
 The HTTP routes are defined in one place, `newRouter` in
