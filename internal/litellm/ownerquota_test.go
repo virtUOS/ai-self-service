@@ -166,57 +166,6 @@ func TestCreateKeyWithoutQuotaClearsOwnerBudget(t *testing.T) {
 	}
 }
 
-// The quota shown is the owner's, since that is the binding one after a
-// rotation. The key's own counter must not be consulted when the owner has an
-// allowance — that counter is exactly what resets.
-func TestQuotaPrefersTheOwnerAllowance(t *testing.T) {
-	var asked []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		asked = append(asked, r.URL.Path)
-		if r.URL.Path == "/user/info" {
-			w.Write([]byte(`{"user_info":{"spend":0.05,"max_budget":0.1}}`))
-			return
-		}
-		w.Write([]byte(`{"info":{"spend":0.0,"max_budget":0.1}}`))
-	}))
-	defer srv.Close()
-
-	q, err := NewProvider(NewClient(srv.URL, "mk")).Quota(context.Background(), "sk-fresh", "sub-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if q.Used != 0.05 {
-		t.Errorf("used = %v, want the owner's spend carried across the rotation", q.Used)
-	}
-	for _, p := range asked {
-		if p == "/key/info" {
-			t.Error("fell back to the key's own counter, which a rotation resets")
-		}
-	}
-}
-
-// Keys issued before owners were tracked have no user upstream. They must keep
-// reporting the key's own figure rather than showing nothing.
-func TestQuotaFallsBackToTheKeyForUntrackedOwners(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/user/info" {
-			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte(`{"error":{"message":"not found"}}`))
-			return
-		}
-		w.Write([]byte(`{"info":{"spend":0.03,"max_budget":0.1}}`))
-	}))
-	defer srv.Close()
-
-	q, err := NewProvider(NewClient(srv.URL, "mk")).Quota(context.Background(), "sk-old", "sub-unknown")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if q.Used != 0.03 {
-		t.Errorf("used = %v, want the key's own figure as a fallback", q.Used)
-	}
-}
-
 // A profile edit has to reach both halves of the allowance.
 func TestUpdateLimitsAppliesBothHalves(t *testing.T) {
 	g := newGatewayStub(t)

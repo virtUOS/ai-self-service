@@ -31,28 +31,6 @@ func TestKeyHashIsSHA256(t *testing.T) {
 	}
 }
 
-// A key with no budget has nothing remaining to report; the caller must be
-// able to tell that apart from a fully-consumed quota.
-func TestKeyQuotaUnlimited(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"info": map[string]any{
-			"spend": 1e-05, "max_budget": nil,
-		}})
-	}))
-	defer srv.Close()
-
-	got, err := NewClient(srv.URL, "mk").KeyQuota(context.Background(), "sk-x")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Limit != 0 {
-		t.Errorf("Limit = %v, want 0 for an unlimited key", got.Limit)
-	}
-	if got.Used != 1e-05 {
-		t.Errorf("Used = %v, want 1e-05", got.Used)
-	}
-}
-
 // A profile's limits must be pushable onto a key that already exists.
 // Without this a profile change never reaches issued keys, and the portal
 // advertises a quota the gateway does not enforce.

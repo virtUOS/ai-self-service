@@ -47,20 +47,12 @@ type Fake struct {
 	ModelUsageByOwner map[string][]ModelUsage
 	UsageErr          error
 
-	// QuotaByRef is what Quota returns per key ref; QuotaErr forces failure.
-	QuotaByRef map[string]Quota
-	QuotaErr   error
-
 	// WindowsByRef and WindowsByOwner are what Windows returns; WindowsErr
-	// forces it to fail. The owner's entry wins, as on the real gateway.
+	// forces it to fail. The owner's entry wins, as on the real gateway, so a
+	// test can assert that a figure survives a key rotation.
 	WindowsByRef   map[string][]WindowUsage
 	WindowsByOwner map[string][]WindowUsage
 	WindowsErr     error
-
-	// QuotaByOwner is the allowance held against a person rather than a key.
-	// It takes precedence over QuotaByRef, mirroring the real gateway, so a
-	// test can assert that a figure survives a key rotation.
-	QuotaByOwner map[string]Quota
 
 	// OnCreate, when set, runs at the start of CreateKey before it takes the
 	// fake's lock, so a test can hold a request there and force overlap.
@@ -114,9 +106,7 @@ func (f *Fake) UpdateLimits(_ context.Context, ref string, user User, l Limits) 
 	return nil
 }
 
-// WindowsByRef is what Windows returns per key ref; WindowsErr forces failure.
-// Keyed by ref so a test can model a rotation.
-// Windows returns the canned per-window figures.
+// Windows returns the canned per-window figures, preferring the owner's.
 func (f *Fake) Windows(_ context.Context, ref, ownerID string) ([]WindowUsage, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -127,21 +117,6 @@ func (f *Fake) Windows(_ context.Context, ref, ownerID string) ([]WindowUsage, e
 		return w, nil
 	}
 	return f.WindowsByRef[ref], nil
-}
-
-// Quota returns the allowance figures for a key, preferring the one held
-// against its owner where there is one — as the real gateway does, so that the
-// figure does not reset when the key is rotated.
-func (f *Fake) Quota(_ context.Context, ref, ownerID string) (Quota, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.QuotaErr != nil {
-		return Quota{}, f.QuotaErr
-	}
-	if q, ok := f.QuotaByOwner[ownerID]; ok && ownerID != "" {
-		return q, nil
-	}
-	return f.QuotaByRef[ref], nil
 }
 
 // Models is what ListModels returns.

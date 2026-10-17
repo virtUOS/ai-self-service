@@ -779,7 +779,6 @@ func TestDashboardDrawsABarPerWindow(t *testing.T) {
 		APIKey:     &database.APIKey{KeyPrefix: "sk-x", ExpiresAt: time.Now().Add(24 * time.Hour)},
 		BudgetUnit: "$",
 		Usage: usageReport{
-			HasQuota: true,
 			Windows: []quotaWindowView{
 				{Period: "1h", Label: "per hour", Used: 0.00095, Limit: 0.001, Pct: 95},
 				{Period: "30d", Label: "per month", Used: 0.00959, Limit: 1, Pct: 1},
@@ -804,28 +803,6 @@ func TestDashboardDrawsABarPerWindow(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("card is missing %q", want)
 		}
-	}
-}
-
-// With no per-window figures the card keeps the single bar rather than showing
-// nothing, so a gateway that cannot report every window still reports a quota.
-func TestDashboardFallsBackToOneBar(t *testing.T) {
-	var buf bytes.Buffer
-	err := parseDashboardTemplate().Execute(&buf, dashboardData{
-		Lang:       i18n.EN,
-		Langs:      i18n.Supported,
-		User:       &database.User{Email: "a@b.c"},
-		APIKey:     &database.APIKey{KeyPrefix: "sk-x", ExpiresAt: time.Now().Add(24 * time.Hour)},
-		BudgetUnit: "$",
-		Usage: usageReport{
-			HasQuota: true, Used: 0.00959, Limit: 1, QuotaPct: 1,
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := strings.Count(buf.String(), "quota-fill"); got != 1 {
-		t.Errorf("drew %d bars, want exactly one in the fallback", got)
 	}
 }
 

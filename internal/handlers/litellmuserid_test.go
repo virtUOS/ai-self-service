@@ -36,9 +36,9 @@ func TestDashboardReadsThePrefixedOwnersQuota(t *testing.T) {
 	ui, fake, _, _ := newTestUI(t, "uid-dash")
 	ui.cfg.LiteLLMUserIDPrefix = "testing"
 	post(t, ui, ui.GenerateKey, "/key/generate")
-	fake.QuotaByOwner = map[string]keyprovider.Quota{
-		"sub-1":         {Used: 0.9, Limit: 1},
-		"testing:sub-1": {Used: 0.25, Limit: 1},
+	fake.WindowsByOwner = map[string][]keyprovider.WindowUsage{
+		"sub-1":         {{Period: "30d", Used: 0.95, Limit: 1}},
+		"testing:sub-1": {{Period: "30d", Used: 0.25, Limit: 1}},
 	}
 
 	body := getPage(t, ui, ui.Dashboard, "/").Body.String()

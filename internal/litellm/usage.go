@@ -160,12 +160,16 @@ func (c *Client) dailyActivity(ctx context.Context, q url.Values) (dailyActivity
 // versions answer 404 here too.
 const keyStatusDeleted = "deleted"
 
+// keyInfoResponse is the part of /key/info the portal reads.
 type keyInfoResponse struct {
 	Info struct {
-		Status        string   `json:"status"`
-		Spend         float64  `json:"spend"`
-		MaxBudget     *float64 `json:"max_budget"`
-		BudgetResetAt *string  `json:"budget_reset_at"`
+		Status            string                 `json:"status"`
+		Spend             float64                `json:"spend"`
+		BudgetLimits      []budgetWindow         `json:"budget_limits"`
+		BudgetLimitsUsage map[string]windowSpend `json:"budget_limits_usage"`
+		MaxBudget         *float64               `json:"max_budget"`
+		BudgetDuration    *string                `json:"budget_duration"`
+		BudgetResetAt     *string                `json:"budget_reset_at"`
 	} `json:"info"`
 }
 
@@ -198,26 +202,6 @@ func (c *Client) keyInfo(ctx context.Context, ref string) (keyInfoResponse, erro
 		return info, fmt.Errorf("LiteLLM /key/info reports the key deleted: %w", keyprovider.ErrKeyNotFound)
 	}
 	return info, nil
-}
-
-// KeyQuota reports spend against the key's enforced budget, both read from
-// the key itself: that is the counter LiteLLM enforces against, and it resets
-// on the budget period rather than the 30-day window the log is charted over.
-func (c *Client) KeyQuota(ctx context.Context, ref string) (keyprovider.Quota, error) {
-	info, err := c.keyInfo(ctx, ref)
-	if err != nil {
-		return keyprovider.Quota{}, err
-	}
-	q := keyprovider.Quota{Used: info.Info.Spend}
-	if info.Info.MaxBudget != nil {
-		q.Limit = *info.Info.MaxBudget
-	}
-	if info.Info.BudgetResetAt != nil {
-		if t, err := time.Parse(time.RFC3339, *info.Info.BudgetResetAt); err == nil {
-			q.ResetsAt = t
-		}
-	}
-	return q, nil
 }
 
 // UpdateKeyLimits pushes a profile's limits onto a key that already exists.

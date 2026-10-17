@@ -146,8 +146,19 @@ func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 
 // keySpend is the key's own spend counter, which /key/info reports.
 func (g e2eGateway) keySpend(ctx context.Context, ref string) (float64, error) {
-	q, err := g.client.KeyQuota(ctx, ref)
-	return q.Used, err
+	info, err := g.client.keyInfo(ctx, ref)
+	return info.Info.Spend, err
+}
+
+// ownerAllowance is the allowance held against a person, and what they have
+// spent against it across every key, as /user/info reports them. Both are
+// zero for a person without one.
+func (g e2eGateway) ownerAllowance(ctx context.Context, owner string) (used, limit float64, err error) {
+	w, err := g.client.userWindow(ctx, owner)
+	if err != nil || w == nil {
+		return 0, 0, err
+	}
+	return w.Spend, w.MaxBudget, nil
 }
 
 // waitOutWindowBoundary sleeps past any quota window of the key that is about
@@ -307,31 +318,40 @@ func TestE2EOwnerQuotaSurvivesRotation(t *testing.T) {
 	k1 := g.createKey(t, owner, limits)
 	g.mustComplete(t, k1.Secret, "mock-small")
 
-	var q1 keyprovider.Quota
+	var used1, limit1 float64
 	eventually(t, "spend via first key", func() error {
 		var err error
-		if q1, err = g.Quota(ctx, k1.Ref, owner); err != nil {
+		if used1, limit1, err = g.ownerAllowance(ctx, owner); err != nil {
 			return err
 		}
-		if q1.Used <= 0 {
-			return fmt.Errorf("used = %v", q1.Used)
+		if used1 <= 0 {
+			return fmt.Errorf("used = %v", used1)
 		}
 		return nil
 	})
-	if q1.Limit != 10 {
-		t.Errorf("limit = %v, want the 30d allowance on the owner", q1.Limit)
+	if limit1 != 10 {
+		t.Errorf("limit = %v, want the 30d allowance on the owner", limit1)
 	}
 
 	k2 := g.createKey(t, owner, limits)
-	q2, err := g.Quota(ctx, k2.Ref, owner)
+	used2, limit2, err := g.ownerAllowance(ctx, owner)
 	if err != nil {
-		t.Fatalf("quota via replacement key: %v", err)
+		t.Fatalf("allowance after rotation: %v", err)
 	}
-	if q2.Limit != q1.Limit {
-		t.Errorf("allowance changed across rotation: %v then %v", q1.Limit, q2.Limit)
+	if limit2 != limit1 {
+		t.Errorf("allowance changed across rotation: %v then %v", limit1, limit2)
 	}
-	if !near(q2.Used, q1.Used) {
-		t.Errorf("spend reset across rotation: %v then %v", q1.Used, q2.Used)
+	if !near(used2, used1) {
+		t.Errorf("spend reset across rotation: %v then %v", used1, used2)
+	}
+
+	// The dashboard reads the same figure through the replacement key.
+	windows, err := g.Windows(ctx, k2.Ref, owner)
+	if err != nil {
+		t.Fatalf("windows via replacement key: %v", err)
+	}
+	if n := len(windows); n == 0 || windows[n-1].Period != "30d" || !near(windows[n-1].Used, used1) {
+		t.Errorf("windows via replacement key = %+v, want the 30d window at %v", windows, used1)
 	}
 
 	// Spend through the replacement adds to the same allowance.
@@ -341,12 +361,12 @@ func TestE2EOwnerQuotaSurvivesRotation(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		q3, err := g.Quota(ctx, k2.Ref, owner)
+		used3, _, err := g.ownerAllowance(ctx, owner)
 		if err != nil {
 			return err
 		}
-		if spent2 <= 0 || !near(q3.Used, q1.Used+spent2) {
-			return fmt.Errorf("used = %v, want %v + %v", q3.Used, q1.Used, spent2)
+		if spent2 <= 0 || !near(used3, used1+spent2) {
+			return fmt.Errorf("used = %v, want %v + %v", used3, used1, spent2)
 		}
 		return nil
 	})
@@ -404,7 +424,7 @@ func TestE2EWindowsByShape(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				ownerQuota, err := g.client.UserQuota(ctx, owner)
+				ownerSpend, _, err := g.ownerAllowance(ctx, owner)
 				if err != nil {
 					return err
 				}
@@ -412,11 +432,10 @@ func TestE2EWindowsByShape(t *testing.T) {
 				for _, w := range windows {
 					want := keySpend
 					if w.Period == widest {
-						want = ownerQuota.Used
+						want = ownerSpend
 					}
-					if !w.UsedKnown || want <= 0 || !near(w.Used, want) {
-						return fmt.Errorf("%s window: used=%v known=%v, want %v",
-							w.Period, w.Used, w.UsedKnown, want)
+					if want <= 0 || !near(w.Used, want) {
+						return fmt.Errorf("%s window: used=%v, want %v", w.Period, w.Used, want)
 					}
 					if w.ResetsAt.IsZero() {
 						return fmt.Errorf("%s window has no reset time", w.Period)
@@ -554,14 +573,14 @@ func TestE2EUpdateLimitsMovesKeyToNewOwner(t *testing.T) {
 
 	k := g.createKey(t, oldOwner, limits)
 	g.mustComplete(t, k.Secret, "mock-small")
-	var before keyprovider.Quota
+	var before float64
 	eventually(t, "spend on the old owner", func() error {
 		var err error
-		if before, err = g.Quota(ctx, k.Ref, oldOwner); err != nil {
+		if before, _, err = g.ownerAllowance(ctx, oldOwner); err != nil {
 			return err
 		}
-		if before.Used <= 0 {
-			return fmt.Errorf("used = %v", before.Used)
+		if before <= 0 {
+			return fmt.Errorf("used = %v", before)
 		}
 		return nil
 	})
@@ -572,21 +591,21 @@ func TestE2EUpdateLimitsMovesKeyToNewOwner(t *testing.T) {
 	g.mustComplete(t, k.Secret, "mock-small")
 
 	eventually(t, "spend on the new owner", func() error {
-		q, err := g.Quota(ctx, k.Ref, newOwner)
+		used, limit, err := g.ownerAllowance(ctx, newOwner)
 		if err != nil {
 			return err
 		}
-		if q.Limit != 10 || q.Used <= 0 {
-			return fmt.Errorf("new owner: used %v of %v, want spend against 10", q.Used, q.Limit)
+		if limit != 10 || used <= 0 {
+			return fmt.Errorf("new owner: used %v of %v, want spend against 10", used, limit)
 		}
 		return nil
 	})
-	after, err := g.Quota(ctx, k.Ref, oldOwner)
+	after, _, err := g.ownerAllowance(ctx, oldOwner)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !near(after.Used, before.Used) {
-		t.Errorf("old owner's spend moved from %v to %v after the key left it", before.Used, after.Used)
+	if !near(after, before) {
+		t.Errorf("old owner's spend moved from %v to %v after the key left it", before, after)
 	}
 }
 
@@ -756,7 +775,6 @@ func TestE2EDeletedKeyIsReportedMissing(t *testing.T) {
 		"update alias":  func() error { return g.UpdateAlias(ctx, k.Ref, owner+"-gone") },
 		"update expiry": func() error { return g.UpdateExpiry(ctx, k.Ref, time.Now().AddDate(0, 0, 30)) },
 		"windows":       func() error { _, err := g.Windows(ctx, k.Ref, ""); return err },
-		"key quota":     func() error { _, err := g.Quota(ctx, k.Ref, ""); return err },
 	} {
 		if err := call(); !errors.Is(err, keyprovider.ErrKeyNotFound) {
 			t.Errorf("%s: err = %v, want ErrKeyNotFound", name, err)

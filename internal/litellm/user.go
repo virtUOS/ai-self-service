@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/virtuos/keyosk/internal/keyprovider"
 )
@@ -153,49 +152,5 @@ func (c *Client) userWindow(ctx context.Context, userID string) (*budgetWindow, 
 		MaxBudget:      *info.UserInfo.MaxBudget,
 		ResetAt:        info.UserInfo.BudgetResetAt,
 		Spend:          info.UserInfo.Spend,
-		HasSpend:       true,
 	}, nil
-}
-
-// UserQuota reports a user's consumption against the allowance enforced on
-// them, across every key they own.
-//
-// This replaces the key's own quota as the figure shown to users: it is the
-// one that binds after a rotation, and the one a user cannot reset.
-func (c *Client) UserQuota(ctx context.Context, userID string) (keyprovider.Quota, error) {
-	q := url.Values{}
-	q.Set("user_id", userID)
-
-	resp, err := c.do(ctx, http.MethodGet, "/user/info?"+q.Encode(), nil)
-	if err != nil {
-		return keyprovider.Quota{}, err
-	}
-	defer resp.Body.Close()
-
-	// A user that has never been created has no usage to report. That is the
-	// normal state for a key issued before this became the enforcement point,
-	// so it is not an error.
-	if resp.StatusCode == http.StatusNotFound {
-		return keyprovider.Quota{}, nil
-	}
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return keyprovider.Quota{}, fmt.Errorf("LiteLLM /user/info returned %d: %s", resp.StatusCode, b)
-	}
-
-	var info userInfoResponse
-	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		return keyprovider.Quota{}, fmt.Errorf("decode user info: %w", err)
-	}
-
-	quota := keyprovider.Quota{Used: info.UserInfo.Spend}
-	if info.UserInfo.MaxBudget != nil {
-		quota.Limit = *info.UserInfo.MaxBudget
-	}
-	if info.UserInfo.BudgetResetAt != nil {
-		if t, err := time.Parse(time.RFC3339, *info.UserInfo.BudgetResetAt); err == nil {
-			quota.ResetsAt = t
-		}
-	}
-	return quota, nil
 }

@@ -104,46 +104,50 @@ func TestUpsertUserClearsBudgetWhenNil(t *testing.T) {
 	}
 }
 
-// The quota shown to a user is the one enforced on them across every key.
-func TestUserQuotaReportsSpendAgainstBudget(t *testing.T) {
+// The owner's allowance is reported as a window, with the spend enforced on
+// them across every key.
+func TestUserWindowReportsSpendAgainstBudget(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("user_id"); got != "u1" {
 			t.Errorf("user_id = %q, want u1", got)
 		}
-		w.Write([]byte(`{"user_info":{"spend":0.02,"max_budget":0.1,"budget_reset_at":"2026-09-01T00:00:00Z"}}`))
+		w.Write([]byte(`{"user_info":{"spend":0.02,"max_budget":0.1,"budget_duration":"30d","budget_reset_at":"2026-09-01T00:00:00Z"}}`))
 	}))
 	defer srv.Close()
 
-	q, err := NewClient(srv.URL, "mk").UserQuota(context.Background(), "u1")
+	w, err := NewClient(srv.URL, "mk").userWindow(context.Background(), "u1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.Used != 0.02 {
-		t.Errorf("used = %v, want 0.02", q.Used)
+	if w == nil {
+		t.Fatal("no window for an owner with an allowance")
 	}
-	if q.Limit != 0.1 {
-		t.Errorf("limit = %v, want 0.1", q.Limit)
+	if w.Spend != 0.02 {
+		t.Errorf("spend = %v, want 0.02", w.Spend)
 	}
-	if q.ResetsAt.IsZero() {
+	if w.MaxBudget != 0.1 || w.BudgetDuration != "30d" {
+		t.Errorf("window = %v per %s, want 0.1 per 30d", w.MaxBudget, w.BudgetDuration)
+	}
+	if w.ResetAt == nil {
 		t.Error("reset time not reported")
 	}
 }
 
 // Keys issued before the portal tracked users have no user upstream. That is
 // expected during the transition, not a failure that should break a dashboard.
-func TestUserQuotaTreatsMissingUserAsNoUsage(t *testing.T) {
+func TestUserWindowTreatsMissingUserAsNoAllowance(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(`{"error":{"message":"User not found"}}`))
 	}))
 	defer srv.Close()
 
-	q, err := NewClient(srv.URL, "mk").UserQuota(context.Background(), "nobody")
+	w, err := NewClient(srv.URL, "mk").userWindow(context.Background(), "nobody")
 	if err != nil {
 		t.Fatalf("missing user reported as an error: %v", err)
 	}
-	if q.Limit != 0 || q.Used != 0 {
-		t.Errorf("got %+v, want an empty quota", q)
+	if w != nil {
+		t.Errorf("got %+v, want no allowance", *w)
 	}
 }
 

@@ -96,19 +96,6 @@ type QuotaWindow struct {
 	Period string  // "1h" | "24h" | "7d" | "30d"
 }
 
-// Quota is a key's consumption against the allowance the gateway enforces.
-// It is reported separately from usage because it resets on the budget period,
-// which need not match the window usage is reported over.
-type Quota struct {
-	// Used is spend in the current window.
-	Used float64
-	// Limit is the allowance. Zero means the key is unlimited, which is
-	// different from an allowance that has been fully consumed.
-	Limit float64
-	// ResetsAt is when the window rolls over. Zero when unknown or unlimited.
-	ResetsAt time.Time
-}
-
 // WindowUsage is consumption against one of a profile's quota windows.
 //
 // Reported per window because a profile can hold several at once and the
@@ -125,10 +112,6 @@ type WindowUsage struct {
 	Limit float64
 	// ResetsAt is when this window rolls over.
 	ResetsAt time.Time
-	// UsedKnown reports whether Used is a real figure. It is false when the
-	// gateway reported no spend for the window, and a bar drawn from a silent
-	// zero would claim a full allowance the user may not have.
-	UsedKnown bool
 }
 
 // DailyUsage is one day's token consumption for a person.
@@ -170,19 +153,18 @@ type UsageReporter interface {
 	History(ctx context.Context, ownerID string, days int) (History, error)
 
 	// Windows reports consumption against every quota window that applies to
-	// the key and its owner, tightest period first.
-	//
-	// Returns nothing when the key has no quota, or when the windows cannot be
-	// determined — callers fall back to Quota.
-	Windows(ctx context.Context, ref, ownerID string) ([]WindowUsage, error)
-
-	// Quota reports consumption against the enforced allowance, in the window
-	// the gateway resets on.
+	// the key and its owner, tightest period first. It is the whole of the
+	// allowance: nothing when neither the key nor its owner has a quota.
 	//
 	// ownerID names the person the key belongs to. Where an allowance is held
-	// against the person, that is the figure reported: it is the one that
-	// binds after a rotation, and the one a user cannot reset by regenerating.
-	Quota(ctx context.Context, ref, ownerID string) (Quota, error)
+	// against the person, it is reported with the person's spend: it is the
+	// one that binds after a rotation, and the one a user cannot reset by
+	// regenerating.
+	//
+	// Every window comes with the spend the gateway counts against it. When
+	// that cannot be read for a window, Windows fails rather than report a
+	// silent zero.
+	Windows(ctx context.Context, ref, ownerID string) ([]WindowUsage, error)
 }
 
 // Provider issues and revokes keys on an upstream gateway.
