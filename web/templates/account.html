@@ -36,7 +36,7 @@
         <div class="form-group">
           <label for="setting-lang">{{T .Lang "lang.label"}}</label>
           <select id="setting-lang" name="lang">
-            <option value=""{{if not .LangPref}} selected{{end}}>{{T .Lang "account.system"}}</option>
+            <option value=""{{if not .LangPref}} selected{{end}}>{{T .Lang "account.browser"}}</option>
             {{- $pref := .LangPref}}{{range .Langs}}
             <option value="{{.}}" lang="{{.}}"{{if eq . $pref}} selected{{end}}>{{.Name}}</option>
             {{- end}}
@@ -45,7 +45,7 @@
         <div class="form-group">
           <label for="setting-theme">{{T .Lang "account.theme"}}</label>
           <select id="setting-theme" name="theme">
-            <option value=""{{if not .Theme}} selected{{end}}>{{T .Lang "account.system"}}</option>
+            <option value=""{{if not .Theme}} selected{{end}}>{{T .Lang "account.browser"}}</option>
             {{- $theme := .Theme}}{{range .Themes}}
             <option value="{{.}}"{{if eq . $theme}} selected{{end}}>{{if eq . "light"}}{{T $.Lang "account.light"}}{{else}}{{T $.Lang "account.dark"}}{{end}}</option>
             {{- end}}

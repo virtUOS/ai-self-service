@@ -55,7 +55,7 @@
 /* ── Design tokens ───────────────────────────────────────── */
 /* The Keyosk palette: warm paper, dark teal-black ink, one teal accent.
    Each colour is a light-dark() pair, so the palette follows color-scheme:
-   the system's by default, or the one chosen in the account settings, which
+   the browser's by default, or the one chosen in the account settings, which
    the server writes onto <html data-theme>. */
 :root {
   /* Also tells the browser which scheme its own controls follow: without it
@@ -328,6 +328,9 @@ main.main-wide { max-width: 1280px; }
 /* The privacy notice is the operator's own prose markup, which the reset above
    would run together into one block. */
 .notice h3 { margin-top: 1.5rem; }
+/* Where an anonymous reader gets the language tabs, a signed-in one gets a
+   link to the account settings. */
+.notice-lang { text-align: right; font-size: .85rem; margin-bottom: 1rem; }
 .notice p, .notice ul { margin-bottom: .75rem; }
 .notice ul { padding-left: 1.25rem; }
 .notice li { margin-bottom: .4rem; }

@@ -18,6 +18,8 @@
       <a class="tab-btn{{if eq . $cur}} active{{end}}" href="/privacy?lang={{.}}" lang="{{.}}"{{if eq . $cur}} aria-current="page"{{end}}>{{.Name}}</a>
       {{- end}}
     </nav>
+    {{else if .SettingsLink}}
+    <p class="notice-lang"><a href="/account">{{T .Lang "privacy.changelang"}}</a></p>
     {{end}}
     <div class="notice" lang="{{.NoticeLang}}">
       {{.Notice}}

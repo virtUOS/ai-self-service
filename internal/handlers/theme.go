@@ -5,7 +5,7 @@ import (
 )
 
 // Theme is the colour scheme chosen in the account settings. The empty Theme
-// follows the system, which is what a visitor without a choice gets.
+// follows the browser, which is what a visitor without a choice gets.
 type Theme string
 
 const (
@@ -20,7 +20,7 @@ const (
 // Themes lists the choices in the order the settings page offers them.
 var Themes = []Theme{ThemeSystem, ThemeLight, ThemeDark}
 
-// validTheme reports whether t is one of the choices, the system one included.
+// validTheme reports whether t is one of the choices, the browser's included.
 func validTheme(t Theme) bool {
 	for _, v := range Themes {
 		if v == t {
@@ -43,7 +43,7 @@ func ThemeFromRequest(r *http.Request) Theme {
 }
 
 // setPrefCookie stores a preference for a year, or deletes it when value is
-// empty, so that "follow the system" means no cookie at all rather than one
+// empty, so that "follow the browser" means no cookie at all rather than one
 // that has to be read and ignored.
 func setPrefCookie(w http.ResponseWriter, name, value string, secure bool) {
 	c := &http.Cookie{

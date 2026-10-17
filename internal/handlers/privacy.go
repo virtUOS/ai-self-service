@@ -28,10 +28,12 @@ type privacyData struct {
 	// from Lang when the reader's language has none.
 	NoticeLang i18n.Lang
 	// Tabs are the languages an anonymous reader can switch the notice to,
-	// empty unless there is more than one. A signed-in reader has chosen a
-	// language in the account settings and gets that.
-	Tabs     []i18n.Lang
-	TitleKey string
+	// empty unless there is more than one. A signed-in reader gets the
+	// notice in the interface's language, which the account settings choose,
+	// so SettingsLink points them there instead.
+	Tabs         []i18n.Lang
+	SettingsLink bool
+	TitleKey     string
 	// User is nil for an anonymous reader, who gets no account menu.
 	User          *database.User
 	IsAdmin       bool
@@ -92,7 +94,9 @@ func hasPrivacyNotice(cfg *config.Config) bool {
 //
 // An anonymous reader gets one tab per language the notice is written in,
 // each a link with ?lang. The parameter only picks what this page shows and
-// stores nothing, so the GET stays free of side effects.
+// stores nothing, so the GET stays free of side effects. A signed-in reader
+// gets the notice in the language of the rest of the interface, and a link to
+// the account settings, where that is chosen.
 func (u *UI) Privacy(w http.ResponseWriter, r *http.Request) {
 	if !hasPrivacyNotice(u.cfg) {
 		http.NotFound(w, r)
@@ -111,6 +115,7 @@ func (u *UI) Privacy(w http.ResponseWriter, r *http.Request) {
 	if su, err := u.requireSession(r); err == nil && su != nil {
 		data.User = su.User
 		data.IsAdmin = su.User.IsAdmin
+		data.SettingsLink = len(noticeLangs(u.cfg)) > 1
 	} else {
 		if l := i18n.Lang(r.URL.Query().Get("lang")); i18n.Valid(l) {
 			data.Lang = l

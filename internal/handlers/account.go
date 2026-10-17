@@ -29,7 +29,7 @@ type accountData struct {
 	PrivacyNotice bool
 
 	// Langs and Themes are the choices the settings offer, besides the
-	// system's. LangPref is the language chosen here, empty when the page
+	// browser's. LangPref is the language chosen here, empty when the page
 	// follows the browser, so the form can tell the two apart even when the
 	// browser asks for the language that was chosen.
 	Langs    []i18n.Lang
@@ -79,7 +79,7 @@ func (u *UI) Account(w http.ResponseWriter, r *http.Request) {
 // than on the account: they apply before login too, on the public privacy
 // page, and are a matter of the device as much as of the person.
 //
-// An empty value follows the system and deletes the cookie. Anything else the
+// An empty value follows the browser and deletes the cookie. Anything else the
 // form does not offer only comes from a crafted request and is refused.
 func (u *UI) SaveAccount(w http.ResponseWriter, r *http.Request) {
 	if _, err := u.requireSession(r); err != nil {

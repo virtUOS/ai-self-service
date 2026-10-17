@@ -87,18 +87,18 @@ func TestAccountPageNeedsALogin(t *testing.T) {
 	}
 }
 
-// Without a choice both settings say "system", even when the browser asks for
-// a language the portal has: following the browser is not the same as having
-// picked German.
+// Without a choice both settings say "browser setting", even when the browser
+// asks for a language the portal has: following the browser is not the same as
+// having picked German.
 func TestAccountPageSelectsTheCurrentChoices(t *testing.T) {
 	ui, _, _, _ := newTestUI(t, "acct3")
 
 	page := getAccount(t, ui, "/account").Body.String()
 	if got := selected(t, page, "lang"); got != "" {
-		t.Errorf("language %q selected without a choice, want system", got)
+		t.Errorf("language %q selected without a choice, want the browser setting", got)
 	}
 	if got := selected(t, page, "theme"); got != "" {
-		t.Errorf("theme %q selected without a choice, want system", got)
+		t.Errorf("theme %q selected without a choice, want the browser setting", got)
 	}
 	// Every language is offered under its own name.
 	for _, l := range i18n.Supported {
@@ -119,8 +119,8 @@ func TestAccountPageSelectsTheCurrentChoices(t *testing.T) {
 	}
 }
 
-// A choice is kept for a year; "system" deletes the cookie, so the browser
-// and the operating system decide again.
+// A choice is kept for a year; the browser setting deletes the cookie, so the
+// browser decides again.
 func TestSaveAccountStoresAndClearsTheChoices(t *testing.T) {
 	ui, _, _, _ := newTestUI(t, "acct4")
 
@@ -148,7 +148,7 @@ func TestSaveAccountStoresAndClearsTheChoices(t *testing.T) {
 	c = cookies(saveAccount(t, ui, url.Values{"lang": {""}, "theme": {""}}))
 	for _, name := range []string{i18n.CookieName, themeCookie} {
 		if c[name] == nil || c[name].MaxAge >= 0 {
-			t.Errorf("choosing system does not delete the %s cookie: %+v", name, c[name])
+			t.Errorf("choosing the browser setting does not delete the %s cookie: %+v", name, c[name])
 		}
 	}
 }
@@ -183,7 +183,7 @@ func TestAccountPageConfirmsTheSave(t *testing.T) {
 }
 
 // A chosen theme is on <html> when the page arrives, so it applies before the
-// first paint; without one the page has no attribute and follows the system.
+// first paint; without one the page has no attribute and follows the browser.
 func TestPagesCarryTheChosenTheme(t *testing.T) {
 	ui, _, _, _ := newTestUI(t, "acct7")
 
@@ -224,7 +224,7 @@ func TestPagesCarryTheChosenTheme(t *testing.T) {
 func TestAccountPageFullyGerman(t *testing.T) {
 	ui, _, _, _ := newTestUI(t, "acct8")
 	page := getAccount(t, ui, "/account?saved=1", &http.Cookie{Name: i18n.CookieName, Value: "de"}).Body.String()
-	for _, english := range []string{"Account settings", "Appearance", "Username", "User ID", ">Theme<", ">Light<", ">Dark<", ">Save<", "System default", "have been saved"} {
+	for _, english := range []string{"Account settings", "Appearance", "Username", "User ID", ">Theme<", ">Light<", ">Dark<", ">Save<", "Browser setting", "have been saved"} {
 		if strings.Contains(page, english) {
 			t.Errorf("untranslated on the German page: %q", english)
 		}
