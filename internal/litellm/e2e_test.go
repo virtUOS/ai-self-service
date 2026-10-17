@@ -12,7 +12,9 @@ package litellm
 //
 // LITELLM_BASE_URL and LITELLM_MASTER_KEY point them at another gateway, which
 // needs the same models. Every test works under an owner of its own, so
-// reruns against a long-lived stack never see each other's keys or spend.
+// reruns against a long-lived stack never see each other's keys or spend, and
+// the tests run in parallel: most of their time is spent waiting for LiteLLM
+// to record spend.
 
 import (
 	"bytes"
@@ -168,6 +170,7 @@ func (g e2eGateway) waitOutWindowBoundary(t *testing.T, ref, owner string) {
 }
 
 func TestE2EModels(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
 
@@ -191,6 +194,7 @@ func TestE2EModels(t *testing.T) {
 }
 
 func TestE2EKeyLifecycle(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
 	owner := e2eOwner(t)
@@ -273,6 +277,7 @@ func TestE2EKeyLifecycle(t *testing.T) {
 // (issue #108): present while the key lives, gone once it is deleted, and gone
 // for a ref the gateway never had.
 func TestE2ECheckKey(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
 	owner := e2eOwner(t)
@@ -296,6 +301,7 @@ func TestE2ECheckKey(t *testing.T) {
 // Issue #26: the widest window lives on the owner, so regenerating a key must
 // neither reset its spend nor change its allowance.
 func TestE2EOwnerQuotaSurvivesRotation(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
 	owner := e2eOwner(t)
@@ -356,6 +362,7 @@ func TestE2EOwnerQuotaSurvivesRotation(t *testing.T) {
 // figures: the widest window on the owner, and nothing, one flat window or
 // several in budget_limits on the key.
 func TestE2EWindowsByShape(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		quotas  []keyprovider.QuotaWindow
@@ -373,6 +380,7 @@ func TestE2EWindowsByShape(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			g := newE2EGateway(t)
 			ctx := context.Background()
 			owner := e2eOwner(t)
@@ -431,6 +439,7 @@ func TestE2EWindowsByShape(t *testing.T) {
 // The per-model table labels requests by the public model name and counts
 // their tokens.
 func TestE2EHistoryByModel(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
 	owner := e2eOwner(t)
@@ -474,6 +483,7 @@ func TestE2EHistoryByModel(t *testing.T) {
 // The history belongs to the person, so regenerating a key does not start it
 // over: what the old key used stays, and the new key's usage adds to it.
 func TestE2EHistorySurvivesRotation(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
 	owner := e2eOwner(t)
@@ -518,6 +528,7 @@ func TestE2EHistorySurvivesRotation(t *testing.T) {
 // A quota the portal pushes is one the gateway enforces: on the owner for the
 // widest window, which is the one users actually run into.
 func TestE2EOwnerQuotaIsEnforced(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	owner := e2eOwner(t)
 	// Room for about two mock-small requests.
@@ -546,6 +557,7 @@ func TestE2EOwnerQuotaIsEnforced(t *testing.T) {
 // prefixed user. Spend from then on counts against the new owner only, and the
 // ':' the prefix adds is accepted in a user ID.
 func TestE2EUpdateLimitsMovesKeyToNewOwner(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
 	oldOwner := e2eOwner(t)
@@ -626,6 +638,7 @@ func (g e2eGateway) e2eUser(t *testing.T, id string) (alias, email string, keys 
 // A user is created labelled, owning no key of LiteLLM's making, and an
 // existing user picks up a new name and address.
 func TestE2EUpsertUserLabelsTheUser(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
 	id := e2eOwner(t)
@@ -654,6 +667,7 @@ func TestE2EUpsertUserLabelsTheUser(t *testing.T) {
 // LITELLM_USER_EMAIL is opt-in because LiteLLM's own SSO login matches users
 // by address, and then picks one of them.
 func TestE2EUpsertUserToleratesADuplicateEmail(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
 	first := e2eOwner(t)
@@ -699,6 +713,7 @@ func (g e2eGateway) e2eKeyInfo(t *testing.T, ref string) (alias string, metadata
 // A relabel changes the alias and nothing else; in particular it leaves the
 // key's metadata alone, where LiteLLM keeps settings an admin made.
 func TestE2EUpdateAliasRelabelsTheKey(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
 	owner := e2eOwner(t)
@@ -739,6 +754,7 @@ func TestE2EUpdateAliasRelabelsTheKey(t *testing.T) {
 // answers, with status "deleted", while every other route answers 404. The
 // portal must read all of these as a missing key, and a second delete as done.
 func TestE2EDeletedKeyIsReportedMissing(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
 	owner := e2eOwner(t)
