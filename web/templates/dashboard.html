@@ -310,6 +310,15 @@ const BASE_URL = {{.APIBaseURL}};
 // chat example — the behaviour before this was threaded through.
 const EMBEDDING_MODELS = {{.EmbeddingModels}} || {};
 
+// The token in ?k= that brought a new key here is spent once the page has
+// rendered. Drop it from the address bar so a reload or a copied link does not
+// carry it.
+if (new URLSearchParams(location.search).has('k')) {
+  const u = new URL(location.href);
+  u.searchParams.delete('k');
+  history.replaceState(null, '', u.pathname + u.search + u.hash);
+}
+
 // Time words, translated server-side: the browser does the arithmetic, but
 // the wording has to match the page.
 const T_TIME = {

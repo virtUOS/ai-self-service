@@ -72,6 +72,9 @@ func TestLogoutEndsTheSession(t *testing.T) {
 	if !cleared {
 		t.Error("session cookie not cleared")
 	}
+	if got := rec.Header().Get("Clear-Site-Data"); got != `"cache"` {
+		t.Errorf("Clear-Site-Data = %q, want \"cache\" so Back cannot show the dashboard from bfcache", got)
+	}
 
 	loc, err := url.Parse(rec.Header().Get("Location"))
 	if err != nil {
