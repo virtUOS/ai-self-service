@@ -9,5 +9,76 @@
     "email": "admin@example.com",
     "name": "Test Admin",
     "groups": ["keyosk-admin"]
+  },
+  {
+    "sub": "admin2",
+    "email": "admin2@example.com",
+    "name": "Second Admin",
+    "groups": ["keyosk-admin"]
+  },
+  {
+    "sub": "nokey",
+    "email": "nokey@uni-osnabrueck.de",
+    "name": "Nora Nokey"
+  },
+  {
+    "sub": "keyflow",
+    "email": "keyflow@uni-osnabrueck.de",
+    "name": "Kai Keyflow"
+  },
+  {
+    "sub": "logout",
+    "email": "logout@uni-osnabrueck.de",
+    "name": "Lou Logout"
+  },
+  {
+    "sub": "heavy",
+    "email": "heavy@uni-osnabrueck.de",
+    "name": "Hanna Heavy"
+  },
+  {
+    "sub": "stacked",
+    "email": "stacked@uni-osnabrueck.de",
+    "name": "Stefan Stacked"
+  },
+  {
+    "sub": "restricted",
+    "email": "restricted@uni-osnabrueck.de",
+    "name": "Rita Restricted"
+  },
+  {
+    "sub": "expiring",
+    "email": "expiring@uni-osnabrueck.de",
+    "name": "Emil Expiring"
+  },
+  {
+    "sub": "expired",
+    "email": "expired@uni-osnabrueck.de",
+    "name": "Erika Expired"
+  },
+  {
+    "sub": "missing",
+    "email": "missing@uni-osnabrueck.de",
+    "name": "Mia Missing"
+  },
+  {
+    "sub": "guest",
+    "email": "guest@example.com",
+    "name": "Gina Guest"
+  },
+  {
+    "sub": "intern",
+    "email": "intern@uni-osnabrueck.de",
+    "name": "Ivo Intern"
+  },
+  {
+    "sub": "lapsed",
+    "email": "lapsed@uni-osnabrueck.de",
+    "name": "Leon Lapsed"
+  },
+  {
+    "sub": "oezlem",
+    "email": "oezlem.mueller-luedenscheidt@studentische-hilfskraefte.uni-osnabrueck.de",
+    "name": "Özlem Müller-Lüdenscheidt"
   }
 ]

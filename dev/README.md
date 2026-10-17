@@ -66,6 +66,11 @@ At the login prompt, enter the subject of the user you want to be, matching
 | `student` | student@uni-osnabrueck.de    | regular user    |
 | `admin`   | admin@example.com            | admin (in the `keyosk-admin` group) |
 
+The file holds more users, the personas of `make seed` (see
+[Seed data](#seed-data)); any of them can log in here too. The mock reads the
+file when it starts, so after it changes, restart it with
+`docker compose -f dev/docker-compose.yml restart oidc-mock`.
+
 `admin` is an admin because `mock-users.json` puts it in the
 `keyosk-admin` group and `.env.example` sets `ADMIN_GROUP` to that
 group. The Admins tab is then read-only.
@@ -168,6 +173,53 @@ during a session.
 Mailpit accepts whatever the app sends on port 1025 and shows it at
 <http://localhost:8025>; nothing leaves the machine. `.env.example` points
 `SMTP_HOST` at it.
+
+## Seed data
+
+```bash
+make seed
+```
+
+starts an app instance of its own on <http://127.0.0.1:8090> and fills it in
+about a minute with users, profiles, keys and usage, so the dashboard and the
+admin panel show every state they have. It keeps running until Ctrl-C.
+
+It does not touch your own setup: it runs from `dev/.seed/` with its own
+database, leaves `.env` and `data.db` alone, and names its users in LiteLLM
+with a prefix of its own (`seed-<time>:`). Each run starts from scratch and
+first deletes what the previous one created in LiteLLM. Its cookies are those
+of `127.0.0.1`, so a browser keeps you signed in on `localhost:8080` and on the
+seed at the same time.
+
+Log in with the subjects it prints; they are in `dev/mock-users.json`:
+
+| Subject      | Profile    | Shows |
+| ------------ | ---------- | ----- |
+| `admin`      | default    | admin (in the `keyosk-admin` group) |
+| `admin2`     | default    | a second admin |
+| `student`    | default    | a key with usage on two models |
+| `nokey`      | default    | no key yet |
+| `keyflow`    | default    | no key; for the browser tests' key flow |
+| `logout`     | default    | no key; for the browser tests' logout |
+| `heavy`      | Tight      | a nearly full quota bar |
+| `stacked`    | Stacked    | three quota bars |
+| `restricted` | Small only | one model, with rate limits |
+| `expiring`   | Short keys | a key that expires in three days (its reminder is in Mailpit) |
+| `expired`    | default    | an expired key |
+| `missing`    | default    | a key the gateway no longer has |
+| `guest`      | Stacked    | Stacked for a week, then the key is revoked |
+| `intern`     | Small only | Small only for a month, then Tight |
+| `lapsed`     | default    | an assignment that ran out, back on the default |
+| `oezlem`     | default    | a name with umlauts and a long address |
+
+Everything a user or admin can do, the seed does through the app's own pages,
+so keys, limits and the audit log are what the app makes of them. Only an
+expired key and a passed deadline are written to the database directly, since
+no page can make them.
+
+The personas and profiles are defined in `internal/devseed/personas.go`. The
+browser tests use them as fixtures, so a change there is a change to the
+tests.
 
 ## Automated tests
 

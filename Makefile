@@ -11,7 +11,7 @@ COMPOSE_FILE := dev/docker-compose.yml
 SERVICES ?=
 LITELLM_URL := http://localhost:4000
 
-.PHONY: check fmt vet test build e2e up down website website-assets website-serve
+.PHONY: check fmt vet test build e2e up down seed website website-assets website-serve
 
 check: fmt vet test build e2e
 
@@ -51,6 +51,11 @@ up:
 
 down:
 	$(COMPOSE) -f $(COMPOSE_FILE) down
+
+# An instance of its own on http://127.0.0.1:8090, filled with users, profiles,
+# keys and usage, until Ctrl-C. See dev/README.md.
+seed: up
+	go run ./dev/seed
 
 # The website and documentation (docs/, built with Zensical; the pages are in
 # docs/content). Not part of `make check`, which needs no Python; CI builds
