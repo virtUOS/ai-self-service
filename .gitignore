@@ -14,6 +14,12 @@
 /keyosk
 /server
 
+# The instance `make seed` runs: its binary, database, log and manifest.
+/dev/.seed/
+
+# Traces the browser tests save when one fails.
+/internal/browsertest/testdata/traces/
+
 # OS / editor cruft
 .DS_Store
 
