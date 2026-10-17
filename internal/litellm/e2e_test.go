@@ -12,7 +12,9 @@ package litellm
 //
 // LITELLM_BASE_URL and LITELLM_MASTER_KEY point them at another gateway, which
 // needs the same models. Every test works under an owner of its own, so
-// reruns against a long-lived stack never see each other's keys or spend.
+// reruns against a long-lived stack never see each other's keys or spend, and
+// the tests run in parallel: most of their time is spent waiting for LiteLLM
+// to record spend.
 
 import (
 	"bytes"
@@ -24,13 +26,13 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/virtuos/keyosk/internal/e2etest"
 	"github.com/virtuos/keyosk/internal/keyprovider"
 )
 
@@ -48,22 +50,8 @@ type e2eGateway struct {
 
 func newE2EGateway(t *testing.T) e2eGateway {
 	t.Helper()
-	base := envOr("LITELLM_BASE_URL", "http://localhost:4000")
-	key := envOr("LITELLM_MASTER_KEY", "sk-local-dev")
-	return e2eGateway{Provider: NewProvider(NewClient(base, key)), baseURL: base}
-}
-
-func envOr(name, fallback string) string {
-	if v := os.Getenv(name); v != "" {
-		return v
-	}
-	return fallback
-}
-
-// e2eOwner is an owner no earlier run has used.
-func e2eOwner(t *testing.T) string {
-	return fmt.Sprintf("zz-e2e-%s-%s",
-		strings.ToLower(t.Name()), strconv.FormatInt(time.Now().UnixNano(), 36))
+	base := e2etest.BaseURL()
+	return e2eGateway{Provider: NewProvider(NewClient(base, e2etest.MasterKey())), baseURL: base}
 }
 
 // createKey creates a key for owner and deletes it when the test ends.
@@ -168,6 +156,7 @@ func (g e2eGateway) waitOutWindowBoundary(t *testing.T, ref, owner string) {
 }
 
 func TestE2EModels(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
 
@@ -191,9 +180,10 @@ func TestE2EModels(t *testing.T) {
 }
 
 func TestE2EKeyLifecycle(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
-	owner := e2eOwner(t)
+	owner := e2etest.Owner(t)
 
 	k := g.createKey(t, owner, keyprovider.Limits{
 		Models: []string{"mock-small"},
@@ -273,9 +263,10 @@ func TestE2EKeyLifecycle(t *testing.T) {
 // (issue #108): present while the key lives, gone once it is deleted, and gone
 // for a ref the gateway never had.
 func TestE2ECheckKey(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
-	owner := e2eOwner(t)
+	owner := e2etest.Owner(t)
 	k := g.createKey(t, owner, keyprovider.Limits{Models: []string{"mock-small"}})
 
 	if err := g.CheckKey(ctx, k.Ref); err != nil {
@@ -296,9 +287,10 @@ func TestE2ECheckKey(t *testing.T) {
 // Issue #26: the widest window lives on the owner, so regenerating a key must
 // neither reset its spend nor change its allowance.
 func TestE2EOwnerQuotaSurvivesRotation(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
-	owner := e2eOwner(t)
+	owner := e2etest.Owner(t)
 	limits := keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{
 		{Budget: 1, Period: "1h"},
 		{Budget: 10, Period: "30d"},
@@ -356,6 +348,7 @@ func TestE2EOwnerQuotaSurvivesRotation(t *testing.T) {
 // figures: the widest window on the owner, and nothing, one flat window or
 // several in budget_limits on the key.
 func TestE2EWindowsByShape(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		quotas  []keyprovider.QuotaWindow
@@ -373,9 +366,10 @@ func TestE2EWindowsByShape(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			g := newE2EGateway(t)
 			ctx := context.Background()
-			owner := e2eOwner(t)
+			owner := e2etest.Owner(t)
 
 			k := g.createKey(t, owner, keyprovider.Limits{Quotas: tc.quotas})
 			g.waitOutWindowBoundary(t, k.Ref, owner)
@@ -431,9 +425,10 @@ func TestE2EWindowsByShape(t *testing.T) {
 // The per-model table labels requests by the public model name and counts
 // their tokens.
 func TestE2EHistoryByModel(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
-	owner := e2eOwner(t)
+	owner := e2etest.Owner(t)
 	k := g.createKey(t, owner, keyprovider.Limits{})
 
 	g.mustComplete(t, k.Secret, "mock-small")
@@ -474,9 +469,10 @@ func TestE2EHistoryByModel(t *testing.T) {
 // The history belongs to the person, so regenerating a key does not start it
 // over: what the old key used stays, and the new key's usage adds to it.
 func TestE2EHistorySurvivesRotation(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
-	owner := e2eOwner(t)
+	owner := e2etest.Owner(t)
 
 	k1 := g.createKey(t, owner, keyprovider.Limits{})
 	g.mustComplete(t, k1.Secret, "mock-small")
@@ -518,8 +514,9 @@ func TestE2EHistorySurvivesRotation(t *testing.T) {
 // A quota the portal pushes is one the gateway enforces: on the owner for the
 // widest window, which is the one users actually run into.
 func TestE2EOwnerQuotaIsEnforced(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
-	owner := e2eOwner(t)
+	owner := e2etest.Owner(t)
 	// Room for about two mock-small requests.
 	k := g.createKey(t, owner, keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{
 		{Budget: 0.1, Period: "30d"},
@@ -546,10 +543,12 @@ func TestE2EOwnerQuotaIsEnforced(t *testing.T) {
 // prefixed user. Spend from then on counts against the new owner only, and the
 // ':' the prefix adds is accepted in a user ID.
 func TestE2EUpdateLimitsMovesKeyToNewOwner(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
-	oldOwner := e2eOwner(t)
+	oldOwner := e2etest.Owner(t)
 	newOwner := "zz-e2e-prefix:" + oldOwner
+	e2etest.DeleteUserAtCleanup(t, newOwner)
 	limits := keyprovider.Limits{Quotas: []keyprovider.QuotaWindow{{Budget: 10, Period: "30d"}}}
 
 	k := g.createKey(t, oldOwner, limits)
@@ -591,19 +590,8 @@ func TestE2EUpdateLimitsMovesKeyToNewOwner(t *testing.T) {
 }
 
 // e2eUser reads a user back from the gateway, with the keys it owns.
-func (g e2eGateway) e2eUser(t *testing.T, id string) (alias, email string, keys int) {
+func e2eUser(t *testing.T, id string) (alias, email string, keys int) {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodGet,
-		g.baseURL+"/user/info?user_id="+url.QueryEscape(id), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Authorization", "Bearer "+envOr("LITELLM_MASTER_KEY", "sk-local-dev"))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
 	var info struct {
 		UserInfo struct {
 			Alias *string `json:"user_alias"`
@@ -611,9 +599,7 @@ func (g e2eGateway) e2eUser(t *testing.T, id string) (alias, email string, keys 
 		} `json:"user_info"`
 		Keys []json.RawMessage `json:"keys"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		t.Fatalf("decode /user/info: %v", err)
-	}
+	e2etest.Call(t, http.MethodGet, "/user/info?user_id="+url.QueryEscape(id), nil, &info)
 	if info.UserInfo.Alias != nil {
 		alias = *info.UserInfo.Alias
 	}
@@ -626,15 +612,16 @@ func (g e2eGateway) e2eUser(t *testing.T, id string) (alias, email string, keys 
 // A user is created labelled, owning no key of LiteLLM's making, and an
 // existing user picks up a new name and address.
 func TestE2EUpsertUserLabelsTheUser(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
-	id := e2eOwner(t)
+	id := e2etest.Owner(t)
 	email := id + "@e2e.invalid"
 
 	if err := g.client.UpsertUser(ctx, keyprovider.User{ID: id, Name: "alice", Email: email}, nil); err != nil {
 		t.Fatal(err)
 	}
-	alias, gotEmail, keys := g.e2eUser(t, id)
+	alias, gotEmail, keys := e2eUser(t, id)
 	if alias != "alice" || gotEmail != email || keys != 0 {
 		t.Errorf("created user: alias %q, email %q, %d keys; want alice, %s, no keys", alias, gotEmail, keys, email)
 	}
@@ -643,7 +630,7 @@ func TestE2EUpsertUserLabelsTheUser(t *testing.T) {
 	if err := g.client.UpsertUser(ctx, keyprovider.User{ID: id, Name: "Alice", Email: renamed}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if alias, gotEmail, _ := g.e2eUser(t, id); alias != "Alice" || gotEmail != renamed {
+	if alias, gotEmail, _ := e2eUser(t, id); alias != "Alice" || gotEmail != renamed {
 		t.Errorf("updated user: alias %q, email %q; want Alice and %s", alias, gotEmail, renamed)
 	}
 }
@@ -654,79 +641,60 @@ func TestE2EUpsertUserLabelsTheUser(t *testing.T) {
 // LITELLM_USER_EMAIL is opt-in because LiteLLM's own SSO login matches users
 // by address, and then picks one of them.
 func TestE2EUpsertUserToleratesADuplicateEmail(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
-	first := e2eOwner(t)
+	first := e2etest.Owner(t)
 	email := first + "@e2e.invalid"
 	if err := g.client.UpsertUser(ctx, keyprovider.User{ID: first, Email: email}, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	second := first + "-other"
+	e2etest.DeleteUserAtCleanup(t, second)
 	if err := g.client.UpsertUser(ctx, keyprovider.User{ID: second, Name: "bob", Email: email}, nil); err != nil {
 		t.Fatalf("second user with the same email: %v", err)
 	}
-	if alias, gotEmail, keys := g.e2eUser(t, second); alias != "bob" || gotEmail != email || keys != 0 {
+	if alias, gotEmail, keys := e2eUser(t, second); alias != "bob" || gotEmail != email || keys != 0 {
 		t.Errorf("second user: alias %q, email %q, %d keys; want bob, %s, no keys", alias, gotEmail, keys, email)
 	}
 }
 
 // e2eKeyInfo reads a key's alias and metadata back from the gateway.
-func (g e2eGateway) e2eKeyInfo(t *testing.T, ref string) (alias string, metadata map[string]any) {
+func e2eKeyInfo(t *testing.T, ref string) (alias string, metadata map[string]any) {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodGet, g.baseURL+"/key/info?key="+url.QueryEscape(ref), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Authorization", "Bearer "+envOr("LITELLM_MASTER_KEY", "sk-local-dev"))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
 	var info struct {
 		Info struct {
 			Alias    string         `json:"key_alias"`
 			Metadata map[string]any `json:"metadata"`
 		} `json:"info"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		t.Fatalf("decode /key/info: %v", err)
-	}
+	e2etest.Call(t, http.MethodGet, "/key/info?key="+url.QueryEscape(ref), nil, &info)
 	return info.Info.Alias, info.Info.Metadata
 }
 
 // A relabel changes the alias and nothing else; in particular it leaves the
 // key's metadata alone, where LiteLLM keeps settings an admin made.
 func TestE2EUpdateAliasRelabelsTheKey(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
-	owner := e2eOwner(t)
+	owner := e2etest.Owner(t)
 	k := g.createKey(t, owner, keyprovider.Limits{})
 
-	if _, metadata := g.e2eKeyInfo(t, k.Ref); len(metadata) != 0 {
+	if _, metadata := e2eKeyInfo(t, k.Ref); len(metadata) != 0 {
 		t.Errorf("new key carries metadata %v, want none", metadata)
 	}
 
 	// What an admin might set on the key in LiteLLM's UI.
-	body, _ := json.Marshal(map[string]any{"key": k.Ref, "metadata": map[string]any{"admin_note": "keep"}})
-	req, err := http.NewRequest(http.MethodPost, g.baseURL+"/key/update", bytes.NewReader(body))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Authorization", "Bearer "+envOr("LITELLM_MASTER_KEY", "sk-local-dev"))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
+	e2etest.Call(t, http.MethodPost, "/key/update",
+		map[string]any{"key": k.Ref, "metadata": map[string]any{"admin_note": "keep"}}, nil)
 
 	alias := owner + "-relabelled"
 	if err := g.UpdateAlias(ctx, k.Ref, alias); err != nil {
 		t.Fatal(err)
 	}
-	got, metadata := g.e2eKeyInfo(t, k.Ref)
+	got, metadata := e2eKeyInfo(t, k.Ref)
 	if got != alias {
 		t.Errorf("alias = %q, want %q", got, alias)
 	}
@@ -739,9 +707,10 @@ func TestE2EUpdateAliasRelabelsTheKey(t *testing.T) {
 // answers, with status "deleted", while every other route answers 404. The
 // portal must read all of these as a missing key, and a second delete as done.
 func TestE2EDeletedKeyIsReportedMissing(t *testing.T) {
+	t.Parallel()
 	g := newE2EGateway(t)
 	ctx := context.Background()
-	owner := e2eOwner(t)
+	owner := e2etest.Owner(t)
 	k := g.createKey(t, owner, keyprovider.Limits{})
 
 	if err := g.DeleteKey(ctx, k.Ref); err != nil {

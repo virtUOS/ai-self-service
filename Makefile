@@ -34,8 +34,9 @@ test:
 build:
 	CGO_ENABLED=0 go build ./...
 
+# Only the end-to-end tests: `test` already ran the packages' unit tests.
 e2e: up
-	go test -tags e2e -race ./internal/litellm/ ./internal/limitsync/
+	go test -tags e2e -race -run '^TestE2E' ./internal/litellm/ ./internal/limitsync/
 
 # Readiness is polled here rather than left to `up --wait`, so it does not
 # depend on the compose implementation supporting that flag.
