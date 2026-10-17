@@ -19,7 +19,6 @@ func newTestProvider(t *testing.T, m *oidctest.Server) *Provider {
 		OIDCIssuerURL:    m.Issuer(),
 		OIDCClientID:     "keyosk",
 		OIDCClientSecret: "secret",
-		OIDCRedirectURL:  "http://localhost:8080/callback",
 		FrontendURL:      "http://localhost:8080",
 	}
 	p, err := NewProvider(context.Background(), cfg, nil)
@@ -93,7 +92,7 @@ func TestValidateLogoutTokenRejectsWrongAudience(t *testing.T) {
 	}
 }
 
-func TestLoginMovesToRedirectURLHost(t *testing.T) {
+func TestLoginMovesToFrontendURLHost(t *testing.T) {
 	p := newTestProvider(t, oidctest.NewServer(t))
 	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8080/login?next=x", nil)
 	rec := httptest.NewRecorder()
@@ -112,7 +111,7 @@ func TestLoginMovesToRedirectURLHost(t *testing.T) {
 	}
 }
 
-func TestLoginOnRedirectURLHostStartsAuth(t *testing.T) {
+func TestLoginOnFrontendURLHostStartsAuth(t *testing.T) {
 	m := oidctest.NewServer(t)
 	p := newTestProvider(t, m)
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/login", nil)
