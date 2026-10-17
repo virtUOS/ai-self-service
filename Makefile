@@ -11,9 +11,9 @@ COMPOSE_FILE := dev/docker-compose.yml
 SERVICES ?=
 LITELLM_URL := http://localhost:4000
 
-.PHONY: check fmt vet test build e2e up down seed website website-assets website-serve
+.PHONY: check fmt vet test build e2e browser browser-install up down seed website website-assets website-serve
 
-check: fmt vet test build e2e
+check: fmt vet test build e2e browser
 
 fmt:
 	@unformatted="$$(gofmt -l .)"; \
@@ -21,10 +21,12 @@ fmt:
 		echo "These files need gofmt:"; echo "$$unformatted"; exit 1; \
 	fi
 
-# The e2e tests only build with their tag, so they are vetted separately.
+# The e2e and browser tests only build with their tags, so they are vetted
+# separately.
 vet:
 	go vet ./...
 	go vet -tags e2e ./...
+	go vet -tags browser ./...
 
 test:
 	go test -race ./...
@@ -36,6 +38,19 @@ build:
 
 e2e: up
 	go test -tags e2e -race ./internal/litellm/ ./internal/limitsync/
+
+# The pages in Chromium, against an instance the tests seed for themselves.
+# They need the OIDC mock as well as LiteLLM, and `make browser-install` once.
+# -count=1: the tests build the server at run time, so go test's cache would
+# not notice a change to it and report an old result.
+browser: up
+	go test -tags browser -count=1 ./internal/browsertest/
+
+# The Playwright driver and Chromium's headless shell, into ~/.cache. CI adds
+# --with-deps for the system libraries, which only works on Debian and Ubuntu.
+PLAYWRIGHT := go run github.com/mxschmitt/playwright-go/cmd/playwright
+browser-install:
+	$(PLAYWRIGHT) install --only-shell $(PLAYWRIGHT_FLAGS) chromium
 
 # Readiness is polled here rather than left to `up --wait`, so it does not
 # depend on the compose implementation supporting that flag.

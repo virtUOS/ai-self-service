@@ -62,6 +62,48 @@ jobs:
         if: failure()
         run: docker compose -f dev/docker-compose.yml logs litellm
 
+  # The pages in Chromium, against an instance the tests seed on the dev
+  # stack's OIDC mock and LiteLLM.
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # The driver and Chromium follow the playwright-go version in go.sum.
+      - name: Cache Playwright
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/.cache/ms-playwright-go
+          key: playwright-${{ runner.os }}-${{ hashFiles('go.sum') }}
+
+      # --with-deps also installs Chromium's system libraries, from apt.
+      - name: Install Playwright
+        run: make browser-install PLAYWRIGHT_FLAGS=--with-deps
+
+      - name: Test
+        run: make browser SERVICES="litellm oidc-mock"
+
+      - name: Upload traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-traces
+          path: internal/browsertest/testdata/traces/
+          if-no-files-found: ignore
+
+      - name: Show the stack's logs
+        if: failure()
+        run: docker compose -f dev/docker-compose.yml logs litellm oidc-mock
+
   # The image is only published from main and tags, so a broken Dockerfile
   # (e.g. go.mod requiring a newer Go than the builder image) would otherwise
   # only surface after merge.

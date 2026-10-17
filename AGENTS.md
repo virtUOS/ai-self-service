@@ -3,9 +3,17 @@
 ## Before committing
 
 Run `make check` and get it passing. It runs what CI runs: gofmt, vet, the unit
-tests, a CGO-free build, and the LiteLLM end-to-end tests against the dev
-stack, which it starts if needed. The end-to-end tests are part of every check,
-not only of changes to `internal/litellm`.
+tests, a CGO-free build, the LiteLLM end-to-end tests and the browser tests,
+both against the dev stack, which it starts if needed. The end-to-end and
+browser tests are part of every check, not only of changes to
+`internal/litellm` or the templates. The browser tests need the Playwright
+driver and Chromium, which `make browser-install` puts into `~/.cache` once.
+
+The browser tests (`internal/browsertest`) run against an instance seeded by
+`internal/devseed`, the same seed as `make seed`. Its personas and profiles
+(`internal/devseed/personas.go`, with the users in `dev/mock-users.json`) are
+the tests' fixtures: a test that changes data uses only those set aside for
+it, so a change to them is a change to the tests.
 
 The dev stack (`dev/docker-compose.yml`, see `dev/README.md`) works with Docker
 and with Podman, and developers have one or the other. The Makefile uses

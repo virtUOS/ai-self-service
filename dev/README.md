@@ -235,6 +235,21 @@ docker compose -f dev/docker-compose.yml up -d --wait litellm
 go test -tags e2e ./internal/litellm/ ./internal/limitsync/
 ```
 
+The browser tests drive the pages in Chromium through Playwright
+(playwright-go), and are built only with the `browser` tag. They start an
+instance of their own on `127.0.0.1:8091`, seed it as `make seed` does, and
+need the OIDC mock as well as LiteLLM. The Playwright driver and Chromium are
+downloaded once:
+
+```bash
+make browser-install
+make browser
+```
+
+A failing test saves a trace in `internal/browsertest/testdata/traces/`; the
+test's log says how to open it. When the run ends, the seed's keys and users
+are deleted from LiteLLM again.
+
 `make check` runs everything CI runs, these tests included, and starts the
 stack first; run it before committing. CI runs the same targets on every push. `LITELLM_BASE_URL` and `LITELLM_MASTER_KEY` point
 them at another gateway, which then needs the same models.
