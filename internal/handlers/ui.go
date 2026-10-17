@@ -297,6 +297,11 @@ func (u *UI) Logout(w http.ResponseWriter, r *http.Request) {
 		_ = u.sessions.Delete(r.Context(), su.SessionID)
 	}
 	u.sessions.ClearCookie(w)
+	// no-store is not enough: Chrome may keep a no-store page in the
+	// back/forward cache, and Back after signing out would show the dashboard,
+	// a newly generated key included. Browsers honour this only over HTTPS and
+	// on localhost.
+	w.Header().Set("Clear-Site-Data", `"cache"`)
 	if logoutURL != "" {
 		http.Redirect(w, r, logoutURL, http.StatusFound)
 	} else {
