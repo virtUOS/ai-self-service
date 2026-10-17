@@ -77,7 +77,7 @@ func TestForeignNotFoundIsNotAMissingKey(t *testing.T) {
 			"limits": func() error { return c.UpdateKeyLimits(ctx, "abc", "", keyprovider.Limits{}) },
 			"alias":  func() error { return c.UpdateKeyAlias(ctx, "abc", "x") },
 			"expiry": func() error { return c.UpdateKeyExpiry(ctx, "abc", testExpiry()) },
-			"quota":  func() error { _, err := c.KeyQuota(ctx, "abc"); return err },
+			"info":   func() error { _, err := c.keyInfo(ctx, "abc"); return err },
 		} {
 			if err := call(); err == nil || errors.Is(err, keyprovider.ErrKeyNotFound) {
 				t.Errorf("%s, %s: err = %v, want a plain failure", name, route, err)
@@ -129,9 +129,6 @@ func TestKeyInfoReportsAMissingKey(t *testing.T) {
 		"deleted": gatewayAnswering(t, http.StatusOK, infoDeleted),
 	} {
 		ctx := context.Background()
-		if _, err := gw.KeyQuota(ctx, "abc"); !errors.Is(err, keyprovider.ErrKeyNotFound) {
-			t.Errorf("%s: KeyQuota err = %v, want ErrKeyNotFound", name, err)
-		}
 		if _, err := gw.keyWindows(ctx, "abc"); !errors.Is(err, keyprovider.ErrKeyNotFound) {
 			t.Errorf("%s: keyWindows err = %v, want ErrKeyNotFound", name, err)
 		}

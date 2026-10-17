@@ -35,10 +35,6 @@ func TestDashboardHasNoUntranslatedProse(t *testing.T) {
 		Usage: usageReport{
 			Days:  []keyprovider.DailyUsage{{Day: "2026-08-01", Tokens: 10}},
 			Total: 10, Peak: 10,
-			HasQuota: true, Used: 0.05, Limit: 0.15, QuotaPct: 33,
-			// A window is set because production renders the per-window
-			// branch; without one the template takes the fallback path and
-			// the strings on the branch users actually see go unexamined.
 			Windows: []quotaWindowView{{Period: "1h", Label: "pro Stunde",
 				Used: 0.05, Limit: 0.15, Pct: 33, ResetsAt: time.Now().Add(time.Hour)}},
 			Models: []keyprovider.ModelUsage{{Model: "gpt-4o", Requests: 3,
@@ -92,10 +88,6 @@ func TestDashboardRendersNoRawCatalogueKeys(t *testing.T) {
 		Usage: usageReport{
 			Days:  []keyprovider.DailyUsage{{Day: "2026-08-25", Tokens: 204}},
 			Total: 204, Peak: 204,
-			HasQuota: true, Used: 0.042, Limit: 0.15, QuotaPct: 28,
-			ResetsAt: time.Now().Add(6 * time.Hour),
-			// The per-window branch is the one production renders, so the
-			// catalogue keys on it have to be examined too.
 			Windows: []quotaWindowView{{Period: "1h", Label: "pro Stunde",
 				Used: 0.05, Limit: 0.15, Pct: 33, ResetsAt: time.Now().Add(time.Hour)}},
 			Models: []keyprovider.ModelUsage{{Model: "gpt-4o", Requests: 3,

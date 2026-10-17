@@ -76,15 +76,3 @@ func (c *usageCache) History(ctx context.Context, ownerID string) (keyprovider.H
 	c.entries[ownerID] = usageEntry{history: h, fetchedAt: time.Now()}
 	return h, nil
 }
-
-// Quota returns consumption against the enforced allowance, for the key and
-// the person who owns it.
-//
-// Uncached: it is the figure users act on when they are close to the limit,
-// and a minute-stale number there is worse than a fresh call.
-func (c *usageCache) Quota(ctx context.Context, ref, ownerID string) (keyprovider.Quota, error) {
-	if c.reporter == nil || ref == "" {
-		return keyprovider.Quota{}, nil
-	}
-	return c.reporter.Quota(ctx, ref, ownerID)
-}

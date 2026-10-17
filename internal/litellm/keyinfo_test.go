@@ -40,7 +40,7 @@ func TestUsageRoutesSendTheRefVerbatim(t *testing.T) {
 
 	c := NewClient(srv.URL, "mk")
 	ctx := context.Background()
-	if _, err := c.KeyQuota(ctx, ref); err != nil {
+	if err := NewProvider(c).CheckKey(ctx, ref); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := NewProvider(c).Windows(ctx, ref, ""); err != nil {
@@ -65,7 +65,7 @@ func TestTransportErrorOmitsTheQuery(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	srv.Close()
 
-	_, err := NewClient(srv.URL, "mk").KeyQuota(context.Background(), ref)
+	_, err := NewClient(srv.URL, "mk").keyInfo(context.Background(), ref)
 	if err == nil {
 		t.Fatal("want an error from a closed server")
 	}

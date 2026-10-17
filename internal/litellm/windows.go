@@ -2,9 +2,7 @@ package litellm
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"sort"
 	"time"
 
@@ -22,12 +20,7 @@ type budgetWindow struct {
 	// reset — the same counter it enforces against. The array itself does not
 	// carry it, so keyWindows and userWindow fill it in from the figures
 	// reported next to it.
-	//
-	// HasSpend is false when the gateway reported no figure for the window.
-	// That should not happen, but a bar drawn from a silent zero would promise
-	// an allowance the user may not have.
-	Spend    float64
-	HasSpend bool
+	Spend float64
 }
 
 // windowSpend is one entry of /key/info's budget_limits_usage, which LiteLLM
@@ -43,51 +36,32 @@ type windowSpend struct {
 // with their spend in budget_limits_usage. A single one is kept in the flat
 // max_budget/budget_duration pair, and the key's own spend counter then covers
 // just that window: LiteLLM resets it whenever the window rolls over.
+//
+// LiteLLM reports the spend of every window in budget_limits. A window without
+// a figure is an error rather than a zero: a bar drawn from a silent zero
+// would promise an allowance the user may not have.
 func (c *Client) keyWindows(ctx context.Context, ref string) ([]budgetWindow, error) {
-	resp, err := c.do(ctx, http.MethodGet, keyInfoPath(ref), nil)
+	info, err := c.keyInfo(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, keyCallError("/key/info", resp)
-	}
-
-	var body struct {
-		Info struct {
-			Status            string                 `json:"status"`
-			Spend             float64                `json:"spend"`
-			BudgetLimits      []budgetWindow         `json:"budget_limits"`
-			BudgetLimitsUsage map[string]windowSpend `json:"budget_limits_usage"`
-			MaxBudget         *float64               `json:"max_budget"`
-			BudgetDuration    *string                `json:"budget_duration"`
-			BudgetResetAt     *string                `json:"budget_reset_at"`
-		} `json:"info"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, fmt.Errorf("decode key info: %w", err)
-	}
-	if body.Info.Status == keyStatusDeleted {
-		return nil, fmt.Errorf("LiteLLM /key/info reports the key deleted: %w", keyprovider.ErrKeyNotFound)
-	}
-
-	if len(body.Info.BudgetLimits) > 0 {
-		windows := body.Info.BudgetLimits
+	if windows := info.Info.BudgetLimits; len(windows) > 0 {
 		for i := range windows {
-			if u, ok := body.Info.BudgetLimitsUsage[windows[i].BudgetDuration]; ok {
-				windows[i].Spend, windows[i].HasSpend = u.CurrentSpend, true
+			u, ok := info.Info.BudgetLimitsUsage[windows[i].BudgetDuration]
+			if !ok {
+				return nil, fmt.Errorf("LiteLLM /key/info reports no spend for the %s window", windows[i].BudgetDuration)
 			}
+			windows[i].Spend = u.CurrentSpend
 		}
 		return windows, nil
 	}
-	if body.Info.MaxBudget != nil && body.Info.BudgetDuration != nil {
+	if info.Info.MaxBudget != nil && info.Info.BudgetDuration != nil {
 		return []budgetWindow{{
-			BudgetDuration: *body.Info.BudgetDuration,
-			MaxBudget:      *body.Info.MaxBudget,
-			ResetAt:        body.Info.BudgetResetAt,
-			Spend:          body.Info.Spend,
-			HasSpend:       true,
+			BudgetDuration: *info.Info.BudgetDuration,
+			MaxBudget:      *info.Info.MaxBudget,
+			ResetAt:        info.Info.BudgetResetAt,
+			Spend:          info.Info.Spend,
 		}}, nil
 	}
 	return nil, nil
@@ -125,10 +99,9 @@ func (p *Provider) Windows(ctx context.Context, ref, ownerID string) ([]keyprovi
 			continue
 		}
 		u := keyprovider.WindowUsage{
-			Period:    w.BudgetDuration,
-			Limit:     w.MaxBudget,
-			Used:      w.Spend,
-			UsedKnown: w.HasSpend,
+			Period: w.BudgetDuration,
+			Limit:  w.MaxBudget,
+			Used:   w.Spend,
 		}
 		if w.ResetAt != nil {
 			if t, err := time.Parse(time.RFC3339, *w.ResetAt); err == nil {

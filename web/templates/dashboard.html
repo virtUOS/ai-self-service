@@ -182,24 +182,6 @@
           <span class="reset-at" data-reset="{{.ResetsAt.Format "2006-01-02T15:04:05Z"}}"></span>{{end}}
         </p>
       {{end}}
-    {{else if .Usage.HasQuota}}
-      {{/* No per-window figures — the gateway did not report consumption for
-           every window. One bar for the window that binds.
-           Both figures are spend, straight from the gateway. */}}
-      <p style="margin-bottom:.35rem">
-        <strong>{{fmtPct .Usage.Used .Usage.QuotaPct}}</strong> {{T .Lang "dash.quota.used"}}
-      </p>
-      <div class="quota-bar" role="img"
-           aria-label="{{fmtPct .Usage.Used .Usage.QuotaPct}} {{T .Lang "dash.quota.used"}}">
-        <div class="quota-fill{{if ge .Usage.QuotaPct 90}} quota-full{{end}}"
-             style="width:{{.Usage.QuotaPct}}%"></div>
-      </div>
-      <p class="text-muted" style="font-size:.85rem;margin-bottom:1rem">
-        {{fmtBudget .Usage.Used .BudgetUnit}} {{T .Lang "dash.quota.of"}}
-        {{fmtBudget .Usage.Limit .BudgetUnit}}{{if not .Usage.ResetsAt.IsZero}} ·
-        {{T .Lang "dash.quota.resets"}}
-        <span class="reset-at" data-reset="{{.Usage.ResetsAt.Format "2006-01-02T15:04:05Z"}}"></span>{{end}}
-      </p>
     {{else if not .Usage.Incomplete}}
       {{/* Only when the gateway answered: a failed read is not "no limit". */}}
       <p class="text-muted" style="font-size:.85rem;margin-bottom:1rem">

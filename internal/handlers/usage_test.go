@@ -156,20 +156,21 @@ func TestUserUsageReportsPercentOfBudget(t *testing.T) {
 	fake.UsageByOwner = map[string][]keyprovider.DailyUsage{
 		"sub-1": {{Day: "2026-08-25", Tokens: 420_000}},
 	}
-	fake.QuotaByRef = map[string]keyprovider.Quota{
-		"k": {Used: 0.042, Limit: 0.15,
-			ResetsAt: time.Now().Add(6 * time.Hour)},
+	fake.WindowsByRef = map[string][]keyprovider.WindowUsage{
+		"k": {{Period: "24h", Used: 0.042, Limit: 0.15,
+			ResetsAt: time.Now().Add(6 * time.Hour)}},
 	}
 
 	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{KeyRef: "k"}, "", i18n.EN)
-	if !got.HasQuota {
-		t.Fatal("HasQuota should be set when the key has a budget")
+	if len(got.Windows) != 1 {
+		t.Fatalf("got %d windows, want the key's budget", len(got.Windows))
 	}
-	if got.QuotaPct != 28 {
-		t.Errorf("QuotaPct = %d, want 28 (0.042 of 0.15)", got.QuotaPct)
+	w := got.Windows[0]
+	if w.Pct != 28 {
+		t.Errorf("Pct = %d, want 28 (0.042 of 0.15)", w.Pct)
 	}
-	if got.Used != 0.042 || got.Limit != 0.15 {
-		t.Errorf("Used/Limit = %v/%v, want 0.042/0.15", got.Used, got.Limit)
+	if w.Used != 0.042 || w.Limit != 0.15 {
+		t.Errorf("Used/Limit = %v/%v, want 0.042/0.15", w.Used, w.Limit)
 	}
 }
 
@@ -177,15 +178,15 @@ func TestUserUsageReportsPercentOfBudget(t *testing.T) {
 // no quota at all rather than one that looks exhausted.
 func TestUserUsageUnlimitedReportsNoQuota(t *testing.T) {
 	fake := keyprovider.NewFake()
-	fake.QuotaByRef = map[string]keyprovider.Quota{
-		"k": {Used: 0.05, Limit: 0},
+	fake.WindowsByRef = map[string][]keyprovider.WindowUsage{
+		"k": {{Period: "30d", Used: 0.05, Limit: 0}},
 	}
 	got := usageUI(t, fake).userUsage(context.Background(), &database.APIKey{KeyRef: "k"}, "", i18n.EN)
-	if got.HasQuota {
-		t.Error("HasQuota should be false for an unlimited key")
+	if len(got.Windows) != 0 {
+		t.Errorf("unlimited key reported windows %+v", got.Windows)
 	}
-	if got.QuotaPct != 0 {
-		t.Errorf("unlimited key reported pct=%d", got.QuotaPct)
+	if got.Incomplete {
+		t.Error("an unlimited key is reported as an incomplete read")
 	}
 }
 
@@ -244,8 +245,8 @@ func TestQuotaResetIsRenderedRelative(t *testing.T) {
 			APIKey:    &database.APIKey{KeyPrefix: "sk-a", ExpiresAt: time.Now().Add(24 * time.Hour)},
 			CSRFToken: "TOK",
 			Usage: usageReport{
-				HasQuota: true, Used: 0.086, Limit: 0.1, QuotaPct: 86,
-				ResetsAt: reset,
+				Windows: []quotaWindowView{{Period: "24h", Label: "per day",
+					Used: 0.086, Limit: 0.1, Pct: 86, ResetsAt: reset}},
 			},
 		}); err != nil {
 			t.Fatal(err)

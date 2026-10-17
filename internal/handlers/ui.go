@@ -655,25 +655,13 @@ type usageReport struct {
 	// the same daily totals.
 	Models []keyprovider.ModelUsage
 
-	// HasQuota is set when the key has an enforced allowance. Profiles may
-	// leave it unset, and an unlimited key must not read as an exhausted one.
-	HasQuota bool
-	// Used, Limit and QuotaPct describe the current quota window as spend.
-	// They come from the key's own counter, which is what the gateway enforces
-	// against, so they can disagree with the 30-day chart above — the window
-	// resets on the budget period, not on a rolling month.
-	Used     float64
-	Limit    float64
-	QuotaPct int
-	ResetsAt time.Time
-
 	// Windows is one entry per quota window, tightest first, so the card can
 	// show what each allowance has left. A profile can hold several at once
 	// and the tightest binds: a user with room on their monthly allowance can
 	// still be blocked by an hourly cap.
 	//
-	// Empty when the gateway cannot report consumption for every window. The
-	// card falls back to the single bar then.
+	// Empty when the key has no quota, or when the gateway could not be read,
+	// which sets Incomplete.
 	Windows []quotaWindowView
 
 	// Incomplete is set when part of the report could not be read from the
@@ -732,30 +720,11 @@ func (u *UI) userUsage(ctx context.Context, k *database.APIKey, ownerID string, 
 			}
 		}
 	}
-	q, err := u.usage.Quota(ctx, k.KeyRef, ownerID)
-	if err != nil {
-		slog.Error("read quota", "err", err)
-		rep.Incomplete = true
-		rep.KeyMissing = rep.KeyMissing || errors.Is(err, keyprovider.ErrKeyNotFound)
-	} else if q.Limit > 0 {
-		rep.HasQuota = true
-		rep.Used, rep.Limit, rep.ResetsAt = q.Used, q.Limit, q.ResetsAt
-		rep.QuotaPct = quotaPct(q.Used, q.Limit)
-	}
 
 	rep.Windows, err = u.quotaWindows(ctx, k.KeyRef, ownerID, lang)
 	if err != nil {
 		rep.Incomplete = true
-		rep.KeyMissing = rep.KeyMissing || errors.Is(err, keyprovider.ErrKeyNotFound)
-	}
-
-	// With per-window figures the headline should name the window that binds,
-	// not the widest one: a user is blocked by whichever allowance runs out
-	// first, and the loosest reads as more headroom than they have.
-	if b := bindingWindow(rep.Windows); b != nil {
-		rep.HasQuota = true
-		rep.Used, rep.Limit = b.Used, b.Limit
-		rep.QuotaPct, rep.ResetsAt = b.Pct, b.ResetsAt
+		rep.KeyMissing = errors.Is(err, keyprovider.ErrKeyNotFound)
 	}
 	return rep
 }
@@ -808,14 +777,14 @@ func quotaPct(used, limit float64) int {
 
 // quotaWindows reports each allowance window with what it has left.
 //
-// Returns nothing when the provider cannot report per-window figures, or when
-// consumption is unknown for any window — a bar drawn from a silent zero would
-// promise an allowance the user may not have. The card falls back to the
-// single gateway-reported bar then. An
-// error means the gateway could not be read.
+// Uncached: it is the figure users act on when they are close to the limit,
+// and a minute-stale number there is worse than a fresh call.
+//
+// Returns nothing when the key has no quota or the provider does not report
+// usage. An error means the gateway could not be read.
 func (u *UI) quotaWindows(ctx context.Context, ref, ownerID string, lang i18n.Lang) ([]quotaWindowView, error) {
-	reporter, ok := u.keys.(keyprovider.UsageReporter)
-	if !ok || ref == "" {
+	reporter := u.usage.reporter
+	if reporter == nil || ref == "" {
 		return nil, nil
 	}
 	windows, err := reporter.Windows(ctx, ref, ownerID)
@@ -829,11 +798,6 @@ func (u *UI) quotaWindows(ctx context.Context, ref, ownerID string, lang i18n.La
 		if w.Limit <= 0 {
 			continue
 		}
-		if !w.UsedKnown {
-			// One unknown window makes the whole set untrustworthy: the others
-			// would imply this one is fine. Fall back rather than mislead.
-			return nil, nil
-		}
 		out = append(out, quotaWindowView{
 			Period:   w.Period,
 			Label:    periodLabel(w.Period, lang),
@@ -844,18 +808,6 @@ func (u *UI) quotaWindows(ctx context.Context, ref, ownerID string, lang i18n.La
 		})
 	}
 	return out, nil
-}
-
-// bindingWindow is the window closest to being exhausted — the one that will
-// reject the next request. Nil when there are none.
-func bindingWindow(windows []quotaWindowView) *quotaWindowView {
-	var binding *quotaWindowView
-	for i := range windows {
-		if binding == nil || windows[i].Pct > binding.Pct {
-			binding = &windows[i]
-		}
-	}
-	return binding
 }
 
 // profileNotice is the sentence telling a user their assignment ends, and what

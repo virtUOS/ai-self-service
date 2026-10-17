@@ -48,25 +48,6 @@ func (p *Provider) UpdateLimits(ctx context.Context, ref string, user keyprovide
 	return p.client.UpdateKeyLimits(ctx, ref, user.ID, l)
 }
 
-// Quota reports consumption against the enforced allowance.
-//
-// The owner's allowance is the one reported when there is one: it is the
-// widest window, so it is the limit users actually reach, and unlike the key's
-// own counter it survives a rotation. Keys issued before the portal tracked
-// owners have no user upstream, and fall back to the key's own figure.
-func (p *Provider) Quota(ctx context.Context, ref, ownerID string) (keyprovider.Quota, error) {
-	if ownerID != "" {
-		q, err := p.client.UserQuota(ctx, ownerID)
-		if err != nil {
-			return keyprovider.Quota{}, err
-		}
-		if q.Limit > 0 {
-			return q, nil
-		}
-	}
-	return p.client.KeyQuota(ctx, ref)
-}
-
 // userBudget is the allowance to hold against the person, or nil when the
 // profile sets no quota at all.
 func userBudget(w keyprovider.QuotaWindow) *UserBudget {
